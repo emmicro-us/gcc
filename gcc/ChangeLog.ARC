@@ -22,7 +22,7 @@
 
 	* config/arc/arc.c (arc_init): Always default to ARC700.
 
-	* config/arc/arc.md (attribute delay_slot_filled): : Check that we
+	* config/arc/arc.md (attribute delay_slot_filled): Check that we
 	have an actual JUMP_INSN before using INSN_ANNULLED_BRANCH_P.
 
 	* config/arc/arc.h (TARGET_CPU_CPP_BUILTIN): Define __Xnorm /
@@ -33,6 +33,9 @@
 	(cstoresi4, cstore<SDF:mode>4, cbranch<SDF:mode>4): Likewise.
 	(scc_insn, branch_insn): Separate out expander, preserving mode
 	of CC_REG.
+
+	* config/arc/arc.c (CCFSM_DBR_ISCOMPACT): Check that we
+	have an actual JUMP_INSN before using INSN_ANNULLED_BRANCH_P.
 
 2012-08-15  Joern Rennecke  <joern.rennecke@embecosm.com>
 
