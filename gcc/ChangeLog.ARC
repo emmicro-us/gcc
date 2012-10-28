@@ -1,3 +1,9 @@
+2012-10-28  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.h: Remove long-obsolete REAL_ARITHMETIC comment.
+	Update comment about hardware meanings of r61..r63
+	(ARC_EXTENSION_CPU): Delete.
+
 2012-10-25  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_adjust_insn_length): Update prototype.
