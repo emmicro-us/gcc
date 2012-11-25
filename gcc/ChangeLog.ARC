@@ -43,6 +43,11 @@
 	(arc_save_restore): Remove offset parameter.  Changed all callers.
 	Expanded comment.
 
+	* config/arc/arc.c (arc_raw_symbolic_reference_mentioned_p):
+	Add parameter skip_local.  Changed all callers.
+	* config/arc/arc-protos.h (arc_raw_symbolic_reference_mentioned_p):
+	Update prototype.
+
 2012-11-22  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config.gcc (arc-*-elf*): Use same default settings as for *-*-elf.
