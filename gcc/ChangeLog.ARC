@@ -7,6 +7,13 @@
 	* config/arc/arc.h (DRIVER_SELF_SPECS): Insert space before
 	concatenated -mcpu options.
 
+2013-03-15  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.opt (mno-sdata): Replace with:
+	(msdata).
+	* testsuite/gcc.target/arc/sdata-1.c: New file.
+	* testsuite/gcc.target/arc/sdata-2.c: Likewise.
+
 2013-03-14  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_profile_call): Check for TARGET_UCB_MCOUNT.
