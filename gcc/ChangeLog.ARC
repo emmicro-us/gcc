@@ -1,3 +1,8 @@
+2013-03-16  Jeremy Bennett  <jeremy.bennett@embecosm.com>
+
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Insert space before
+	concatenated -mcpu options.
+
 2013-03-04  Simon Cook  <simon.cook@embecosm.com>
 
 	* config.gcc (arc*-*-elf*): Add big endian options based on
