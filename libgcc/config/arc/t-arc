@@ -41,7 +41,7 @@ LIB1ASMFUNCS = _mulsi3 _umulsidi3 _udivsi3 _divsi3 _umodsi3 _modsi3 \
 # and (for debugging) of renaming functions so that they can be
 # used in an asm wrapper.
 
-LIB2FUNCS_EXTRA = fp-bit.c dp-bit.c
+LIB2ADD = fp-bit.c dp-bit.c
 
 dp-bit.c: $(srcdir)/fp-bit.c
 	echo '#ifndef __big_endian__' > dp-bit.c

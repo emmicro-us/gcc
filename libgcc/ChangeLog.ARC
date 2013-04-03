@@ -1,3 +1,8 @@
+2013-04-03  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/t-arc (LIB2FUNCS_EXTRA): Replace with:
+	(LIB2ADD).
+
 2013-02-25  Simon Cook  <simon.cook@embecosm.com>
 
 	* config.host: arc-*-elf* renamed to arc*-*-elf*.
