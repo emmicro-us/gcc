@@ -1,3 +1,7 @@
+2013-04-03  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Also remove -mA6 / -mA7.
+
 2013-03-16  Jeremy Bennett  <jeremy.bennett@embecosm.com>
 
 	* config/arc/arc.h (DRIVER_SELF_SPECS): Insert space before
