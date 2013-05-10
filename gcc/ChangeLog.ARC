@@ -1,3 +1,19 @@
+2013-05-09  Jeremy Bennett  <jeremy.bennett@embecosm.com>
+
+	* doc/invoke.texi (Option Summary, ARC Options): Remove
+	-mold-di-patterns, -mCPU=A5, -mA5. Add -mlra,
+	-mlra-priority-compact, -mlra-priority-noncompact,
+	-mlra-priority-none and -mucb-count.
+	Mark
+	-mbarrel_shifter, -mdpfp_compact, -mdpfp_fast,
+	-mdsp_packa, -mmac_24, -mmac_d16, -mmpy_option, -mspfp_compact,
+	-mspfp_fast as deprecated and replace by
+	equivalents without '_'. Partition options into groups are reorder
+	alphabetically in groups. Update summary to match detailed list.
+
+	Where there are positive and negative (-mno) options, just list the
+	former in the summary.
+
 2013-04-29  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* gcc/config/arc/arc.c (arc_legitimate_constant_p): When
