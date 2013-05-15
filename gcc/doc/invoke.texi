@@ -11357,7 +11357,8 @@ values for @var{cpu} are
 Compile for ARC600.  Aliases: @option{-mA6}, @option{-mARC600}.
 
 @item ARC601
-Compile for ARC601.
+@opindex mARC600
+Compile for ARC601. Alias: @option{-mARC601}.
 
 @item ARC700
 @opindex mA7
@@ -11517,11 +11518,17 @@ The following options are passed through to the linker:
 @table @gcctabopt
 @item -marclinux
 @opindex marclinux
-Pass -marclinux option through to linker.
+Pass -marclinux option through to linker, to specify use of the
+@code{arclinux} emulation.  This option is enabled by default in tool
+chains built for @code{arc-linux-uclibc} and @code{arceb-linux-uclibc}
+targets when profiling is not requested.
 
 @item -marclinux_prof
 @opindex marclinux_prof
-Pass -marclinux_prof option through to linker.
+Pass -marclinux_prof option through to linker, to specify use of the
+@code{arclinux_prof} emulation.  This option is enabled by default in tool
+chains built for @code{arc-linux-uclibc} and @code{arceb-linux-uclibc}
+targets when profiling is requested.
 
 @end table
 
@@ -11544,13 +11551,18 @@ to the full 32-bit address range.
 
 @item -mmedium-calls
 @opindex mmedium-calls
-Don't use less than 25 bit addressing range for calls.
+Don't use less than 25 bit addressing range for calls, which is the
+offset available for an unconditional branch-and-link
+instruction. Conditional execution of function calls is suppressed, to
+allow use of the 25-bit range, rather than the 21-bit range with
+conditional branch-and-link. This is the default for tool chains built
+for @code{arc-linux-uclibc} and @code{arceb-linux-uclibc} targets.
 
 @item -mno-sdata
 @opindex mno-sdata
 Do not generate sdata references. This is the default for tool chains
-targeting Linux applications (@emph{arc-linux-uclibc-} and
-@emph{arceb-linux-uclibc}).
+built for @code{arc-linux-uclibc} and @code{arceb-linux-uclibc}
+targets.
 
 @item -mucb-mcount
 @opindex mucb-mcount
@@ -11684,10 +11696,13 @@ The recognized values for @var{level} are:
 @table @samp
 @item 0
 No size optimization.  This level is deprecated and treated like @samp{1}.
+
 @item 1
 Short instructions are used opportunistically.
+
 @item 2
 In addition, alignment of loops and of code after barriers are dropped.
+
 @item 3
 In addition, optional data alignment is dropped, and the option @option{Os} is enabled.
 

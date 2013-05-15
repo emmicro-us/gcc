@@ -3,6 +3,21 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+2013-05-15  Jeremy Bennett  <jeremy.bennett@embecosm.com>
+
+	* doc/extend.texi (Declaring Attributes of Functions): Correct
+	typo for interrupt attribute. Note that branch-and-link has a
+	21-bit offset.
+	(ARC Built-in Functions): Correct first argument of deftypefn in
+	some places.
+	* doc/invoke.texi (ARC Options): Note that -mshort-calls has a
+	21-bit range. Clarify meaning of options passed through to the linker.
+
+2013-05-14  Jeremy Bennett  <jeremy.bennett@embecosm.com>
+
+	* doc/invoke.texi (ARC Options): Add -mARC601 alias
+	and index entry for -mARC601 cpu option.
+
 2013-05-13  Jeremy Bennett  <jeremy.bennett@embecosm.com>
 
 	* doc/extend.texi (ARC Built-in Functions): Use deftypefn for
