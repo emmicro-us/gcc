@@ -9009,7 +9009,7 @@ mov  r@var{regno}, @var{val}
 @end deftypefn
 
 @deftypefn {Built-in Function} int __builtin_arc_divaw (int @var{a}, int @var{b})
-Only available if either @option{-mcpu=ARC700} or @option{-mEA} is set.
+Only available if either @option{-mcpu=ARC700} or @option{-meA} is set.
 Generates:
 @example
 divaw  @var{dest}, @var{a}, @var{b}
@@ -9184,7 +9184,7 @@ provided:
 The following is a complete list of all the SIMD built-ins provided
 for ARC, grouped by calling signature.
 
-The followign take two @code{__v8hi} arguments and return a
+The following take two @code{__v8hi} arguments and return a
 @code{__v8hi} result:
 @example
 __v8hi __builtin_arc_vaddaw (__v8hi, __v8hi)
@@ -17191,3 +17191,6 @@ implicitly scoped inside a C language scope.  Also, an empty prototype
 @code{()} is treated as an unspecified number of arguments, rather
 than no arguments, as C++ demands.
 @end table
+
+@c  LocalWords:  emph deftypefn builtin ARCv2EM SIMD builtins msimd
+@c  LocalWords:  typedef v4si v8hi DMA dma vdiwr vdowr followign
