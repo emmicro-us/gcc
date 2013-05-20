@@ -11,3 +11,4 @@ d8f0ff19a72eac27d2033001b16f73d8ba1d235c
 e19caafab9874303238974f6b5ef6d85932ea5a1 (resource.c COND_EXEC bug)
 ed6431d6d5850a44e4087c282aac95e8743d6c3f (resource.c COND_EXEC bug)
 3f75e6e0f6de2804fd4e37512f9dc974acd6a25e (branch shortening test)
+c4c50937b1493c878fca92bcea77f6aa2639cfcd (recog.c part, verify_changes ICE)

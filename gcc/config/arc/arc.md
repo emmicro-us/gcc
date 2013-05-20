@@ -3371,7 +3371,7 @@
     }
   else
     {
-      arc_ccfsm_record_condition (operands[1], 0, insn, 0);
+      arc_ccfsm_record_condition (operands[1], false, insn, 0);
       if (get_attr_length (insn) == 2)
 	 return \"b%d1%? %^%l0%&\";
       else
@@ -3421,7 +3421,7 @@
     }
   else
     {
-      arc_ccfsm_record_condition (operands[1], 1, insn, 0);
+      arc_ccfsm_record_condition (operands[1], true, insn, 0);
       if (get_attr_length (insn) == 2)
 	 return \"b%D1%? %^%l0\";
       else
@@ -4448,7 +4448,7 @@
 ; represent the blink use in return / sibcall instructions themselves, and
 ; instead have to show it in EPILOGUE_USES and must explicitly
 ; forbid instructions that change blink in the return / sibcall delay slot.
-(define_insn "return_i"
+(define_insn "simple_return"
   [(simple_return)]
   "reload_completed"
 {
@@ -4492,6 +4492,8 @@
   if (TARGET_PAD_RETURN)
     arc_pad_return ();
   output_asm_insn (\"j%d0%!%# [%1]%&\", xop);
+  /* record the condition in case there is a delay insn.  */
+  arc_ccfsm_record_condition (xop[0], false, insn, 0);
   return \"\";
 }
   [(set_attr "type" "return")
@@ -4538,6 +4540,12 @@
     }
 }
   [(set_attr "length" "12")])
+
+;; ??? #ifdefs in function.c require the presence of this pattern, with a
+;; non-constant predicate.
+(define_expand "return"
+  [(return)]
+  "optimize < 0")
 
  ;; Comment in final.c (insn_current_reference_address) says
  ;; forward branch addresses are calculated from the next insn after branch
