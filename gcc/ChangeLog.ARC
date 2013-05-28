@@ -3,6 +3,12 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+2013-05-28  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/predicates.md (mult_operator): Check TARGET_NOMPY_SET.
+	Move before commutative_operator.
+	(commutative_operator): Use mult_operator.
+
 2013-05-23  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.md (attribute length): Conditionalized move insns
