@@ -3,6 +3,10 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+2013-05-29  Vineet Gupta  <vgupta@synopsys.com>
+
+	* config/arc/arc.h (DWARF2_FRAME_INFO): Don't define unconditionally
+
 2013-05-28  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/predicates.md (mult_operator): Check TARGET_NOMPY_SET.
