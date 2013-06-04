@@ -3,6 +3,10 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+2013-06-04  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Fix typo: %<A6 -> %<mA6
+
 2013-06-01  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.md (umul_600): Output LIMM before register operand.
