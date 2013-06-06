@@ -140,8 +140,8 @@ along with GCC; see the file COPYING3.  If not see
 %{mcpu=ARC700:-mARC700} \
 %{mcpu=ARC700:-mEA} \
 %{!mcpu=*:" ASM_DEFAULT "}}}}} \
-%{mbarrel-shifter} %{mno-mpy} %{mmul64} %{mmul32x16:-mdsp} %{mnorm} %{mswap} \
-%{mEA} %{mmin-max} %{mspfp*} %{mdpfp*} \
+%{mbarrel-shifter} %{mno-mpy} %{mmul64} %{mmul32x16:-mdsp-packa} %{mnorm} \
+%{mswap} %{mEA} %{mmin-max} %{mspfp*} %{mdpfp*} \
 %{msimd} \
 %{mmac-d16} %{mmac-24} %{mdsp-packa} %{mcrc} %{mdvbf} %{mtelephony} %{mxy} \
 %{mcpu=ARC700:%{mlock}} \
