@@ -117,10 +117,10 @@ along with GCC; see the file COPYING3.  If not see
 /* Match the macros used in the assembler.  */
 #define CPP_SPEC "\
 %{msimd:-D__Xsimd} %{mno-mpy:-D__Xno_mpy} %{mswap:-D__Xswap} \
-%{mmin_max:-D__Xmin_max} %{mEA:-D__Xea} \
+%{mmin-max:-D__Xmin_max} %{mEA:-D__Xea} \
 %{mspfp*:-D__Xspfp} %{mdpfp*:-D__Xdpfp} \
-%{mmac_d16:-D__Xxmac_d16} %{mmac_24:-D__Xxmac_24} \
-%{mdsp_packa:-D__Xdsp_packa} %{mcrc:-D__Xcrc} %{mdvbf:-D__Xdvbf} \
+%{mmac-d16:-D__Xxmac_d16} %{mmac-24:-D__Xxmac_24} \
+%{mdsp-packa:-D__Xdsp_packa} %{mcrc:-D__Xcrc} %{mdvbf:-D__Xdvbf} \
 %{mtelephony:-D__Xtelephony} %{mxy:-D__Xxy} %{mmul64: -D__Xmult32} \
 %{mlock:-D__Xlock} %{mswape:-D__Xswape} %{mrtsc:-D__Xrtsc} \
 "
@@ -129,21 +129,24 @@ along with GCC; see the file COPYING3.  If not see
 %{EB:%{EL:%emay not use both -EB and -EL}} \
 %{EB:-mbig-endian} %{EL:-mlittle-endian} \
 "
+
+#define ASM_DEFAULT "-mARC700 -mEA"
+
 #define ASM_SPEC  "\
 %{mbig-endian|EB:-EB} %{EL} \
 %{mcpu=A5|mcpu=a5|mA5:-mA5} \
-%{mcpu=ARC600|mcpu=arc600|mARC600|mA6:-mARC600} \
-%{mcpu=ARC601|mcpu=arc601:-mARC601} \
-%{mcpu=ARC700|mcpu=arc700|mARC700|mA7:-mARC700} \
-%{mcpu=ARC700|mcpu=arc700|mARC700|mA7:-mEA} \
-%{!mcpu=*:%{!mA5:%{!mA6:%{!mARC600:%{!mARC700:-mARC700 -mEA}}}}} \
-%{mbarrel_shifter} %{mno-mpy} %{mmul64} %{mmul32x16:-mdsp} %{mnorm} %{mswap} \
-%{mEA} %{mmin_max} %{mspfp*} %{mdpfp*} \
+%{mcpu=ARC600:-mARC600} \
+%{mcpu=ARC601:-mARC601} \
+%{mcpu=ARC700:-mARC700} \
+%{mcpu=ARC700:-mEA} \
+%{!mcpu=*:" ASM_DEFAULT "}}}}} \
+%{mbarrel-shifter} %{mno-mpy} %{mmul64} %{mmul32x16:-mdsp} %{mnorm} %{mswap} \
+%{mEA} %{mmin-max} %{mspfp*} %{mdpfp*} \
 %{msimd} \
-%{mmac_d16} %{mmac_24} %{mdsp_packa} %{mcrc} %{mdvbf} %{mtelephony} %{mxy} \
-%{mcpu=ARC700|mARC700|mA7:%{mlock}} \
-%{mcpu=ARC700|mARC700|mA7:%{mswape}} \
-%{mcpu=ARC700|mARC700|mA7:%{mrtsc}} \
+%{mmac-d16} %{mmac-24} %{mdsp-packa} %{mcrc} %{mdvbf} %{mtelephony} %{mxy} \
+%{mcpu=ARC700:%{mlock}} \
+%{mcpu=ARC700:%{mswape}} \
+%{mcpu=ARC700:%{mrtsc}} \
 "
 
 #if DEFAULT_LIBC == LIBC_UCLIBC
@@ -222,10 +225,18 @@ along with GCC; see the file COPYING3.  If not see
 #endif
 
 #define DRIVER_SELF_SPECS DRIVER_ENDIAN_SELF_SPECS \
-  "%{mARC5: -mcpu=A5 %<mA5}" \
+  "%{mARC5|mA5: -mcpu=A5 %<mARC5 %<mA5}" \
   "%{mARC600|mA6: -mcpu=ARC600 %<mARC600 %<mA6}" \
   "%{mARC601: -mcpu=ARC601 %<mARC601}" \
-  "%{mARC700|mA7: -mcpu=ARC700 %<mARC700 %<mA7}"
+  "%{mARC700|mA7: -mcpu=ARC700 %<mARC700 %<mA7}" \
+  "%{barrel_shifter: -barrel-shifter %<barrel_shifter}" \
+  "%{mspfp_compact: -mspfp-compact %<mspfp_compact}" \
+  "%{mspfp_fast: -mspfp-fast %<mspfp_fast}" \
+  "%{mdpfp_compact: -mdpfp-compact %<mdpfp_compact}" \
+  "%{mdpfp_fast: -mdpfp-fast %<mdpfp_fast}" \
+  "%{mdsp_packa: -mdsp-packa %<mdsp_packa}" \
+  "%{mmac_d16: -mmac-d16 %<mmac_d16}" \
+  "%{mmac_24: -mmac-24 %<mmac_24}"
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
