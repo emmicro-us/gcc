@@ -3,6 +3,12 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+2013-06-08  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* gcc/config/arc/arc.c (arc_hazard): Also consider CALLs before
+	doloop_end_i.
+	(arc_adjust_insn_length): Likewise.
+
 2013-06-07  Mischa Jonker  <mjonker@synopsys.com>
 
 	* config/arc/arc.h (LINK_COMMAND_SPEC): Don't include libgcc when
