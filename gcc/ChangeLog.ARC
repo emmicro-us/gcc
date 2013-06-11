@@ -3,6 +3,13 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+2013-06-11  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.opt: Add backward compatibility aliases.
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Update backwards
+	compatibility translations to translate the prefixes chosen
+	in arc.opt.
+
 2013-06-10  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.md (eh_return): Check if address is valid, and

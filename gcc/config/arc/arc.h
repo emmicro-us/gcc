@@ -228,14 +228,11 @@ along with GCC; see the file COPYING3.  If not see
   "%{mARC600|mA6: -mcpu=ARC600 %<mARC600 %<mA6}" \
   "%{mARC601: -mcpu=ARC601 %<mARC601}" \
   "%{mARC700|mA7: -mcpu=ARC700 %<mARC700 %<mA7}" \
-  "%{barrel_shifter: -barrel-shifter %<barrel_shifter}" \
-  "%{mspfp_compact: -mspfp-compact %<mspfp_compact}" \
-  "%{mspfp_fast: -mspfp-fast %<mspfp_fast}" \
-  "%{mdpfp_compact: -mdpfp-compact %<mdpfp_compact}" \
-  "%{mdpfp_fast: -mdpfp-fast %<mdpfp_fast}" \
-  "%{mdsp_packa: -mdsp-packa %<mdsp_packa}" \
-  "%{mmac_d16: -mmac-d16 %<mmac_d16}" \
-  "%{mmac_24: -mmac-24 %<mmac_24}"
+  "%{barrel_shifte*: -barrel-shifte%* %<barrel_shifte*}" \
+  "%{mspfp_*: -mspfp-%* %<mspfp_*}" \
+  "%{mdpfp_*: -mdpfp-%* %<mdpfp_*}" \
+  "%{mdsp_pack*: -mdsp-pack%* %<mdsp_pack*}" \
+  "%{mmac_*: -mmac-%* %<mmac_*}"
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
