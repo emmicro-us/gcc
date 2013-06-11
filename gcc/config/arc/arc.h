@@ -228,7 +228,7 @@ along with GCC; see the file COPYING3.  If not see
   "%{mARC600|mA6: -mcpu=ARC600 %<mARC600 %<mA6}" \
   "%{mARC601: -mcpu=ARC601 %<mARC601}" \
   "%{mARC700|mA7: -mcpu=ARC700 %<mARC700 %<mA7}" \
-  "%{barrel_shifte*: -barrel-shifte%* %<barrel_shifte*}" \
+  "%{mbarrel_shifte*: -mbarrel-shifte%* %<mbarrel_shifte*}" \
   "%{mspfp_*: -mspfp-%* %<mspfp_*}" \
   "%{mdpfp_*: -mdpfp-%* %<mdpfp_*}" \
   "%{mdsp_pack*: -mdsp-pack%* %<mdsp_pack*}" \
