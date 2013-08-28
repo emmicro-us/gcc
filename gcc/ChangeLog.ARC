@@ -1,3 +1,13 @@
+2012-11-08  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_adjust_insn_length): Remove last parameter.
+	* config/arc/arc-protos.h (arc_adjust_insn_length): Adjust prototype.
+	* config/arc/arc.h (ADJUST_INSN_LENGTH): Update.
+
+2012-11-07  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (pass_arc_ifcvt): Set optinfo_flags field.
+
 2012-11-03  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_ifcvt): Delete barrier and, if indicated,
@@ -163,6 +173,11 @@
 	Add comment to keep this in sync with arc.c.
 	* config.gcc (arc*-*-linux-uclibc*): Add gnu-user.h / glibc-stdint.h
 	to tm_file.
+
+2012-10-21  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_address_cost): Update parameter list.
+	(arc_mode_dependent_address_p): Likewise.
 
 2012-10-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
