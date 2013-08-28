@@ -251,7 +251,7 @@
 	(sibcall_value_insn): Likewise.
 	(sibcall_prof, sibcall_value_prof): Add predicable attribute.
 
-2012-10-02  Joern Rennecke  <joern.rennecke@embecosm.com>
+2012-11-02  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c ("tree-pass.h"): Include.
 	(struct GTY (()) arc_ccfsm): Add cond member.
