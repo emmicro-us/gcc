@@ -1,7 +1,4 @@
-2012-11-12  Joern Rennecke  <joern.rennecke@embecosm.com>
-
-	* arc.md (entire file): Whitespace fixes.
-	(attribute length): Remove obsolete bbit nop padding compensation.
+2012-11-13  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.md (attribute length): Fix value for COND_EXEC
 	sfunc.
@@ -9,6 +6,11 @@
 
 	* config/arc/arc.c (arc_label_align): Check INSN_P before calling
 	recog_memoized.
+
+2012-11-12  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* arc.md (entire file): Whitespace fixes.
+	(attribute length): Remove obsolete bbit nop padding compensation.
 
 2012-11-12  Joern Rennecke  <joern.rennecke@embecosm.com>
 
