@@ -22,6 +22,8 @@
 	* doc/extend.texi, doc/invoke.texi: Fix instances of single-space
 	after full-stop in ARC documentation.
 
+	* doc/invoke.texi: Fix opindex for ARC601.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.

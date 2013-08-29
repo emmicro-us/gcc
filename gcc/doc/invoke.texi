@@ -11357,7 +11357,7 @@ values for @var{cpu} are
 Compile for ARC600.  Aliases: @option{-mA6}, @option{-mARC600}.
 
 @item ARC601
-@opindex mARC600
+@opindex mARC601
 Compile for ARC601.  Alias: @option{-mARC601}.
 
 @item ARC700
