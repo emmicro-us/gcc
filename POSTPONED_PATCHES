@@ -8,7 +8,10 @@ b8aed05ee3339f75e68b68871f7e016dab0a0402
 02d31f1b4eeba395a085dcd2607c8aa35783ed42
 d8f0ff19a72eac27d2033001b16f73d8ba1d235c
 524a400bf9afe2351ac62813b868aa0397a2c5da
+310d65a9345485ba5469775ac39e9e58b4edd84e
 e19caafab9874303238974f6b5ef6d85932ea5a1 (resource.c COND_EXEC bug)
 ed6431d6d5850a44e4087c282aac95e8743d6c3f (resource.c COND_EXEC bug)
 3f75e6e0f6de2804fd4e37512f9dc974acd6a25e (branch shortening test)
 c4c50937b1493c878fca92bcea77f6aa2639cfcd (recog.c part, verify_changes ICE)
+a72f393ca53a42595be832837c5fdd9a30e9ed5d (arc linux testing)
+53b5cfdc813c65db1121f0cfc4f3ab03115d29bc (environment for dejagnu plugin check)
