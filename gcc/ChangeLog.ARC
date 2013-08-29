@@ -12,6 +12,8 @@
 	* config/arc/arc.opt, config/arc/arc600.md: Likewise.
 	* config/arc/fpx.md, config/arc/predicates.md: Likewise.
 
+	* config/arc/predicates.md: Space -> tab fixes.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.

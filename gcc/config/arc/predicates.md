@@ -174,7 +174,7 @@
   (match_code "reg, subreg")
   {
      if ((GET_MODE (op) != mode) && (mode != VOIDmode))
-         return 0;
+	 return 0;
 
       return (GET_CODE (op) == REG)
       && (REGNO (op) >= FIRST_PSEUDO_REGISTER
@@ -222,49 +222,49 @@
       plus1 = XEXP (addr, 1);
 
       if ((GET_CODE (plus0) == REG)
-          && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
-              || COMPACT_GP_REG_P (REGNO (plus0)))
-          && ((GET_CODE (plus1) == REG)
-              && ((REGNO (plus1) >= FIRST_PSEUDO_REGISTER)
-                  || COMPACT_GP_REG_P (REGNO (plus1)))))
-        {
-          return 1;
-        }
+	  && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
+	      || COMPACT_GP_REG_P (REGNO (plus0)))
+	  && ((GET_CODE (plus1) == REG)
+	      && ((REGNO (plus1) >= FIRST_PSEUDO_REGISTER)
+		  || COMPACT_GP_REG_P (REGNO (plus1)))))
+	{
+	  return 1;
+	}
 
       if ((GET_CODE (plus0) == REG)
-          && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
-              || COMPACT_GP_REG_P (REGNO (plus0)))
-          && (GET_CODE (plus1) == CONST_INT))
-        {
-          off = INTVAL (plus1);
+	  && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
+	      || COMPACT_GP_REG_P (REGNO (plus0)))
+	  && (GET_CODE (plus1) == CONST_INT))
+	{
+	  off = INTVAL (plus1);
 
-          /* Negative offset is not supported in 16-bit load/store insns.  */
-          if (off < 0)
-            return 0;
+	  /* Negative offset is not supported in 16-bit load/store insns.  */
+	  if (off < 0)
+	    return 0;
 
-          switch (size)
-            {
-            case 1:
-              return (off < 32);
-            case 2:
-              return ((off < 64) && (off % 2 == 0));
-            case 4:
-              return ((off < 128) && (off % 4 == 0));
-            }
-        }
+	  switch (size)
+	    {
+	    case 1:
+	      return (off < 32);
+	    case 2:
+	      return ((off < 64) && (off % 2 == 0));
+	    case 4:
+	      return ((off < 128) && (off % 4 == 0));
+	    }
+	}
 
       if ((GET_CODE (plus0) == REG)
-          && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
-              || SP_REG_P (REGNO (plus0)))
-          && (GET_CODE (plus1) == CONST_INT))
-        {
-          off = INTVAL (plus1);
-          return ((size != 2) && (off >= 0 && off < 128) && (off % 4 == 0));
-        }
+	  && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
+	      || SP_REG_P (REGNO (plus0)))
+	  && (GET_CODE (plus1) == CONST_INT))
+	{
+	  off = INTVAL (plus1);
+	  return ((size != 2) && (off >= 0 && off < 128) && (off % 4 == 0));
+	}
     default:
       break ;
       /* TODO: 'gp' and 'pcl' are to supported as base address operand
-               for 16-bit load instructions.  */
+	       for 16-bit load instructions.  */
     }
   return 0;
 
@@ -298,7 +298,7 @@
     {
     case REG:
       return (REGNO (addr) >= FIRST_PSEUDO_REGISTER
-                || COMPACT_GP_REG_P (REGNO (addr))
+		|| COMPACT_GP_REG_P (REGNO (addr))
 	      || (SP_REG_P (REGNO (addr)) && (size != 2)));
 	/* stw_s does not support SP as a parameter.  */
     case PLUS:
@@ -306,36 +306,36 @@
       plus1 = XEXP (addr, 1);
 
       if ((GET_CODE (plus0) == REG)
-          && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
-              || COMPACT_GP_REG_P (REGNO (plus0)))
-          && (GET_CODE (plus1) == CONST_INT))
-        {
-          off = INTVAL (plus1);
+	  && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
+	      || COMPACT_GP_REG_P (REGNO (plus0)))
+	  && (GET_CODE (plus1) == CONST_INT))
+	{
+	  off = INTVAL (plus1);
 
-          /* Negative offset is not supported in 16-bit load/store insns.  */
-          if (off < 0)
-            return 0;
+	  /* Negative offset is not supported in 16-bit load/store insns.  */
+	  if (off < 0)
+	    return 0;
 
-          switch (size)
-            {
-            case 1:
-              return (off < 32);
-            case 2:
-              return ((off < 64) && (off % 2 == 0));
-            case 4:
-              return ((off < 128) && (off % 4 == 0));
-            }
-        }
+	  switch (size)
+	    {
+	    case 1:
+	      return (off < 32);
+	    case 2:
+	      return ((off < 64) && (off % 2 == 0));
+	    case 4:
+	      return ((off < 128) && (off % 4 == 0));
+	    }
+	}
 
       if ((GET_CODE (plus0) == REG)
-          && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
-              || SP_REG_P (REGNO (plus0)))
-          && (GET_CODE (plus1) == CONST_INT))
-        {
-          off = INTVAL (plus1);
+	  && ((REGNO (plus0) >= FIRST_PSEUDO_REGISTER)
+	      || SP_REG_P (REGNO (plus0)))
+	  && (GET_CODE (plus1) == CONST_INT))
+	{
+	  off = INTVAL (plus1);
 
-          return ((size != 2) && (off >= 0 && off < 128) && (off % 4 == 0));
-        }
+	  return ((size != 2) && (off >= 0 && off < 128) && (off % 4 == 0));
+	}
     default:
       break;
     }
@@ -422,8 +422,8 @@
       if (REGNO (op) == PROGRAM_COUNTER_REGNO)
 	return 0;
       else if (TARGET_MULMAC_32BY16_SET
-               && (REGNO (op) == 56 || REGNO(op) == 57))
-        return 0;
+	       && (REGNO (op) == 56 || REGNO(op) == 57))
+	return 0;
       else if (TARGET_MUL64_SET
 	       && (REGNO (op) == 57 || REGNO(op) == 58 || REGNO(op) == 59 ))
 	return 0;
@@ -570,7 +570,7 @@
     {
       mode = GET_MODE (op);
       if (GET_MODE_CLASS (mode) != MODE_CC)
-        return FALSE;
+	return FALSE;
     }
 
   if (mode == GET_MODE (op) && GET_CODE (op) == REG && REGNO (op) == CC_REG)
@@ -591,7 +591,7 @@
     {
       mode = rmode;
       if (GET_MODE_CLASS (mode) != MODE_CC)
-        return FALSE;
+	return FALSE;
     }
 
   if (REGNO (op) != 61)
