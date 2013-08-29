@@ -1,3 +1,8 @@
+2013-08-29  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
+	specific functions.
+
 2013-05-10  Jeremy Bennett  <jeremy.bennett@embecosm.com>
 
 	* doc/extend.texi (ARC Built-in Functions): New section defining

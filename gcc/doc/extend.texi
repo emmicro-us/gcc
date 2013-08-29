@@ -8978,12 +8978,6 @@ Generates
 brk
 @end example
 
-@item void __builtin_arc_clri (unsigned int  @var{c})
-Only valid with @option{-mcpu=ARCEM}. Generates
-@example
-clri  @var{c}
-@end example
-
 @item unsigned int __builtin_arc_core_read (unsigned int @var{regno})
 The operand is the number of a register to be read.  Generates:
 @example
@@ -9001,40 +8995,18 @@ mov  r@var{regno}, @var{val}
 @end example
 
 @item int __builtin_arc_divaw (int @var{a}, int @var{b})
-Only available with either @option{-mcpu=ARC700} or @option{-mEA} is set, and
-never with @option{-mcpu=ARCEM}.  Generates:
+Only available with either @option{-mcpu=ARC700} or @option{-mEA} is set.
+Generates:
 @example
 divaw  @var{dest}, @var{a}, @var{b}
 @end example
 where the value in @var{dest} will be the result returned from the
 built-in.
 
-@item int __builtin_arc_ffs (int @var{a})
-Only valid with @option{-mcpu=ARCEM} and @option{-mnorm}.  Generates:
-@example
-ffs  @var{dest}, @var{a}
-@end example
-Where the value in @var{dest} will be the result returned from the
-built-in.
-
 @item void __builtin_arc_flag (unsigned int @var{a})
 Generates
 @example
 flag  @var{a}
-@end example
-
-@item int __builtin_arc_fls (int @var{a})
-Only valid with @option{-mcpu=ARCEM} and @option{-mnorm}.  Generates:
-@example
-fls  @var{dest}, @var{a}
-@end example
-Where the value in @var{dest} will be the result returned from the
-built-in.
-
-@item void __builtin_arc_kflag (unsigned int @var{cc})
-Only valid with @option{-mcpu=ARCEM}. Generates:
-@example
-kflag  @var{cc}
 @end example
 
 @item unsigned int __builtin_arc_lr (unsigned int @var{auxr})
@@ -9088,12 +9060,6 @@ built-in.
 Generates:
 @example
 rtie
-@end example
-
-@item void __builtin_arc_seti (int @var{c})
-Only valid with @option{-mcpu=ARCEM}.  Generates:
-@example
-seti  @var{c}
 @end example
 
 @item void __builtin_arc_sleep (int @var{a}
