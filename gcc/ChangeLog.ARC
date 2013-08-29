@@ -1,3 +1,7 @@
+2013-08-30  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.h (ASM_SPEC): Remove stray "}}}}".
+
 2013-08-29  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
