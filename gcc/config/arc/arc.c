@@ -61,6 +61,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "reload.h" /* For operands_match_p */
 #include "df.h"
 #include "tree-pass.h"
+#include "context.h"
+#include "pass_manager.h"
 
 /* Which cpu we're compiling for (A5, ARC600, ARC601, ARC700).  */
 static const char *arc_cpu_string = "";
@@ -588,25 +590,43 @@ arc_secondary_reload (bool in_p, rtx x, reg_class_t cl, enum machine_mode,
 }
 
 static unsigned arc_ifcvt (void);
-struct rtl_opt_pass pass_arc_ifcvt =
+
+namespace {
+
+const pass_data pass_data_arc_ifcvt =
 {
- {
   RTL_PASS,
   "arc_ifcvt",				/* name */
   OPTGROUP_NONE,			/* optinfo_flags */
-  NULL,					/* gate */
-  arc_ifcvt,				/* execute */
-  NULL,					/* sub */
-  NULL,					/* next */
-  0,					/* static_pass_number */
+  false,				/* has_gate */
+  true,					/* has_execute */
   TV_IFCVT2,				/* tv_id */
   0,					/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_df_finish			/* todo_flags_finish */
- }
 };
+
+class pass_arc_ifcvt : public rtl_opt_pass
+{
+public:
+  pass_arc_ifcvt(gcc::context *ctxt)
+  : rtl_opt_pass(pass_data_arc_ifcvt, ctxt)
+  {}
+
+  /* opt_pass methods: */
+  opt_pass * clone () { return new pass_arc_ifcvt (ctxt_); }
+  unsigned int execute () { return arc_ifcvt (); }
+};
+
+} // anon namespace
+
+rtl_opt_pass *
+make_pass_arc_ifcvt (gcc::context *ctxt)
+{
+  return new pass_arc_ifcvt (ctxt);
+}
 
 /* Called by OVERRIDE_OPTIONS to initialize various things.  */
 
@@ -715,20 +735,16 @@ arc_init (void)
   arc_punct_chars['^'] = 1;
   arc_punct_chars['&'] = 1;
 
-  /* There are two target-independent ifcvt passes, and arc_reorg may do
-     one ore more arc_ifcvt calls.  */
-  static struct register_pass_info arc_ifcvt4_info
-    = { &pass_arc_ifcvt.pass, "dbr",
-	1, PASS_POS_INSERT_AFTER
-      };
-
-  static struct register_pass_info arc_ifcvt5_info
-    = { &pass_arc_ifcvt.pass, "shorten",
-	1, PASS_POS_INSERT_BEFORE
-      };
-
   if (optimize > 1 && !TARGET_NO_COND_EXEC)
     {
+      /* There are two target-independent ifcvt passes, and arc_reorg may do
+	 one or more arc_ifcvt calls.  */
+      opt_pass *pass_arc_ifcvt_4 = make_pass_arc_ifcvt (g);
+      struct register_pass_info arc_ifcvt4_info
+	= { pass_arc_ifcvt_4, "dbr", 1, PASS_POS_INSERT_AFTER };
+      struct register_pass_info arc_ifcvt5_info
+	= { pass_arc_ifcvt_4->clone (), "shorten", 1, PASS_POS_INSERT_BEFORE };
+
       register_pass (&arc_ifcvt4_info);
       register_pass (&arc_ifcvt5_info);
     }
@@ -5847,7 +5863,7 @@ arc_reorg (void)
       if (optimize > 1 && !TARGET_NO_COND_EXEC)
 	{
 	  arc_ifcvt ();
-	  unsigned int flags = pass_arc_ifcvt.pass.todo_flags_finish;
+	  unsigned int flags = pass_data_arc_ifcvt.todo_flags_finish;
 	  df_finish_pass ((flags & TODO_df_verify) != 0);
 	}
 

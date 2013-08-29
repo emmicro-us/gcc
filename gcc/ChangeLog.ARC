@@ -24,6 +24,14 @@
 
 	* doc/invoke.texi: Fix opindex for ARC601.
 
+	Update to new pass infrastructure:
+	* config/arc/arc.c: Include context.h and pass_manager.h .
+	(pass_arc_ifcvt): make into class, putting data members into ..
+	(pass_data_arc_ifcvt): .. this (new).
+	(make_pass_arc_ifcvt): New function.
+	(arc_init): Make/clone passes before registering them.
+	(arc_reorg): Get flags from pass_data_arc_ifcvt.todo_flags_finish.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.
