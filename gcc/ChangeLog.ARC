@@ -42,6 +42,11 @@
 	* config/arc/arc.h (DRIVER_SELF_SPECS): Translate mEA to mea,
 	multcost to mmultcost.
 
+	* config/arc/arc.opt (mvolatile-cache): Add RejectNegative.
+	(mno-volatile-cache): Likewise.
+	* testsuite/gcc.target/arc/nv-cache.c: New test.
+	* testsuite/gcc.target/arc/v-cache.c: Likewise.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.

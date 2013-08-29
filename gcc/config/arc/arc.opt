@@ -65,12 +65,14 @@ Tweak register allocation to help 16-bit instruction generation
 ; but we do that without -mmixed-code, too, it's just a different instruction
 ; count / size tradeoff.
 
+; We use an explict definition for the negative form because that is the
+; actually interesting option, and we want that to have its own comment.
 mvolatile-cache
-Target Report Mask(VOLATILE_CACHE_SET)
+Target Report RejectNegative Mask(VOLATILE_CACHE_SET)
 Use ordinarily cached memory accesses for volatile references
 
 mno-volatile-cache
-Target Report InverseMask(VOLATILE_CACHE_SET)
+Target Report RejectNegative InverseMask(VOLATILE_CACHE_SET)
 Enable cache bypass for volatile references
 
 mbarrel-shifter
