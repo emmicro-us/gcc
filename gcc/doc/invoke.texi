@@ -11358,7 +11358,7 @@ Compile for ARC600.  Aliases: @option{-mA6}, @option{-mARC600}.
 
 @item ARC601
 @opindex mARC600
-Compile for ARC601. Alias: @option{-mARC601}.
+Compile for ARC601.  Alias: @option{-mARC601}.
 
 @item ARC700
 @opindex mA7
@@ -11553,21 +11553,21 @@ to the full 32-bit address range.
 @opindex mmedium-calls
 Don't use less than 25 bit addressing range for calls, which is the
 offset available for an unconditional branch-and-link
-instruction. Conditional execution of function calls is suppressed, to
+instruction.  Conditional execution of function calls is suppressed, to
 allow use of the 25-bit range, rather than the 21-bit range with
-conditional branch-and-link. This is the default for tool chains built
+conditional branch-and-link.  This is the default for tool chains built
 for @w{@code{arc-linux-uclibc}} and @w{@code{arceb-linux-uclibc}} targets.
 
 @item -mno-sdata
 @opindex mno-sdata
-Do not generate sdata references. This is the default for tool chains
+Do not generate sdata references.  This is the default for tool chains
 built for @w{@code{arc-linux-uclibc}} and @w{@code{arceb-linux-uclibc}}
 targets.
 
 @item -mucb-mcount
 @opindex mucb-mcount
 Instrument with mcount calls as used in UCB code.  I.e. do the
-counting in the callee, not the caller. By default ARC instrumentation
+counting in the callee, not the caller.  By default ARC instrumentation
 counts in the caller.
 
 @item -mvolatile-cache

@@ -9252,7 +9252,7 @@ __v8hi __builtin_arc_vbsubw (__v8hi, int)
 
 The following take one @code{__v8hi} argument and one @code{int} argument which
 must be a 3-bit compile time constant indicating a register number
-I0-I7. They return a @code{__v8hi} result.
+I0-I7.  They return a @code{__v8hi} result.
 @example
 __v8hi __builtin_arc_vasrw (__v8hi, const int)
 __v8hi __builtin_arc_vsr8 (__v8hi, const int)
@@ -9313,7 +9313,7 @@ void __builtin_arc_vdirun (int, int)
 void __builtin_arc_vdorun (int, int)
 @end example
 
-The following take two @code{int} arguments and return no result. The
+The following take two @code{int} arguments and return no result.  The
 first argument must a 3-bit compile time constant indicating one of
 the DR0-DR7 DMA setup channels:
 @example

@@ -19,6 +19,9 @@
 	(arc_expand_builtin): Don't handle ARC_BUILTIN_ALIGNED.
 	* doc/extend.texi (__builtin_arc_aligned): Don't document.
 
+	* doc/extend.texi, doc/invoke.texi: Fix instances of single-space
+	after full-stop in ARC documentation.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.
