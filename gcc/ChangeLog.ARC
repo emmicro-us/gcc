@@ -3,6 +3,11 @@
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
 	specific functions.
 
+	* config/arc/arc.c: Whitespace / formatting fixes.
+	* config/arc/arc.h (SDATA_BASE_REGNUM): Define.
+	* config/arc/arc.c (LEGITIMATE_SMALL_DATA_ADDRESS_P):
+	Use SDATA_BASE_REGNUM.
+
 2013-07-02 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c: Fixed indentation.

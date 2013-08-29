@@ -1205,6 +1205,9 @@ arc_select_cc_mode (OP, X, Y)
    position independent code.  */
 #define LEGITIMATE_PIC_OPERAND_P(X)  (arc_legitimate_pic_operand_p(X))
 
+/* PIC and small data don't mix on ARC because they use the same register.  */
+#define SDATA_BASE_REGNUM 26
+
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) \
   (flag_pic \
    ? (GLOBAL ? DW_EH_PE_indirect : 0) | DW_EH_PE_pcrel | DW_EH_PE_sdata4 \
