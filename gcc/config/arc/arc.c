@@ -7732,7 +7732,7 @@ enum
 
 /* While the infrastructure patch is waiting for review, duplicate the
    struct definitions, to allow this file to compile.  */
-#if 0
+#if 1
 typedef struct
 {
   unsigned align_set;

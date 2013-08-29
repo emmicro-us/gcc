@@ -32,6 +32,8 @@
 	(arc_init): Make/clone passes before registering them.
 	(arc_reorg): Get flags from pass_data_arc_ifcvt.todo_flags_finish.
 
+	* config/arc/arc.c (insn_length_variant_t): Enable typedef.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.
