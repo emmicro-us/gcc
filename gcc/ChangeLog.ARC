@@ -34,6 +34,14 @@
 
 	* config/arc/arc.c (insn_length_variant_t): Enable typedef.
 
+	* config/arc/arc.opt (ARC601): New option.
+	(mA6, mA7): Remove ARCtangent- prefix from CPU name.
+	(mEA, multcost): Rename to ..
+	(mea, mmultcost): .. these.
+	(mEA, multcost): New alias stubs.
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Translate mEA to mea,
+	multcost to mmultcost.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.

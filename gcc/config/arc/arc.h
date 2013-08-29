@@ -229,10 +229,12 @@ along with GCC; see the file COPYING3.  If not see
   "%{mARC601: -mcpu=ARC601 %<mARC601}" \
   "%{mARC700|mA7: -mcpu=ARC700 %<mARC700 %<mA7}" \
   "%{mbarrel_shifte*: -mbarrel-shifte%* %<mbarrel_shifte*}" \
+  "%{mEA: -mea %<mEA}" \
   "%{mspfp_*: -mspfp-%* %<mspfp_*}" \
   "%{mdpfp_*: -mdpfp-%* %<mdpfp_*}" \
   "%{mdsp_pack*: -mdsp-pack%* %<mdsp_pack*}" \
-  "%{mmac_*: -mmac-%* %<mmac_*}"
+  "%{mmac_*: -mmac-%* %<mmac_*}" \
+  "%{multcost=*: -mmultcost=%* %<multcost=*}"
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 

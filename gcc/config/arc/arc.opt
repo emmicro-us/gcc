@@ -39,15 +39,19 @@ Generate ARCompact 32-bit code for ARCtangent-A5 processor
 
 mA6
 Target Report
-Generate ARCompact 32-bit code for ARCtangent-ARC600 processor
+Generate ARCompact 32-bit code for ARC600 processor
 
 mARC600
 Target Report
 Same as -mA6
 
+mARC601
+Target Report
+Generate ARCompact 32-bit code for ARC601 processor
+
 mA7
 Target Report
-Generate ARCompact 32-bit code for ARCtangent-ARC700 processor
+Generate ARCompact 32-bit code for ARC700 processor
 
 mARC700
 Target Report
@@ -89,7 +93,7 @@ mno-mpy
 Target Report Mask(NOMPY_SET)
 Do not generate mpy instructions for ARC700
 
-mEA
+mea
 Target Report Mask(EA_SET)
 Generate Extended arithmetic instructions.  Currently only divaw, adds, subs and sat16 are supported
 
@@ -176,7 +180,7 @@ misize
 Target Report Var(TARGET_DUMPISIZE)
 Annotate assembler instructions with estimated addresses
 
-multcost=
+mmultcost=
 Target RejectNegative Joined UInteger Var(arc_multcost) Init(-1)
 Cost to assume for a multiply instruction, with 4 being equal to a normal insn.
 
@@ -357,6 +361,13 @@ Target Report Var(TARGET_UCB_MCOUNT)
 instrument with mcount calls as in the ucb code
 
 ; backward-compatibility aliases, translated by DRIVER_SELF_SPECS
+
+mEA
+Target
+
+multcost=
+Target RejectNegative Joined
+
 ; Unfortunately, listing the full option name gives us clashes
 ; with OPT_opt_name being claimed for both opt_name and opt-name,
 ; so we leave out the last character or more.
