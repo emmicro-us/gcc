@@ -1,5 +1,5 @@
 /* Common hooks for Synopsys DesignWare ARC
-   Copyright (C) 1994, 1995, 1997, 1998, 2007-2012
+   Copyright (C) 1994, 1995, 1997, 1998, 2007-2013
    Free Software Foundation, Inc.
    Contributor: Joern Rennecke <joern.rennecke@embecosm.com>
 		on behalf of Synopsys Inc.

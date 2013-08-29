@@ -1,3 +1,8 @@
+2013-08-29  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/t-arc: Update FSF Copyright years.
+	* config/arc/dp-hack.h: Likewise.
+
 2013-06-08  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/dp-hack.h

@@ -8,6 +8,10 @@
 	* config/arc/arc.c (LEGITIMATE_SMALL_DATA_ADDRESS_P):
 	Use SDATA_BASE_REGNUM.
 
+	* config/arc/arc.c: Update FSF Copyright years.
+	* config/arc/arc.opt, config/arc/arc600.md: Likewise.
+	* config/arc/fpx.md, config/arc/predicates.md: Likewise.
+
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_legitimize_reload_address): Declare.
