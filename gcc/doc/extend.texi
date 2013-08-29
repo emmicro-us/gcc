@@ -8982,12 +8982,6 @@ by a target may cause problems. At present the compiler is not
 guaranteed to detect such misuse, and as a result an internal compiler
 error may be generated.
 
-@deftypefn {Built-in Function} int __builtin_arc_aligned (void* @var{val}, int @var{alignval})
-Return 1 if @var{val} has the alignment given by @var{alignval},
-otherwise return 0. May generate a load constant instruction if the
-result is used.
-@end deftypefn
-
 @deftypefn {Built-in Function} void __builtin_arc_brk (void)
 Generates
 @example
