@@ -8,6 +8,9 @@
 	* config/arc/arc.md (casesi_load): Use next_nonnote_insn to
 	find JUMP_TABLE_DATA.
 
+	* config/arc/arc.c (arc_pad_return): Save current_insn_predicate
+	before / restore it after call to final_scan_insn.
+
 2013-08-29  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM

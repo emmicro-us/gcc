@@ -8472,10 +8472,12 @@ arc_pad_return (void)
 	  gcc_assert (!prev_real_insn (insn)
 		      || !arc_hazard (prev_real_insn (insn), prev));
 	  cfun->machine->force_short_suffix = !want_long;
+	  rtx save_pred = current_insn_predicate;
 	  final_scan_insn (prev, asm_out_file, optimize, 1, NULL);
 	  cfun->machine->force_short_suffix = -1;
 	  INSN_DELETED_P (prev) = 1;
 	  current_output_insn = insn;
+	  current_insn_predicate = save_pred;
 	}
       else if (want_long)
 	fputs ("\tnop\n", asm_out_file);
