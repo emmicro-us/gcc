@@ -5,6 +5,9 @@
 	* config/arc/arc.md (annul_ret_delay_insn): New attribute.
 	Use it in type "return" define_delay.
 
+	* config/arc/arc.md (casesi_load): Use next_nonnote_insn to
+	find JUMP_TABLE_DATA.
+
 2013-08-29  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM
