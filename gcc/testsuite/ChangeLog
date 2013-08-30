@@ -1,3 +1,126 @@
+2013-08-30  Teresa Johnson  <tejohnson@google.com>
+
+	* gcc.dg/inline-dump.c: Delete inadvertant commit.
+
+2013-08-30  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58277
+	* gcc.c-torture/execute/pr58277-1.c: New test.
+	* gcc.c-torture/execute/pr58277-2.c: New test.
+
+2013-08-30  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.dg/guality/param-1.c: New test.
+	* gcc.dg/guality/param-2.c: Likewise.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58228
+	* gcc.dg/torture/pr58228.c: New testcase.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58223
+	* gcc.dg/torture/pr58223.c: New testcase.
+	* gcc.dg/tree-ssa/ldist-16.c: Flip expected behavior.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58010
+	* gcc.dg/pr58010.c: New testcase.
+
+2013-08-29  Xinliang DavidLi  <davidxl@google.com>
+	
+	* gcc.dg/unroll_3.c: Message change.
+	* gcc.dg/unroll_4.c: Likewise.
+	* gcc.dg/tree-ssa/cunroll-1.c: Likewise.
+	* gcc.dg/tree-ssa/cunroll-2.c: Likewise.
+	* gcc.dg/tree-ssa/cunroll-3.c: Likewise.
+	* gcc.dg/tree-ssa/cunroll-4.c: Likewise.
+	* gcc.dg/tree-ssa/cunroll-5.c: Likewise.
+	* gcc.dg/tree-ssa/loop-23.c: Likewise.
+	* gcc.dg/tree-ssa/loop-1.c: Likewise.
+	* gcc.dg/unroll_1.c: Likewise.
+	* gcc.dg/vect/bb-slp-31.c: Likewise.
+	* gcc.dg/vect/bb-slp-14.c: Likewise.
+	* gcc.dg/vect/bb-slp-8.c: Likewise.
+	* gcc.dg/vect/bb-slp-23.c: Likewise.
+	* gcc.dg/vect/bb-slp-15.c: Likewise.
+	* gcc.dg/vect/bb-slp-9.c: Likewise.
+	* gcc.dg/vect/bb-slp-24.c: Likewise.
+	* gcc.dg/vect/bb-slp-16.c: Likewise.
+	* gcc.dg/vect/bb-slp-25.c: Likewise.
+	* gcc.dg/vect/bb-slp-17.c: Likewise.
+	* gcc.dg/vect/bb-slp-26.c: Likewise.
+	* gcc.dg/vect/bb-slp-18.c: Likewise.
+	* gcc.dg/vect/no-tree-reassoc-bb-slp-12.c: Likewise.
+	* gcc.dg/vect/bb-slp-27.c: Likewise.
+	* gcc.dg/vect/bb-slp-19.c: Likewise.
+	* gcc.dg/vect/bb-slp-28.c: Likewise.
+	* gcc.dg/vect/bb-slp-cond-1.c: Likewise.
+	* gcc.dg/vect/bb-slp-29.c: Likewise.
+	* gcc.dg/vect/bb-slp-8a.c: Likewise.
+	* gcc.dg/vect/bb-slp-pattern-2.c: Likewise.
+	* gcc.dg/vect/bb-slp-1.c: Likewise.
+	* gcc.dg/vect/bb-slp-8b.c: Likewise.
+	* gcc.dg/vect/bb-slp-2.c: Likewise.
+	* gcc.dg/vect/bb-slp-3.c: Likewise.
+	* gcc.dg/vect/bb-slp-10.c: Likewise.
+	* gcc.dg/vect/fast-math-bb-slp-call-1.c: Likewise.
+	* gcc.dg/vect/bb-slp-4.c: Likewise.
+	* gcc.dg/vect/bb-slp-11.c: Likewise.
+	* gcc.dg/vect/fast-math-bb-slp-call-2.c: Likewise.
+	* gcc.dg/vect/bb-slp-5.c: Likewise.
+	* gcc.dg/vect/bb-slp-20.c: Likewise.
+	* gcc.dg/vect/bb-slp-6.c: Likewise.
+	* gcc.dg/vect/bb-slp-21.c: Likewise.
+	* gcc.dg/vect/bb-slp-30.c: Likewise.
+	* gcc.dg/vect/bb-slp-13.c: Likewise.
+	* gcc.dg/vect/bb-slp-7.c: Likewise.
+	* gcc.dg/vect/bb-slp-22.c: Likewise.
+	* gcc.dg/unroll_2.c: Likewise.
+	* g++.dg/vect/slp-pr50413.cc: Likewise.
+	* g++.dg/vect/slp-pr56812.cc: Likewise.
+	* g++.dg/vect/slp-pr50819.cc: Likewise.
+
+2013-08-29  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.dg/tree-ssa/ipa-cp-1.c: Adjust regexp.
+
+2013-08-29  Teresa Johnson  <tejohnson@google.com>
+
+	* gcc.dg/pr40209.c: Use -fopt-info.
+	* gcc.dg/pr26570.c: Ditto.
+	* gcc.dg/pr32773.c: Ditto.
+	* g++.dg/tree-ssa/dom-invalid.C: Ditto.
+
+2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58246
+	* gcc.dg/torture/pr58246.c: New testcase.
+
+2013-08-29  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR fortran/52243
+	* gfortran.dg/realloc_on_assign_14.f90:  Remove warning made
+	obsolete by patch.
+	* gfortran.dg/realloc_on_assign_19.f90:  New test.
+
+2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/57287
+	* gcc.dg/pr57287-2.c: New testcase.
+
+2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57685
+	* gcc.dg/torture/pr57685.c: New testcase.
+
+2013-08-28  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58255
+	* g++.dg/cpp0x/dc7.C: New.
+
 2013-08-28  Jakub Jelinek  <jakub@redhat.com>
 
 	PR middle-end/58257

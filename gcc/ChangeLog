@@ -1,3 +1,175 @@
+2013-08-30  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* recog.c (verify_changes): Verify that changes[i].old is non-zero
+	before applying REG_P.
+
+2013-08-30  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58277
+	* tree-ssa-strlen.c (strlen_enter_block): If do_invalidate gave up
+	after seeing too many stmts with vdef in between dombb and current
+	bb, invalidate everything.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	* fold-const.c (fold_single_bit_test): Fix overflow test.
+
+2013-08-30  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* function.c (assign_parm_setup_reg): For a parameter passed by pointer
+	and which can live in a register, always retrieve the value on entry.
+	* var-tracking.c (add_stores): Treat the copy on entry for a parameter
+	passed by invisible reference specially.
+	(emit_notes_in_bb) <MO_VAL_USE>: Emit notes before the instruction.
+	(vt_add_function_parameter): Correctly deal with a parameter passed by
+	invisible reference.
+
+2013-08-30  Jan Hubicka  <jh@suse.cz>
+
+	* tree.c (set_call_expr_flags): Fix handling of TM_PURE.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58228
+	* tree-vect-data-refs.c (vect_analyze_data_ref_access): Do not
+	allow invariant loads in nested loop vectorization.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58223
+	* tree-loop-distribution.c (has_anti_dependence): Rename to ...
+	(has_anti_or_output_dependence): ... this and adjust to also
+	look for output dependences.
+	(mark_nodes_having_upstream_mem_writes): Adjust.
+	(rdg_flag_uses): Likewise.
+
+2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58010
+	* tree-vect-loop.c (vect_create_epilog_for_reduction): Remove
+	assert that we have a loop-closed PHI.
+
+2013-08-29  Jan Hubicka  <jh@suse.cz>
+
+	* lto-symtab.c (lto_cgraph_replace_node): Free decl_in_state.
+	* cgraph.c (cgraph_release_function_body): Free decl_in_state.
+	* lto-section-in.c (lto_free_function_in_decl_state): New function.
+	(lto_free_function_in_decl_state_for_node): New function.
+
+2013-08-29  Xinliang David Li  <davidxl@google.com>
+
+	* loop-unroll.c (report_unroll_peel): Minor message
+	change.
+	* tree-vect-loop-manip.c (vect_do_peeling_for_alignment):
+	Emit alignment peeling message with default -fopt-info.
+	(vect_loop_versioning): Emit loop version info message.
+	* tree-vectorizer.c (vectorize_loops): Minor message
+	change.
+	(execute_vect_slp): Ditto.
+
+2013-08-29  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* cgraphclones.c (cgraph_create_virtual_clone): Compute the DECL_NAME
+	of the clone from the DECL_NAME of the original function.
+
+2013-08-29  Oleg Endo  <olegendo@gcc.gnu.org>
+
+	* passes.c (register_pass): Add overload.
+	* tree-pass.h (register_pass): Forward declare it.  Add comment.
+
+2013-08-29  Jan Hubicka  <jh@suse.cz>
+
+	* lto-streamer-out.c (hash_tree): Stream DECL_FINAL_P.
+	DECL_CXX_CONSTRUCTOR_P. DECL_CXX_DESTRUCTOR_P.
+	TYPE_FINAL_P.
+	* lto-streamer-in.c (unpack_ts_decl_with_vis_value_fields):
+	DECL_FINAL_P. DECL_CXX_CONSTRUCTOR_P and DECL_CXX_DESTRUCTOR_P.
+	(unpack_ts_type_common_value_fields): Stream TYPE_FINAL_P.
+	* tree-streamer-out.c (pack_ts_decl_with_vis_value_fields):
+	Add DECL_FINAL_P, DECL_CXX_CONSTRUCTOR_P, DECL_CXX_DESTRUCTOR_P
+	(pack_ts_type_common_value_fields): Add TYPE_FINAL_P.
+
+2013-08-29  Teresa Johnson  <tejohnson@google.com>
+
+	* dumpfile.c (dump_loc): Output column number.
+	* dumpfile.h (OPTGROUP_OTHER): Add and enable under OPTGROUP_ALL.
+	* doc/invoke.texi: Document optall -fopt-info flag.
+	* profile.c (read_profile_edge_counts): Use new dump framework.
+	(compute_branch_probabilities): Ditto.
+	* passes.c (pass_manager::register_one_dump_file): Use OPTGROUP_OTHER
+	when pass not in any opt group.
+	* pass_manager.h (pass_manager::get_pass_profile): New method.
+	* value-prof.c (check_counter): Use new dump framework.
+	(check_ic_target): Ditto.
+	* coverage.c (get_coverage_counts): Ditto.
+	(coverage_init): Setup new dump framework.
+
+2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58246
+	* tree-ssa-dce.c (mark_aliased_reaching_defs_necessary_1): Properly
+	handle the dominance check inside a basic-block.
+
+2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/57287
+	* tree-ssa-copy.c (may_propagate_copy): Allow propagating
+	of default defs that appear in abnormal PHI nodes.
+
+2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57685
+	* tree-vrp.c (register_edge_assert_for_1): Recurse only for
+	single-use operands to avoid exponential complexity.
+
+2013-08-28  Dehao Chen  <dehao@google.com>
+
+	* ipa-inline.c (edge_badness): Fix integer underflow.
+
+2013-08-28  Uros Bizjak  <ubizjak@gmail.com>
+
+	* gtm-builtins.def (_ITM_free): Declare leaf.
+
+2013-08-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/58067
+	* config/i386/i386.md (*tls_global_dynamic_64_largepic): New insn.
+	(*tls_local_dynamic_base_64_largepic): Likewise.
+	(tls_global_dynamic_64_<mode>, tls_local_dynamic_base_64_<mode>):
+	Remove predicate from call operand.
+	* config/i386/i386.c (ix86_tls_get_addr): For -mcmodel=large -fpic
+	return sum of pic_offset_table_rtx and UNSPEC_PLTOFF of the symbol.
+
+2013-08-28  Jeff Law  <law@redhat.com>
+
+	* tree-ssa-threadedge.c (thread_around_empty_block): Remove
+	checks for the number of predecessors and successors allowed.
+	* tree-ssa-threadupdate.c (mark_threaded_blocks): Ignore requests
+	which require copying a joiner block if there is a request which
+	is a subpath that requires no joiner block copying.
+
+2013-08-28  Jan Hubicka  <jh@suse.cz>
+
+	* lto-streamer-out.c (DFS_write_tree_body): Drop
+	BINFO_INHERITANCE_CHAIN, BINFO_SUBVTT_INDEX and BINFO_VPTR_INDEX.
+	(hash_tree): Do not hash DECL_DEFER_OUTPUT, BINFO_INHERITANCE_CHAIN,
+	BINFO_SUBVTT_INDEX, BINFO_VPTR_INDEX, DECL_IN_TEXT_SECTION.
+	* tree-streamer-in.c (unpack_ts_decl_common_value_fields):
+	Do not read DECL_ERROR_ISSUED.
+	(unpack_ts_decl_with_vis_value_fields): Do not read
+	DECL_DEFER_OUTPUT.
+	(lto_input_ts_binfo_tree_pointers): Do not read
+	BINFO_INHERITANCE_CHAIN, BINFO_SUBVTT_INDEX, BINFO_VPTR_INDEX
+	* tree-streamer-out.c (pack_ts_decl_common_value_fields): Do not
+	write DECL_ERROR_ISSUED..
+	(pack_ts_decl_with_vis_value_fields): Do not write
+	DECL_DEFER_OUTPUT.
+	(write_ts_binfo_tree_pointers): Do not read BINFO_INHERITANCE_CHAIN,
+	BINFO_SUBVTT_INDEX, BINFO_VPTR_INDEX.
+	* print-tree.c (print_node): Do not print DECL_ERROR_ISSUED.
+	* tree.h (tree_decl_common): Update comment.
+	(DECL_ERROR_ISSUED): Remove.
+
 2013-08-28  Jakub Jelinek  <jakub@redhat.com>
 
 	PR middle-end/58257
@@ -649,7 +821,7 @@
 	Revert:
 	2013-08-20  Alexey Makhalov  <makhaloff@gmail.com>
 
-        * dce.c (fini_dce): Call df_analyze again just in case
+	* dce.c (fini_dce): Call df_analyze again just in case
 	delete_unmarked_insns removed anything.
 
 2013-08-21  Joern Rennecke  <joern.rennecke@embecosm.com>
