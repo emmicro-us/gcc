@@ -7,6 +7,7 @@
 
 	* config/arc/arc.md (casesi_load): Use next_nonnote_insn to
 	find JUMP_TABLE_DATA.
+	(casesi_compact_jump): Likewise.
 
 	* config/arc/arc.c (arc_pad_return): Save current_insn_predicate
 	before / restore it after call to final_scan_insn.
