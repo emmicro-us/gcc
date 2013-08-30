@@ -2,6 +2,9 @@
 
 	* config/arc/arc.h (ASM_SPEC): Remove stray "}}}}".
 
+	* config/arc/arc.md (annul_ret_delay_insn): New attribute.
+	Use it in type "return" define_delay.
+
 2013-08-29  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* doc/extend.texi (ARC Built-in Functions): Remove description of EM

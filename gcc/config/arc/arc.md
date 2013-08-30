@@ -457,6 +457,13 @@
 	 (eq_attr "cond_delay_insn" "no") (const_string "no")]
 	(const_string "yes")))
 
+(define_attr "annul_ret_delay_insn" "no,yes"
+  (cond [(eq_attr "cond_ret_delay_insn" "yes") (const_string "yes")
+	 (match_test "TARGET_AT_DBR_CONDEXEC") (const_string "no")
+	 (eq_attr "type" "!call,branch,uncond_branch,jump,brcc,return,sfunc")
+	   (const_string "yes")]
+   (const_string "no")))
+
 
 ;; Delay slot definition for ARCompact ISA
 ;; ??? FIXME:
@@ -485,7 +492,7 @@
 (define_delay
   (eq_attr "type" "return")
   [(eq_attr "in_ret_delay_slot" "yes")
-   (eq_attr "type" "!call,branch,uncond_branch,jump,brcc,return,sfunc")
+   (eq_attr "annul_ret_delay_insn" "yes")
    (eq_attr "cond_ret_delay_insn" "yes")])
 
 ;; For ARC600, unexposing the delay sloy incurs a penalty also in the
