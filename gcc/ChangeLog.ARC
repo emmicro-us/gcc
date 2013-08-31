@@ -9,7 +9,7 @@
 	* doc/extend.texi (__builtin_arc_aligned): Refine description.
 
 2013-08-31  Joern Rennecke  <joern.rennecke@embecosm.com>
-	    Vineet Gupta <Vineet.Gupta@synopsys.com>
+	    Vineet Gupta  <Vineet.Gupta@synopsys.com>
 
 	* testsuite/gcc.target/arc/builtin_arc_aligned-1.c: New test.
 	* testsuite/gcc.target/arc/builtin_arc_aligned-2.c: Likewise.
@@ -95,7 +95,7 @@
 	* config/arc/arc.c (arc_legitimize_reload_address): New function.
 	* config/arc/arc.h (LEGITIMIZE_RELOAD_ADDRESS): Use it.
 
-2013-07-02 Claudiu Zissulescu <claziss@synopsys.com>
+2013-07-02 Claudiu Zissulescu  <claziss@synopsys.com>
 
 	* config/arc/arc.c: Fixed indentation.
 
