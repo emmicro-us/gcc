@@ -6218,6 +6218,7 @@ arc_rewrite_small_data_1 (rtx *loc, void *data)
     {
       rtx top;
 
+      gcc_assert (SDATA_BASE_REGNUM == PIC_OFFSET_TABLE_REGNUM);
       *loc = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, *loc);
       if (loc == data)
 	return -1;

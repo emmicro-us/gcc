@@ -1,3 +1,9 @@
+2013-08-31  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_rewrite_small_data_1):
+	Before using pic_offset_table_rtx, assert that
+	SDATA_BASE_REGNUM == PIC_OFFSET_TABLE_REGNUM.
+
 2013-08-30  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.h (ASM_SPEC): Remove stray "}}}}".
