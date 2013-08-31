@@ -5308,58 +5308,54 @@ arc_expand_builtin (tree exp,
 
     case ARC_BUILTIN_ALIGNED:
       /* __builtin_arc_aligned (void* val, int alignval) */
-#ifdef CALL_EXPR_ARG
       arg0 = CALL_EXPR_ARG (exp, 0);
       arg1 = CALL_EXPR_ARG (exp, 1);
-#else
-      arg0 = TREE_VALUE (arglist);
-      arg1 = TREE_VALUE (TREE_CHAIN (arglist));
-#endif
       fold (arg1);
       op0 = expand_expr (arg0, NULL_RTX, VOIDmode, EXPAND_NORMAL);
       op1 = expand_expr (arg1, NULL_RTX, VOIDmode, EXPAND_NORMAL);
       target = gen_reg_rtx (SImode);
 
-      /* Default to false.  */
-      emit_insn (gen_movsi (target, const0_rtx));
-
-      if (GET_CODE (op0) == CONST_INT)
+      if (!CONST_INT_P (op1))
 	{
-	  HOST_WIDE_INT align = INTVAL (op0);
-
-	  int alignTest = 0x00;
-	  switch (INTVAL (op1))
-	    {
-	      /* Test each based on N-byte alignment.  */
-	    case 32: alignTest = 0xFF ; break ;;
-	    case 16: alignTest = 0x7F ; break ;;
-	    case 8:  alignTest = 0x3F ; break ;;
-	    default:
-	      error ("invalid alignment value for __builtin_arc_aligned");
-	      return NULL_RTX;
-	      break
-		;;
-	    }
-
-	  if ((align & alignTest) == 0)
-	    {
-	      emit_insn (gen_movsi (target, const1_rtx));
-	    }
+	  /* If we can't fold the alignment to a constant integer
+	     whilst optimizing, this is probably a user error.  */
+	  if (optimize)
+	    warning (0, "__builtin_arc_aligned with non-constant alignment");
 	}
       else
 	{
-	  int align = get_pointer_alignment (arg0);
-	  if (align)
+	  HOST_WIDE_INT alignTest = INTVAL (op1);
+	  /* Check alignTest is positive, and a power of two.  */
+	  if (alignTest <= 0 || alignTest != (alignTest & -alignTest))
 	    {
-	      int numBits = INTVAL (op1) * BITS_PER_UNIT;
-	      if (align == numBits)
-		{
-		  emit_insn (gen_movsi (target, const1_rtx));
-		}
+	      error ("invalid alignment value for __builtin_arc_aligned");
+	      return NULL_RTX;
+	    }
+
+	  if (CONST_INT_P (op0))
+	    {
+	      HOST_WIDE_INT pnt = INTVAL (op0);
+
+	      if ((pnt & (alignTest - 1)) == 0)
+		return const1_rtx;
+	    }
+	  else
+	    {
+	      int align = get_pointer_alignment (arg0);
+	      int numBits = alignTest * BITS_PER_UNIT;
+
+	      if (align && align >= numBits)
+		return const1_rtx;
+	      /* Another attempt to ascertain alignment.  Check the type
+		 we are pointing to.  */
+	      if (POINTER_TYPE_P (TREE_TYPE (arg0))
+		  && TYPE_ALIGN (TREE_TYPE (TREE_TYPE (arg0))) >= numBits)
+		return const1_rtx;
 	    }
 	}
 
-      return target;
+      /* Default to false.  */
+      return const0_rtx;
 
     default:
       break;

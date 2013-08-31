@@ -3010,7 +3010,7 @@ These attribute specifies how a particular function is called on
 ARC, ARM and Epiphany - with @code{medium_call} being specific to ARC.
 These attributes override the
 @option{-mlong-calls} (@pxref{ARM Options} and @ref{ARC Options})
-and @option{-mmedium-calls} (@xref{ARC Options})
+and @option{-mmedium-calls} (@pxref{ARC Options})
 command-line switches and @code{#pragma long_calls} settings.  For ARM, the
 @code{long_call} attribute indicates that the function might be far
 away from the call site and require a different (more expensive)
@@ -8982,10 +8982,17 @@ by a target may cause problems. At present the compiler is not
 guaranteed to detect such misuse, and as a result an internal compiler
 error may be generated.
 
-@deftypefn {Built-in Function} int __builtin_arc_aligned (void* @var{val}, int @var{alignval})
-Return 1 if @var{val} has the alignment given by @var{alignval},
-otherwise return 0. May generate a load constant instruction if the
-result is used.
+@deftypefn {Built-in Function} int __builtin_arc_aligned (void *@var{val}, int @var{alignval})
+Return 1 if @var{val} is known to have the byte alignment given
+by @var{alignval}, otherwise return 0.
+Note that this is different from
+@smallexample
+__alignof__(*(char *)@var{val}) >= alignval
+@end smallexample
+because __alignof__ sees only the type of the dereference, wheras
+__builtin_arc_align uses alignment information from the pointer
+as well as from the pointed-to type.
+The information available will depend on optimization level.
 @end deftypefn
 
 @deftypefn {Built-in Function} void __builtin_arc_brk (void)

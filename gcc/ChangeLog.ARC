@@ -1,5 +1,22 @@
 2013-08-31  Joern Rennecke  <joern.rennecke@embecosm.com>
 
+	* config/arc/arc.c (arc_expand_builtin): Remove obsolete code.
+	Only apply INTVAL to CONST_INT.
+	Fix alignment calculation for constants.
+	Unify requirements for value of requested alignment.
+	Add type-based alignment check.
+	Don't bother copying the return value, just return it.
+	* doc/extend.texi (__builtin_arc_aligned): Refine description.
+
+2013-08-31  Joern Rennecke  <joern.rennecke@embecosm.com>
+	    Vineet Gupta <Vineet.Gupta@synopsys.com>
+
+	* testsuite/gcc.target/arc/builtin_arc_aligned-1.c: New test.
+	* testsuite/gcc.target/arc/builtin_arc_aligned-2.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_arc_aligned-3.c: Likewise.
+
+2013-08-31  Joern Rennecke  <joern.rennecke@embecosm.com>
+
 	* config/arc/arc.c (arc_rewrite_small_data_1):
 	Before using pic_offset_table_rtx, assert that
 	SDATA_BASE_REGNUM == PIC_OFFSET_TABLE_REGNUM.
