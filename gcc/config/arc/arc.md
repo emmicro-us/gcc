@@ -1065,8 +1065,8 @@
     ; the combine pass will end up replacing uses of it with 0
   ]
   "operands[3] = CONST0_RTX (DFmode);
-   operands[4] = simplify_gen_subreg(SImode,operands[0],DFmode,0);
-   operands[5] = simplify_gen_subreg(SImode,operands[0],DFmode,4);"
+   operands[4] = simplify_gen_subreg (SImode, operands[0], DFmode, 0);
+   operands[5] = simplify_gen_subreg (SImode, operands[0], DFmode, 4);"
   [(set_attr "type" "move")])
 
 ;; Load/Store with update instructions.

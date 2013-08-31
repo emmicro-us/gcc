@@ -12,6 +12,8 @@
 	* config/arc/arc.c (arc_expand_builtin): Adjust to norm->clrsbsi2
 	rename as mentioned above.
 
+	* config/arc/arc.md (movdf_insn_nolrsr) Formatting fixes.
+
 2013-08-30  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.h (ASM_SPEC): Remove stray "}}}}".
