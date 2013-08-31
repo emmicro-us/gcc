@@ -44,11 +44,6 @@
 
 	* config/arc/predicates.md: Space -> tab fixes.
 
-	* config/arc/arc.c (enum arc_builtins): Remove ARC_BUILTIN_ALIGNED.
-	(arc_init_builtins): Don't initialize __builtin_arc_aligned.
-	(arc_expand_builtin): Don't handle ARC_BUILTIN_ALIGNED.
-	* doc/extend.texi (__builtin_arc_aligned): Don't document.
-
 	* doc/extend.texi, doc/invoke.texi: Fix instances of single-space
 	after full-stop in ARC documentation.
 

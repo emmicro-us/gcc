@@ -205,6 +205,7 @@ enum arc_builtins {
   ARC_BUILTIN_SWI        =   19,
   ARC_BUILTIN_TRAP_S     =   20,
   ARC_BUILTIN_UNIMP_S    =   21,
+  ARC_BUILTIN_ALIGNED    =   22,
 
   /* Sentinel to mark start of simd builtins.  */
   ARC_SIMD_BUILTIN_BEGIN      = 1000,
@@ -4985,6 +4986,12 @@ arc_init_builtins (void)
 
     tree pcvoid_type_node
 	= build_pointer_type (build_qualified_type (void_type_node, TYPE_QUAL_CONST));
+    tree int_ftype_pcvoid_int
+	= build_function_type (integer_type_node,
+			   tree_cons (NULL_TREE, pcvoid_type_node,
+			       tree_cons (NULL_TREE, integer_type_node,
+				    endlink)));
+
     tree int_ftype_short_int
 	= build_function_type (integer_type_node,
 			       tree_cons (NULL_TREE, short_integer_type_node, endlink));
@@ -5031,6 +5038,7 @@ arc_init_builtins (void)
     def_mbuiltin (1,"__builtin_arc_sr", void_ftype_usint_usint, ARC_BUILTIN_SR);
     def_mbuiltin (TARGET_ARC700,"__builtin_arc_trap_s", void_ftype_usint, ARC_BUILTIN_TRAP_S);
     def_mbuiltin (TARGET_ARC700,"__builtin_arc_unimp_s", void_ftype_void, ARC_BUILTIN_UNIMP_S);
+    def_mbuiltin (1,"__builtin_arc_aligned", int_ftype_pcvoid_int, ARC_BUILTIN_ALIGNED);
 
     if (TARGET_SIMD_SET)
       arc_init_simd_builtins ();
@@ -5297,6 +5305,61 @@ arc_expand_builtin (tree exp,
       icode = CODE_FOR_unimp_s;
       emit_insn (gen_unimp_s (const1_rtx));
       return NULL_RTX;
+
+    case ARC_BUILTIN_ALIGNED:
+      /* __builtin_arc_aligned (void* val, int alignval) */
+#ifdef CALL_EXPR_ARG
+      arg0 = CALL_EXPR_ARG (exp, 0);
+      arg1 = CALL_EXPR_ARG (exp, 1);
+#else
+      arg0 = TREE_VALUE (arglist);
+      arg1 = TREE_VALUE (TREE_CHAIN (arglist));
+#endif
+      fold (arg1);
+      op0 = expand_expr (arg0, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+      op1 = expand_expr (arg1, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+      target = gen_reg_rtx (SImode);
+
+      /* Default to false.  */
+      emit_insn (gen_movsi (target, const0_rtx));
+
+      if (GET_CODE (op0) == CONST_INT)
+	{
+	  HOST_WIDE_INT align = INTVAL (op0);
+
+	  int alignTest = 0x00;
+	  switch (INTVAL (op1))
+	    {
+	      /* Test each based on N-byte alignment.  */
+	    case 32: alignTest = 0xFF ; break ;;
+	    case 16: alignTest = 0x7F ; break ;;
+	    case 8:  alignTest = 0x3F ; break ;;
+	    default:
+	      error ("invalid alignment value for __builtin_arc_aligned");
+	      return NULL_RTX;
+	      break
+		;;
+	    }
+
+	  if ((align & alignTest) == 0)
+	    {
+	      emit_insn (gen_movsi (target, const1_rtx));
+	    }
+	}
+      else
+	{
+	  int align = get_pointer_alignment (arg0);
+	  if (align)
+	    {
+	      int numBits = INTVAL (op1) * BITS_PER_UNIT;
+	      if (align == numBits)
+		{
+		  emit_insn (gen_movsi (target, const1_rtx));
+		}
+	    }
+	}
+
+      return target;
 
     default:
       break;
