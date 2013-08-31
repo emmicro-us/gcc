@@ -5071,7 +5071,7 @@ arc_expand_builtin (tree exp,
       return NULL_RTX;
 
     case ARC_BUILTIN_NORM:
-      icode = CODE_FOR_norm;
+      icode = CODE_FOR_clrsbsi2;
       arg0 = CALL_EXPR_ARG (exp, 0);
       op0 = expand_expr (arg0, NULL_RTX, VOIDmode, EXPAND_NORMAL);
       mode0 =  insn_data[icode].operand[1].mode;
@@ -5080,7 +5080,7 @@ arc_expand_builtin (tree exp,
       if (! (*insn_data[icode].operand[1].predicate) (op0, mode0))
 	op0 = copy_to_mode_reg (mode0, op0);
 
-      emit_insn (gen_norm (target, op0));
+      emit_insn (gen_clrsbsi2 (target, op0));
       return target;
 
     case ARC_BUILTIN_NORMW:

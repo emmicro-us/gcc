@@ -4,6 +4,14 @@
 	Before using pic_offset_table_rtx, assert that
 	SDATA_BASE_REGNUM == PIC_OFFSET_TABLE_REGNUM.
 
+	* config/arc/arc.md (UNSPEC_NORM, UNSPEC_NORMW): Delete.
+	Change all users to use clrsb.
+	(norm): Rename to ..
+	(clrsbsi2) .. this.  Changed all generator / insn_code users.
+	(clrsbhi2): New define_insn_and_split.
+	* config/arc/arc.c (arc_expand_builtin): Adjust to norm->clrsbsi2
+	rename as mentioned above.
+
 2013-08-30  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.h (ASM_SPEC): Remove stray "}}}}".

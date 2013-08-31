@@ -105,9 +105,7 @@
 
 
 (define_constants
-  [(UNSPEC_NORM 11) ; norm generation through builtins. candidate for scheduling
-   (UNSPEC_NORMW 12) ; normw generation through builtins. candidate for scheduling
-   (UNSPEC_SWAP 13) ; swap generation through builtins. candidate for scheduling
+  [(UNSPEC_SWAP 13) ; swap generation through builtins. candidate for scheduling
    (UNSPEC_MUL64 14) ; mul64 generation through builtins. candidate for scheduling
    (UNSPEC_MULU64 15) ; mulu64 generation through builtins. candidate for scheduling
    (UNSPEC_DIVAW 16) ; divaw generation through builtins. candidate for scheduling
@@ -4032,10 +4030,9 @@
 
 ;; Instructions generated through builtins
 
-(define_insn "norm"
+(define_insn "clrsbsi2"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_NORM))]
+	(clrsb:SI (match_operand:SI 1 "general_operand" "cL,Cal")))]
   "TARGET_NORM"
   "@
    norm \t%0, %1
@@ -4045,8 +4042,7 @@
 
 (define_insn "norm_f"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_NORM))
+	(clrsb:SI (match_operand:SI 1 "general_operand" "cL,Cal")))
    (set (reg:CC_ZN CC_REG)
 	(compare:CC_ZN (match_dup 1) (const_int 0)))]
   "TARGET_NORM"
@@ -4056,10 +4052,19 @@
   [(set_attr "length" "4,8")
    (set_attr "type" "two_cycle_core,two_cycle_core")])
 
+(define_insn_and_split "clrsbhi2"
+  [(set (match_operand:HI  0 "dest_reg_operand" "=w,w")
+	(clrsb:HI (match_operand:HI 1 "general_operand" "cL,Cal")))]
+  "TARGET_NORM"
+  "#"
+  "reload_completed"
+  [(set (match_dup 0) (zero_extend:SI (clrsb:HI (match_dup 1))))]
+  "operands[0] = simplify_gen_subreg (SImode, operands[0], HImode, 0);")
+
 (define_insn "normw"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:HI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_NORMW))]
+	(zero_extend:SI
+	  (clrsb:HI (match_operand:HI 1 "general_operand" "cL,Cal"))))]
   "TARGET_NORM"
   "@
    normw \t%0, %1
@@ -4101,7 +4106,7 @@
     temp = gen_reg_rtx (SImode);
   emit_insn (gen_addsi3 (temp, operands[1], constm1_rtx));
   emit_insn (gen_bic_f_zn (temp, temp, operands[1]));
-  emit_insn (gen_norm (temp, temp));
+  emit_insn (gen_clrsbsi2 (temp, temp));
   emit_insn
     (gen_rtx_COND_EXEC
       (VOIDmode,
