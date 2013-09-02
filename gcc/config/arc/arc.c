@@ -9020,7 +9020,7 @@ arc_text_label (rtx label)
 		  && NOTE_KIND (label) == NOTE_INSN_DELETED_LABEL));
   next = next_nonnote_insn (label);
   if (next)
-    return (GET_CODE (next) != JUMP_INSN
+    return (!JUMP_TABLE_DATA_P (next)
 	    || GET_CODE (PATTERN (next)) != ADDR_VEC);
   else if (!PREV_INSN (label))
     /* ??? sometimes text labels get inserted very late, see

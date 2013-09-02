@@ -1,3 +1,7 @@
+2013-09-03  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_text_label): Test JUMP_TABLE_DATA_P.
+
 2013-09-02  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/constraints.md (Cn0): New constraint.
