@@ -157,6 +157,12 @@
   (and (match_code "const_int")
        (match_test "ival == 0")))
 
+(define_constraint "Cn0"
+  "@internal
+   Negative or zero"
+  (and (match_code "const_int")
+       (match_test "ival <= 0")))
+
 (define_constraint "Cca"
   "@internal
    Conditional or three-address add / sub constant"

@@ -4722,10 +4722,18 @@
    (use (match_operand 4 "" ""))]
   ""
 {
+  /* Using the INSN_UID of the loop end pattern to identify it causes
+     trouble with -fcompare-debug, so allocate a debug-independent
+     id instead.  We use negative numbers so that we can use the same
+     slot in doloop_end_i where we later store a CODE_LABEL_NUMBER, and
+     still be able to tell what kind of number this is.  */
+  static HOST_WIDE_INT loop_end_id = 0;
+
   if (INTVAL (operands[3]) > 1)
     FAIL;
-  emit_insn (gen_doloop_begin_i (operands[0], const0_rtx,
-				 GEN_INT (INSN_UID (operands[4])),
+  rtx id = GEN_INT (--loop_end_id);
+  XEXP (XVECEXP (PATTERN (operands[4]), 0, 4), 0) = id;
+  emit_insn (gen_doloop_begin_i (operands[0], const0_rtx, id,
 				 const0_rtx, const0_rtx));
   DONE;
 })
@@ -4747,16 +4755,17 @@
 ; by arc_reorg.  arc_reorg might also alter operand 0.
 ;
 ; N in XVECEXP PATTERN (lp, 0 N)
-;  V                rtl                 purpose
-;  0             unspec UNSPEC_LP     identify pattern
-;  1             clobber LP_START     show LP_START is set
-;  2             clobber LP_END       show LP_END is set
-;  3             use operand0         loop count pseudo register
-;  4             use operand1         CODE_LABEL_NUMBER of loop top label
-;  5             use operand2         INSN_UID of loop end insn
-;  6             use operand3         loop setup not at start (1 above, 2 below)
-;  7             use operand4         LABEL_REF of top label, if not
-;				      immediately following
+;  V              rtl                 purpose
+;  0           unspec UNSPEC_LP     identify pattern
+;  1           clobber LP_START     show LP_START is set
+;  2           clobber LP_END       show LP_END is set
+;  3           use operand0         loop count pseudo register
+;  4           use operand1         before arc_reorg: -id
+;                                   after : CODE_LABEL_NUMBER of loop top label
+;  5           use operand2         INSN_UID of loop end insn
+;  6           use operand3         loop setup not at start (1 above, 2 below)
+;  7           use operand4         LABEL_REF of top label, if not
+;                                   immediately following
 ; If operand1 is still zero after arc_reorg, this is an orphaned loop
 ; instruction that was not at the start of the loop.
 ; There is no point is reloading this insn - then lp_count would still not
@@ -4944,7 +4953,7 @@
    (set (match_dup 0) (plus:SI (match_dup 0) (const_int -1)))
    (use (reg:SI LP_START))
    (use (reg:SI LP_END))
-   (use (match_operand 2 "const_int_operand" "n,???C_0,???X"))
+   (use (match_operand 2 "const_int_operand" "n,???Cn0,???X"))
    (clobber (match_scratch:SI 3 "=X,X,&????r"))]
   ""
   "*

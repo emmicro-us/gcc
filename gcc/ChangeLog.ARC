@@ -1,3 +1,14 @@
+2013-09-02  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/constraints.md (Cn0): New constraint.
+	* config/arc/arc.md (doloop_begin): Allocate uid for loop
+	end, and poke it into the pattern.
+	(doloop_end_i): Change operand 2 alternative 1 to ???Cn0.
+	* config/arc/arc.c (arc_reorg): Use doloop_end id provided
+	by the doloop_begin expander.
+	* config/arc/arc.c (arc_expand_builtin): Fix signedness of align /
+	numBits.
+
 2013-08-31  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_expand_builtin): Remove obsolete code.

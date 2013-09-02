@@ -5341,8 +5341,8 @@ arc_expand_builtin (tree exp,
 	    }
 	  else
 	    {
-	      int align = get_pointer_alignment (arg0);
-	      int numBits = alignTest * BITS_PER_UNIT;
+	      unsigned  align = get_pointer_alignment (arg0);
+	      unsigned  numBits = alignTest * BITS_PER_UNIT;
 
 	      if (align && align >= numBits)
 		return const1_rtx;
@@ -5702,6 +5702,8 @@ arc_reorg (void)
 	  rtx lp_simple = NULL_RTX;
 	  rtx next = NULL_RTX;
 	  rtx op0 = XEXP (XVECEXP (PATTERN (insn), 0, 1), 0);
+	  HOST_WIDE_INT loop_end_id
+	    = -INTVAL (XEXP (XVECEXP (PATTERN (insn), 0, 4), 0));
 	  int seen_label = 0;
 
 	  for (lp = prev;
@@ -5719,7 +5721,7 @@ arc_reorg (void)
 		      if (NONJUMP_INSN_P (prev)
 			  && recog_memoized (prev) == CODE_FOR_doloop_begin_i
 			  && (INTVAL (XEXP (XVECEXP (PATTERN (prev), 0, 5), 0))
-			      == INSN_UID (insn)))
+			      == loop_end_id))
 			{
 			  lp = prev;
 			  break;
@@ -5733,7 +5735,7 @@ arc_reorg (void)
 		      if (NONJUMP_INSN_P (next)
 			  && recog_memoized (next) == CODE_FOR_doloop_begin_i
 			  && (INTVAL (XEXP (XVECEXP (PATTERN (next), 0, 5), 0))
-			      == INSN_UID (insn)))
+			      == loop_end_id))
 			{
 			  lp = next;
 			  break;
