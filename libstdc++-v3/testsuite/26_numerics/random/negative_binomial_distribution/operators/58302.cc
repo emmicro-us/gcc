@@ -1,7 +1,6 @@
+// { dg-do compile }
 // { dg-options "-std=gnu++11" }
-
-//
-// 2013-08-22  Tim Shen <timshen91@gmail.com>
+// { dg-require-cstdint "" }
 //
 // Copyright (C) 2013 Free Software Foundation, Inc.
 //
@@ -20,39 +19,16 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// 28.11.2 regex_match
-// Tests ECMAScript empty-grouping against a C-string.
+#include <random>
 
-#include <regex>
-#include <testsuite_hooks.h>
-
-using namespace std;
-
-void
-test01()
+void test01()
 {
-  bool test __attribute__((unused)) = true;
+  typedef std::negative_binomial_distribution<> dist_type;
 
-  {
-    regex re("()*\\1");
-    cmatch m;
-    const char s[] = "";
-    VERIFY( regex_match(s, m, re) );
-    VERIFY( m.size() == 2 );
-    VERIFY( m[0].matched );
-    VERIFY( m[1].matched );
-  }
-  {
-    regex re("()*");
-    cmatch m;
-    const char s[] = "";
-    VERIFY( regex_match(s, m, re) );
-  }
-}
+  std::default_random_engine engine;
 
-int
-main()
-{
-  test01();
-  return 0;
+  dist_type dist;
+  dist_type::param_type param(3, 0.5);
+
+  dist(engine, param); // compile error!
 }

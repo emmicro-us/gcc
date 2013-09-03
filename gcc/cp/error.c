@@ -32,6 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pretty-print.h"
 #include "pointer-set.h"
 #include "c-family/c-objc.h"
+#include "ubsan.h"
 
 #include <new>                    // For placement-new.
 
@@ -1044,7 +1045,7 @@ dump_decl (cxx_pretty_printer *pp, tree t, int flags)
 
     case NAMESPACE_DECL:
       if (flags & TFF_DECL_SPECIFIERS)
-	pp_cxx_declaration (pp, t);
+	pp->declaration (t);
       else
 	{
 	  if (! (flags & TFF_UNQUALIFIED_NAME))
@@ -1196,7 +1197,7 @@ dump_decl (cxx_pretty_printer *pp, tree t, int flags)
       break;
 
     case STATIC_ASSERT:
-      pp_cxx_declaration (pp, t);
+      pp->declaration (t);
       break;
 
     case BASELINK:
@@ -1209,9 +1210,9 @@ dump_decl (cxx_pretty_printer *pp, tree t, int flags)
 
     case TEMPLATE_TYPE_PARM:
       if (flags & TFF_DECL_SPECIFIERS)
-	pp_cxx_declaration (pp, t);
+	pp->declaration (t);
       else
-	pp_type_id (pp, t);
+	pp->type_id (t);
       break;
 
     case UNBOUND_CLASS_TEMPLATE:
@@ -1907,7 +1908,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
     case REAL_CST:
     case STRING_CST:
     case COMPLEX_CST:
-      pp_constant (pp, t);
+      pp->constant (t);
       break;
 
     case USERDEF_LITERAL:
@@ -2006,6 +2007,12 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
 		pp_cxx_arrow (pp);
 	      }
 	    skipfirst = true;
+	  }
+	if (flag_sanitize & SANITIZE_UNDEFINED
+	    && is_ubsan_builtin_p (fn))
+	  {
+	    pp_string (cxx_pp, M_("<ubsan routine call>"));
+	    break;
 	  }
 	dump_expr (pp, fn, flags | TFF_EXPR_IN_PARENS);
 	dump_call_expr_args (pp, t, flags, skipfirst);
@@ -2531,7 +2538,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
     case TYPENAME_TYPE:
       /* We get here when we want to print a dependent type as an
          id-expression, without any disambiguator decoration.  */
-      pp_id_expression (pp, t);
+      pp->id_expression (t);
       break;
 
     case TEMPLATE_TYPE_PARM:
@@ -2581,7 +2588,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
     case BIT_FIELD_REF:
     case FIX_TRUNC_EXPR:
     case FLOAT_EXPR:
-      pp_expression (pp, t);
+      pp->expression (t);
       break;
 
     case TRUTH_AND_EXPR:
@@ -2589,7 +2596,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
     case TRUTH_XOR_EXPR:
       if (flags & TFF_EXPR_IN_PARENS)
 	pp_cxx_left_paren (pp);
-      pp_expression (pp, t);
+      pp->expression (t);
       if (flags & TFF_EXPR_IN_PARENS)
 	pp_cxx_right_paren (pp);
       break;

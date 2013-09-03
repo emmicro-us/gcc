@@ -1,3 +1,352 @@
+2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	* tree-affine.c (add_elt_to_tree): Fix association issue,
+	avoid useless converts and make sure to always return a
+	properly typed result.
+
+2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/57656
+	* fold-const.c (negate_expr_p): Fix division case.
+	(negate_expr): Likewise.
+
+2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	PR lto/58285
+	* tree-streamer-out.c: Include tm.h.
+	* Makefile.in (tree-streamer-out.o): Depend on $(TM_H).
+
+2013-09-03  Jan Hubicka  <jh@suse.cz>
+
+	* tree-profile.c (tree_profiling): Cleanup CFG when done.
+
+2013-09-03  Alan Modra  <amodra@gmail.com>
+
+	* config.gcc (powerpc*-*-linux*): Add support for little-endian
+	multilibs to big-endian target and vice versa.
+	* config/rs6000/t-linux64: Use := assignment on all vars.
+	(MULTILIB_EXTRA_OPTS): Remove fPIC.
+	(MULTILIB_OSDIRNAMES): Specify using mapping from multilib_options.
+	* config/rs6000/t-linux64le: New file.
+	* config/rs6000/t-linux64bele: New file.
+	* config/rs6000/t-linux64lebe: New file.
+
+2013-09-02  Jan Hubicka  <jh@suse.cz>
+
+	* ipa-inline-transform.c (inline_transform): Do not
+	optimize_inline_calls when not optimizing.
+
+2013-09-02  Jan Hubicka  <jh@suse.cz>
+
+	* lto-symtab.c (lto_symtab_merge_symbols): Add comments; merge
+	duplicated nodes for assembler names.
+	* symtab.c (symtab_unregister_node): Do not attempt to unlink
+	hard registers from assembler name hash.
+
+2013-09-02  Jan Hubicka  <jh@suse.cz>
+
+	* ipa-split.c (execute_split_functions): Split externally visible
+	functions called once.
+
+2013-09-02  Martin Jambor  <mjambor@suse.cz>
+
+	PR ipa/58106
+	* ipa-prop.c (ipa_edge_duplication_hook): Always put new rdesc to the
+	linked list.  When finding the correct duplicate, also consider also
+	the caller in additon to its inlined_to node.
+
+2013-09-02  James Greenhalgh  <james.greenhalgh@arm.com>
+
+	* config/aarch64/aarch64-simd-builtins.def
+	(dup_lane_scalar): Remove.
+	* config/aarch64/aarch64-simd.md
+	(aarch64_simd_dup): Add 'w->w' alternative.
+	(aarch64_dup_lane<mode>): Allow for VALL.
+	(aarch64_dup_lane_scalar<mode>): Remove.
+	(aarch64_dup_lane_<vswap_width_name><mode>): New.
+	(aarch64_get_lane_signed<mode>): Add w->w altenative.
+	(aarch64_get_lane_unsigned<mode>): Likewise.
+	(aarch64_get_lane<mode>): Likewise.
+	* config/aarch64/aarch64.c (aarch64_evpc_dup): New.
+	(aarch64_expand_vec_perm_const_1): Use aarch64_evpc_dup.
+	* config/aarch64/iterators.md (VSWAP_WIDTH): New.
+	(VCON): Change container of V2SF.
+	(vswap_width_name): Likewise.
+	* config/aarch64/arm_neon.h
+	(__aarch64_vdup_lane_any): New.
+	(__aarch64_vdup<q>_lane<q>_<fpsu><8,16,32,64>): Likewise.
+	(vdup<q>_n_<psuf><8,16,32,64>): Convert to C implementation.
+	(vdup<q>_lane<q>_<fpsu><8,16,32,64>): Likewise.
+
+2013-09-02  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR middle-end/56382
+	* expr.c (emit_move_complex): Do not move complex FP values as parts if
+	the source or the destination is a single hard register.
+
+2013-09-02  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/57511
+	* tree-scalar-evolution.c (instantiate_scev_name): Allow
+	non-linear SCEVs.
+
+2013-09-02  Richard Biener  <rguenther@suse.de>
+
+	* tree-affine.c (add_elt_to_tree): Avoid converting all pointer
+	arithmetic to sizetype.
+
+2013-09-02  Bin Cheng  <bin.cheng@arm.com>
+
+	* tree-ssa-loop-ivopts.c (set_autoinc_for_original_candidates):
+	Find auto-increment use both before and after candidate.
+
+2013-09-02  Marek Polacek  <polacek@redhat.com>
+
+	* Makefile.in (ubsan.o): Add $(TM_P_H) dependency.
+
+2013-09-01  Jan Hubicka  <jh@suse.cz>
+
+	* Makefile.in: Add ipa-profile.o
+	(ipa.o, ipa-devrit.o, ipa-inline-analysis.o): Adjust dependencies.
+	* cgraph.c (struct cgraph_propagate_frequency_data,
+	cgraph_propagate_frequency_1, cgraph_propagate_frequency): Move to
+	ipa-profile.c; replace cgraph_ by ipa_ prefix.
+	* cgraph.h (cgraph_propagate_frequency): Remove.
+	* ipa-inline-analysis.c: Include ipa-utils.h; drop duplicated cfgloop.h.
+	(inline_update_callee_summaries): Update.
+	* ipa-profile.c: New file.
+	* ipa-utils.h (ipa_propagate_frequency): Declare.
+	* ipa.c: Do not include pointer-set.h, hash-table.h, lto-streamer.h,
+	data-streamer.h, value-prof.h
+	(symtab_remove_unreachable_nodes): Update profile.
+	(struct histogram_entry, histogram, histogram_pool, histogram_hash,
+	account_time_size, cmp_counts, dump_histogram,
+	ipa_profile_generate_summary, ipa_profile_write_summary,
+	ipa_profile_read_summary, ipa_profile, gate_ipa_profile,
+	pass_data_ipa_profile, pass_ipa_profile, make_pass_ipa_profile):
+	Move to ipa-profile.c
+
+2013-09-01  John David Anglin  <danglin@gcc.gnu.org>
+
+	* config/pa/pa.md: Allow "const 0" operand 1 in "scc" insns.
+
+2013-09-01  Jan Hubicka  <jh@suse.cz>
+
+	* common.opt (fdevirtualize-speculatively): New function.
+	* invoke.texi (fdevirtualize-speculatively): Document.
+	* ipa-devirt.c: Include ipa-inline.h
+	(likely_target_p): New function.
+	(ipa_devirt): New function.
+	(gate_ipa_devirt): New function.
+	(pass_data_ipa_devirt): New static var.
+	(pass_ipa_devirt): Likewise.
+	(make_pass_ipa_devirt): New function.
+	* opts.c (default_options): Add OPT_fdevirtualize_speculatively.
+	(common_handle_option): Disable devirtualization when
+	value range profiling is available.
+	* passes.def (pass_ipa_devirt): Add.
+	* timever.def (TV_IPA_DEVIRT): New timevar.
+	* tree-pass.h (make_pass_ipa_devirt): 
+
+2013-09-01  Iain Sandoe  <iain@codesourcery.com>
+
+	* config/darwin.h (LINK_COMMAND_SPEC_A): Revise sanitizer specs to
+	include sanitize(undefined).
+
+2013-08-31  Diego Novillo  <dnovillo@google.com>
+
+	* Makefile.in (TREE_CORE_H): Define.
+	(TREE_H): Use.
+	(GTFILES): Add tree-core.h.
+	* builtins.c (built_in_class_names): Use BUILT_IN_LAST to
+	size the array.
+	* tree-core.h: New file.
+	Move all data structures, enum, typedefs, global
+	declarations and constants from ...
+	* tree.h: ... here.
+
+2013-08-31  Jan Hubicka  <jh@suse.cz>
+
+	* bulitins.c (expand_builtin): Do not early exit for gcov
+	instrumented functions.
+
+2013-08-31  Marek Polacek  <polacek@redhat.com>
+
+	* ubsan.c: Include tm_p.h.
+
+2013-08-31  Jan Hubicka  <jh@suse.cz>
+
+	* gimple-streamer-in.c (input_gimple_stmt): Silence parameter unused
+	warning.
+
+	* cgraph.c (cgraph_get_body): Update call of lto_input_function_body.
+	* gimple-streamer-in.c (input_gimple_stmt): Move sanity check to ...
+	* tree-cfg.c (verify_gimple_label): ... here.
+	* ipa-utils.c: Include lto-streamer.h, ipa-inline.h
+	(ipa_merge_profiles): New function.
+	* lto-streamer-in.c (lto_read_body): Take node instead of fn_decl.
+	(lto_input_function_body): Likewise.
+	* ipa-utils.h (ipa_merge_profiles): Declare.
+	* lto-streamer.h (lto_input_function_body): Update prototype.
+	(emit_label_in_global_context_p): Remove.
+	* lto-symtab.c: Include ipa-utils.h
+	(lto_cgraph_replace_node): Use ipa_merge_profiles.
+
+2013-08-31  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.c (cgraph_speculative_call_info): Fix ref lookup
+
+2013-08-31  Jan Hubicka  <jh@suse.cz>
+
+	* basic-block.h (apply_scale): Make scale parmeter gcov_type.
+
+2013-08-31  Uros Bizjak  <ubizjak@gmail.com>
+
+	* config/alpha/alpha.c (alpha_emit_conditional_move): Update
+	"cmp" RTX before signed_comparison_operator check to account
+	for "code" changes.
+
+2013-08-30  Jan Hubicka  <jh@suse.cz>
+
+	* ipa-prop.c (ipa_set_jf_known_type): Check that we add only records.
+	(detect_type_change_1): Rename to ...
+	(detect_type_change): ... this one; early return on non-polymorphic
+	types.
+	(detect_type_change_ssa): Add comp_type parameter; update
+	use of detect_type_change.
+	(compute_complex_assign_jump_func): Add param_type parameter;
+	update use of detect_type_change_ssa.
+	(compute_complex_ancestor_jump_func): Likewise.
+	(ipa_get_callee_param_type): New function.
+	(ipa_compute_jump_functions_for_edge): Compute parameter type;
+	update calls to the jump function computation functions.
+
+2013-08-30  Teresa Johnson  <tejohnson@google.com>
+	    Steven Bosscher  <steven@gcc.gnu.org>
+
+	* cfgrtl.c (fixup_new_cold_bb): New routine.
+	(commit_edge_insertions): Invoke fixup_partitions.
+	(find_partition_fixes): New routine.
+	(fixup_partitions): Ditto.
+	(verify_hot_cold_block_grouping): Update comments.
+	(rtl_verify_edges): Invoke find_partition_fixes.
+	(rtl_verify_bb_pointers): Update comments.
+	(rtl_verify_bb_layout): Ditto.
+	* basic-block.h (probably_never_executed_edge_p): Declare.
+	(fixup_partitions): Ditto.
+	* cfgcleanup.c (try_optimize_cfg): Invoke fixup_partitions.
+	* bb-reorder.c (sanitize_hot_paths): New function.
+	(find_rarely_executed_basic_blocks_and_crossing_edges): Invoke
+	sanitize_hot_paths.
+	* predict.c (probably_never_executed_edge_p): New routine.
+	* cfg.c (check_bb_profile): Add partition insanity warnings.
+
+2013-08-30  Meador Inge  <meadori@codesourcery.com>
+
+	* tree-vrp.c (check_array_ref): Bail out on zero-length arrays.
+
+2013-08-30  Marek Polacek  <polacek@redhat.com>
+
+	* Makefile.in (ubsan.o): Add.
+	(c-family/c-ubsan.o): Add.
+	(builtins.o): Add ubsan.h dependency.
+	* ubsan.h: New file.
+	* ubsan.c: New file.
+	* common.opt: Add -fsanitize=undefined option.
+	(flag_sanitize): Add variable.
+	(fsanitize=): Add option.  Add Driver.
+	(fsanitize=thread): Remove option.
+	(fsanitize=address): Likewise.
+	(static-libubsan): New option.
+	* doc/invoke.texi: Document the new flag and -static-libubsan.
+	* sanitizer.def (DEF_SANITIZER_BUILTIN): Define.
+	(BUILT_IN_UBSAN_HANDLE_BUILTIN_UNREACHABLE): Define.
+	* builtin-attrs.def (ATTR_COLD): Define.
+	(ATTR_COLD_NOTHROW_LEAF_LIST): Define.
+	* builtins.def (BUILT_IN_UBSAN_HANDLE_DIVREM_OVERFLOW,
+	BUILT_IN_UBSAN_HANDLE_SHIFT_OUT_OF_BOUNDS): Define.
+	* flag-types.h (sanitize_code): New enum.
+	* opts.c (common_handle_option): Parse command line arguments
+	of -fsanitize=.  Add -fsanitize=unreachable option.
+	* varasm.c (get_variable_section): Adjust.
+	(assemble_noswitch_variable): Likewise.
+	(assemble_variable): Likewise.
+	(output_constant_def_contents): Likewise.
+	(categorize_decl_for_section): Likewise.
+	(place_block_symbol): Likewise.
+	(output_object_block): Likewise.
+	* builtins.def: Likewise.
+	* toplev.c (compile_file): Likewise.
+	(process_options): Likewise.
+	* cppbuiltin.c: Likewise.
+	* tsan.c (tsan_pass): Likewise.
+	(tsan_gate): Likewise.
+	(tsan_gate_O0): Likewise.
+	* cfgexpand.c (partition_stack_vars): Likewise.
+	(expand_stack_vars): Likewise.
+	(defer_stack_allocation): Likewise.
+	(expand_used_vars): Likewise.
+	* cfgcleanup.c (old_insns_match_p): Likewise.
+	* asan.c (asan_finish_file): Likewise.
+	(asan_instrument): Likewise.
+	(gate_asan): Likewise.
+	(initialize_sanitizer_builtins): Build BT_FN_VOID_PTR_PTR_PTR.
+	(ATTR_COLD_NOTHROW_LEAF_LIST): Define.
+	(asan_global_struct): Use pointer_sized_int_node instead
+	calling build_nonstandard_integer_type.
+	(initialize_sanitizer_builtins): Likewise.
+	(asan_finish_file): Likewise.
+	* gcc.c: Document %{%:function(args):X}.
+	(static_spec_functions): Add sanitize.
+	(handle_spec_function): Add retval_nonnull argument and if non-NULL,
+	store funcval != NULL there.
+	(do_spec_1): Adjust handle_spec_function caller.
+	(handle_braces): Allow %:function(args) as condition.
+	(sanitize_spec_function): New function.
+	(ADD_STATIC_LIBUBSAN_LIBS): Define.
+	(LIBUBSAN_SPEC): Likewise.
+	(LIBUBSAN_EARLY_SPEC): Likewise.
+	(SANITIZER_SPEC): Handle libubsan.
+	(SANITIZER_EARLY_SPEC): Likewise.
+	* config/darwin.h (LINK_COMMAND_SPEC_A): Use %:sanitize(address)
+	instead of fsanitize=address.
+	* config/arm/linux-eabi.h (ASAN_CC1_SPEC): Use %:sanitize(address)
+	instead of fsanitize=address*.
+	* builtins.c: Include ubsan.h.
+	(fold_builtin_0): Instrument __builtin_unreachable.
+	* config/rs6000/rs6000.h (FRAME_GROWS_DOWNWARD): Use flag_sanitize
+	instead of flag_asan.
+	* tree.h (enum tree_index): Add TI_POINTER_SIZED_TYPE.
+	(pointer_sized_int_node): Define.
+	* tree.c (build_common_tree_nodes): Initialize pointer_sized_int_node.
+
+2013-08-30  Mike Stump  <mikestump@comcast.net>
+
+	* doc/install.texi (Prerequisites): Note regression in Tcl 8.6
+	with RE patterns.
+
+2013-08-29  Jan Hubicka  <jh@suse.cz>
+
+	* cgraph.c (cgraph_function_body_availability): Handle weakref
+	correctly.
+	* passes.def: Remove pass_fixup_cfg.
+	* ipa-inline.c (ipa_inline): When not optimizing, do not inline;
+	track when we need to remove functions.
+	(gate_ipa_inline): Execute inlining always; add comment why.
+	(pass_data_ipa_inline): Remove TODO_remove_functions.
+	* ipa-inline-analysis.c (inline_generate_summary): When not optimizing
+	do not produce summaries.
+	* symtab.c (change_decl_assembler_name): Handle renaming of weakrefs.
+	(symtab_nonoverwritable_alias): Assert we are not called on weakref.
+	* varpool.c (cgraph_variable_initializer_availability): Fix weakrefs,
+	constant pool and vtable.
+
+2013-08-30  Tejas Belagod  <tejas.belagod@arm.com>
+
+	* config/aarch64/arm_neon.h (__AARCH64_UINT64_C, __AARCH64_INT64_C):
+	New arm_neon.h's internal macros to specify 64-bit constants.
+	Avoid using stdint.h's macros.
+
 2013-08-30  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* recog.c (verify_changes): Verify that changes[i].old is non-zero
@@ -58,13 +407,11 @@
 
 2013-08-29  Xinliang David Li  <davidxl@google.com>
 
-	* loop-unroll.c (report_unroll_peel): Minor message
-	change.
+	* loop-unroll.c (report_unroll_peel): Minor message change.
 	* tree-vect-loop-manip.c (vect_do_peeling_for_alignment):
 	Emit alignment peeling message with default -fopt-info.
 	(vect_loop_versioning): Emit loop version info message.
-	* tree-vectorizer.c (vectorize_loops): Minor message
-	change.
+	* tree-vectorizer.c (vectorize_loops): Minor message change.
 	(execute_vect_slp): Ditto.
 
 2013-08-29  Eric Botcazou  <ebotcazou@adacore.com>
@@ -79,14 +426,13 @@
 
 2013-08-29  Jan Hubicka  <jh@suse.cz>
 
-	* lto-streamer-out.c (hash_tree): Stream DECL_FINAL_P.
-	DECL_CXX_CONSTRUCTOR_P. DECL_CXX_DESTRUCTOR_P.
-	TYPE_FINAL_P.
-	* lto-streamer-in.c (unpack_ts_decl_with_vis_value_fields):
-	DECL_FINAL_P. DECL_CXX_CONSTRUCTOR_P and DECL_CXX_DESTRUCTOR_P.
+	* lto-streamer-out.c (hash_tree): Stream DECL_FINAL_P,
+	DECL_CXX_CONSTRUCTOR_P, DECL_CXX_DESTRUCTOR_P and TYPE_FINAL_P.
+	* lto-streamer-in.c (unpack_ts_decl_with_vis_value_fields): Stream
+	DECL_FINAL_P, DECL_CXX_CONSTRUCTOR_P and DECL_CXX_DESTRUCTOR_P.
 	(unpack_ts_type_common_value_fields): Stream TYPE_FINAL_P.
 	* tree-streamer-out.c (pack_ts_decl_with_vis_value_fields):
-	Add DECL_FINAL_P, DECL_CXX_CONSTRUCTOR_P, DECL_CXX_DESTRUCTOR_P
+	Add DECL_FINAL_P, DECL_CXX_CONSTRUCTOR_P and DECL_CXX_DESTRUCTOR_P.
 	(pack_ts_type_common_value_fields): Add TYPE_FINAL_P.
 
 2013-08-29  Teresa Johnson  <tejohnson@google.com>

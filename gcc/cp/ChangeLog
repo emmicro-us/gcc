@@ -1,3 +1,71 @@
+2013-09-03  Gabriel Dos Reis  <gdr@integrable-solutions.net>
+
+	* cxx-pretty-print.h (cxx_pretty_printer::type_id): Declare as
+	overrider.
+	* cxx-pretty-print.c (pp_cxx_storage_class_specifier): Remove.
+	(pp_cxx_userdef_literal): Tidy.
+	(pp_cxx_template_argument_list): Likewise.
+	(pp_cxx_typeid_expression): Likewise.
+	(pp_cxx_offsetof_expression_1): Likewise.
+	(cxx_pretty_printer::postfix_expression): Likewise.
+	(cxx_pretty_printer::unary_expression): Likewise.
+	(cxx_pretty_printer::statement): Likewise.
+	(cxx_pretty_printer::type_id): Rename from pp_cxx_type_id.
+	(c_pretty_printer::cxx_pretty_printer): Do not assign to type_id.
+	* error.c (dump_decl): Tidy.
+	(dump_expr): Likewise.
+
+2013-09-02  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/21682, implement DR 565
+	* name-lookup.c (compparms_for_decl_and_using_decl): New.
+	(push_overloaded_decl_1, do_nonmember_using_decl): Use it.
+
+2013-08-30  Marek Polacek  <polacek@redhat.com>
+
+	* typeck.c (cp_build_binary_op): Add division by zero and shift
+	instrumentation.
+	* error.c (dump_expr): Special-case ubsan builtins.
+
+2013-08-30  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/51424
+	* cp-tree.h (LOOKUP_DELEGATING_CONS): Add.
+	* init.c (perform_target_ctor): Use it.
+	* call.c (build_special_member_call): Diagnose self-delegating
+	constructors.
+
+2013-08-30  Gabriel Dos Reis  <gdr@integrable-solutions.net>
+
+	* cxx-pretty-print.h (cxx_pretty_printer::declaration): Declare as
+	overrider.
+	(cxx_pretty_printer::declaration_specifiers): Likewise.
+	(cxx_pretty_printer::function_specifier): Likewise.
+	(cxx_pretty_printer::declarator): Likewise.
+	(cxx_pretty_printer::direct_declarator): Likewise.
+	(cxx_pretty_printer::abstract_declarator): Likewise.
+	(cxx_pretty_printer::direct_abstract_declarator): Likewise.
+	(pp_cxx_declaration): Remove.
+	* cxx-pretty-print.c (cxx_pretty_printer::function_specifier):
+	Rename from pp_cxx_function_specifier.  Adjust.
+	(cxx_pretty_printer::declaration_specifiers): Rename from
+	pp_cxx_decl_specifier_seq.  Adjust.
+	(cxx_pretty_printer::direct_declarator): Rename from
+	pp_cxx_direct_declarator.  Adjust.
+	(cxx_pretty_printer::declarator): Rename from pp_cxx_declarator.
+	Adjust.
+	(cxx_pretty_printer::abstract_declarator): Rename from
+	pp_cxx_abstract_declarator.  Adjust.
+	(cxx_pretty_printer::direct_abstract_declarator): Rename from
+	pp_cxx_direct_abstract_declarator.  Adjust.
+	(cxx_pretty_printer::declaration): Rename from
+	pp_cxx_declaration.  Adjust.
+	(cxx_pretty_printer::cxx_pretty_printer): Do not assign to
+	declaration, declaration_specifiers, function_specifier,
+	declarator, direct_declarator, abstract_declarator,
+	direct_abstract_declarator.
+	* error.c (dump_decl): Adjust.
+
 2013-08-29  Jan Hubicka  <jh@suse.cz>
 
 	Correct previous patch to not mark terminate as LEAF.
