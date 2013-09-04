@@ -2466,14 +2466,61 @@ scan_trace (dw_trace_info *trace)
 	     should include the sp adjustment.  Unfortunately, that leaves
 	     us with an unavoidable unwinding error exactly at the call insn
 	     itself.  For jump insns we'd prefer to avoid this error by
-	     placing the notes after the sequence.  */
+	     placing the notes after the sequence.  Alas, to do this,
+	     if the jump has a target, we need to replicate the note there.
+	     We can't do that if the target also has a fall-through entry.  */
+	  rtx label, barrier;
 	  if (JUMP_P (control))
-	    add_cfi_insn = insn;
-
-	  for (i = 1; i < n; ++i)
 	    {
-	      elt = XVECEXP (pat, 0, i);
-	      scan_insn_after (elt);
+	      label = JUMP_LABEL (control);
+	      if (label && LABEL_P (label))
+		barrier = prev_nonnote_insn (label);
+	      else
+		barrier = label = NULL_RTX;
+	    }
+
+	  if (!JUMP_P (control)
+	      || (!INSN_ANNULLED_BRANCH_P (control) && label && !barrier))
+	    for (i = 1; i < n; ++i)
+	      {
+		elt = XVECEXP (pat, 0, i);
+		scan_insn_after (elt);
+	      }
+
+	  /* Make sure any register saves are visible at the jump target.  */
+	  dwarf2out_flush_queued_reg_saves ();
+
+	  if (JUMP_P (control) && label)
+	    {
+	      add_cfi_insn = label;
+	      for (i = 1; i < n; ++i)
+		{
+		  elt = XVECEXP (pat, 0, i);
+		  if ((!INSN_ANNULLED_BRANCH_P (control)
+		       || INSN_FROM_TARGET_P (elt))
+		      && barrier)
+		    scan_insn_after (elt);
+		  /* ??? If the insn is only executed when the branch is taken,
+		     and there's a fallthrough to the target, we can't
+		     represent the effect.  */
+		  gcc_assert (!INSN_ANNULLED_BRANCH_P (control)
+			      || !INSN_FROM_TARGET_P (elt)
+			      || barrier);
+		}
+	      dwarf2out_flush_queued_reg_saves ();
+	    }
+
+	  if (JUMP_P (control)
+	      && (INSN_ANNULLED_BRANCH_P (control) || !label || barrier))
+	    {
+	      add_cfi_insn = insn;
+	      for (i = 1; i < n; ++i)
+		{
+		  elt = XVECEXP (pat, 0, i);
+		  if (!INSN_ANNULLED_BRANCH_P (control)
+		      || !INSN_FROM_TARGET_P (elt))
+		    scan_insn_after (elt);
+		}
 	    }
 
 	  /* Make sure any register saves are visible at the jump target.  */

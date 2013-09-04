@@ -109,7 +109,7 @@ arc_handle_option (struct gcc_options *opts, struct gcc_options *opts_set,
 
 /* We default to ARC700, which has the barrel shifter enabled.  */
 #define TARGET_DEFAULT_TARGET_FLAGS \
-  (MASK_BARREL_SHIFTER|MASK_VOLATILE_CACHE_SET|DEFAULT_NO_SDATA)
+  (MASK_BARREL_SHIFTER|MASK_VOLATILE_CACHE_SET|DEFAULT_NO_SDATA|MASK_EPILOGUE_CFI)
 
 
 #include "common/common-target-def.h"

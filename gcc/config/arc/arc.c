@@ -629,6 +629,44 @@ make_pass_arc_ifcvt (gcc::context *ctxt)
   return new pass_arc_ifcvt (ctxt);
 }
 
+static unsigned blinker_dwarf2out (void);
+
+namespace {
+
+const pass_data pass_data_blinker_dwarf2out =
+{
+  RTL_PASS,
+  "blinker_dwarf2out",				/* name */
+  OPTGROUP_NONE,			/* optinfo_flags */
+  false,				/* has_gate */
+  true,					/* has_execute */
+  TV_DBR_SCHED,				/* tv_id */
+  0,					/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0,					/* todo_flags_finish */
+};
+
+class pass_blinker_dwarf2out : public rtl_opt_pass
+{
+public:
+  pass_blinker_dwarf2out(gcc::context *ctxt)
+  : rtl_opt_pass(pass_data_blinker_dwarf2out, ctxt)
+  {}
+
+  /* opt_pass methods: */
+  unsigned int execute () { return blinker_dwarf2out (); }
+};
+
+} // anon namespace
+
+rtl_opt_pass *
+make_pass_blinker_dwarf2out (gcc::context *ctxt)
+{
+  return new pass_blinker_dwarf2out (ctxt);
+}
+
 /* Called by OVERRIDE_OPTIONS to initialize various things.  */
 
 void
@@ -736,6 +774,13 @@ arc_init (void)
   arc_punct_chars['^'] = 1;
   arc_punct_chars['&'] = 1;
 
+  if (optimize > 0 && flag_delayed_branch)
+    {
+      opt_pass *pass_dbr_amend = make_pass_blinker_dwarf2out (g);
+      struct register_pass_info dbr_amend_info
+	= { pass_dbr_amend, "dbr", 1, PASS_POS_INSERT_AFTER };
+      register_pass (&dbr_amend_info);
+    }
   if (optimize > 1 && !TARGET_NO_COND_EXEC)
     {
       /* There are two target-independent ifcvt passes, and arc_reorg may do
@@ -1696,6 +1741,17 @@ frame_move_inc (rtx dst, rtx src, rtx reg, rtx addr)
   return insn;
 }
 
+/* Like frame_move_inc, but add a FRAME_CFA_RESTORE note.  */
+
+static rtx
+restore_reg (rtx dst, rtx src, rtx reg, rtx addr)
+{
+  gcc_assert (REG_P (dst));
+  rtx insn = frame_move_inc (dst, src, reg, addr);
+  add_reg_note (insn, REG_CFA_RESTORE, dst);
+  return insn;
+}
+
 /* Emit a frame insn which adjusts a frame address register REG by OFFSET.  */
 
 static rtx
@@ -2125,7 +2181,8 @@ arc_save_restore (rtx base_reg,
 		}
 	      mem = gen_frame_mem (SImode, addr);
 	      if (epilogue_p)
-		frame_move_inc (reg, mem, base_reg, addr);
+		
+		restore_reg (reg, mem, base_reg, addr);
 	      else
 		frame_move_inc (mem, reg, base_reg, addr);
 	      offset += UNITS_PER_WORD;
@@ -2242,6 +2299,8 @@ arc_expand_prologue (void)
     arc_finalize_pic ();
 }
 
+static void blinker_dwarf2out_1 (rtx insn);
+
 /* Do any necessary cleanup after a function to restore stack, frame,
    and regs.  */
 
@@ -2302,8 +2361,8 @@ arc_expand_epilogue (int sibcall_p)
 	{
 	      rtx addr = gen_rtx_POST_INC (Pmode, stack_pointer_rtx);
 
-	      frame_move_inc (frame_pointer_rtx, gen_frame_mem (Pmode, addr),
-			      stack_pointer_rtx, 0);
+	      restore_reg (frame_pointer_rtx, gen_frame_mem (Pmode, addr),
+			   stack_pointer_rtx, 0);
 	      size_to_deallocate -= UNITS_PER_WORD;
 	}
 
@@ -2377,7 +2436,8 @@ arc_expand_epilogue (int sibcall_p)
 	      addr = gen_rtx_POST_INC (Pmode, addr);
 	      size_to_deallocate = 0;
 	    }
-	  frame_move_inc (ra, gen_frame_mem (Pmode, addr), stack_pointer_rtx, addr);
+	  restore_reg (ra, gen_frame_mem (Pmode, addr), stack_pointer_rtx,
+		       addr);
 	}
 
       if (!millicode_p)
@@ -2416,6 +2476,122 @@ arc_expand_epilogue (int sibcall_p)
       for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
 	RTX_FRAME_RELATED_P (insn) = 0;
     }
+  else
+    {
+      /* dwarf2out_frame_debug_expr panics when it sees a register restore
+	 from memory.  OTOH we need the CFAs to match on the path merge
+	 seen for shrinkwrapping.  */
+      rtx insn;
+
+      for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
+	blinker_dwarf2out_1 (insn);
+    }
+}
+
+/* On the one hand, dwarf2out* requires matching traces.  On the other
+   hand, it panics when it sees a COND_EXEC.  So we must vet what it
+   is allowed to see.  We can do this for SEQUENCEs only after they have
+   been created by pass_delay_slots.  */
+
+static void
+blinker_dwarf2out_1 (rtx insn)
+{
+  int len = 1;
+  rtx *patp, frame_pat = NULL_RTX;
+  rtx note = find_reg_note (insn, REG_FRAME_RELATED_EXPR, NULL_RTX);
+  int i;
+  bool need_replace = false;
+
+  if (note)
+    patp = &XEXP (note, 0);
+  else
+    patp = &PATTERN (insn);
+  rtx orig_pat = *patp;
+  if (GET_CODE (orig_pat) == PARALLEL)
+    {
+      len = XVECLEN (orig_pat, 0);
+      patp = &XVECEXP (orig_pat, 0, 0);
+    }
+  for (i = 0; i < len; i++)
+    {
+      rtx pat = *patp++;
+      if (GET_CODE (pat) == COND_EXEC)
+	{
+	  need_replace = true;
+	  rtx jump = PREV_INSN (insn);
+	  rtx jump_set;
+	  if (!JUMP_P (jump) || NEXT_INSN (PREV_INSN (jump)) == jump)
+	    jump = NULL_RTX;
+	  if (jump && INSN_ANNULLED_BRANCH_P (jump))
+	    pat = XEXP (pat, 1);
+	  else if (jump
+		   && (jump_set = single_set (jump))
+		   && GET_CODE (SET_SRC (jump_set)) == IF_THEN_ELSE
+		   && (GET_CODE (XEXP (SET_SRC (jump_set), 1))
+		       == SIMPLE_RETURN))
+	    {
+	      rtx cond = XEXP (pat, 0);
+	      rtx jump_cond = XEXP (SET_SRC (PATTERN (jump)), 0);
+	      /* If COND is the same as JUMP_COND, INSN is part
+		 of the epilogue pertaining to this conditional
+		 return, and not relevant to any code that follows
+		 statically in this function.  */
+	      if (rtx_equal_p (cond, jump_cond))
+		continue;
+	      else if (rtx_equal_p
+			(reversed_comparison (jump_cond, GET_MODE (cond)),
+			 cond))
+		/* For the fall-through path, INSN is effectively
+		   unconditional.  */
+		pat = XEXP (pat, 1);
+	      else
+		gcc_unreachable ();
+	    }
+	  else
+	    /* If we get here, we have to figure out how to make this
+	       palatable to dwarf2out_frame_debug_expr.  */
+	    gcc_unreachable ();
+	}
+      if (GET_CODE (pat) != SET)
+	continue;
+#if 0
+      if (MEM_P (SET_SRC (pat)))
+	{
+	  need_replace = true;
+	  continue;
+	}
+#endif
+      gcc_assert (!frame_pat);
+      frame_pat = pat;
+    }
+  if (!need_replace)
+    ; /* OK.  */
+  else if (!frame_pat)
+    RTX_FRAME_RELATED_P (insn) = 0;
+  else
+    {
+      gcc_assert (frame_pat != orig_pat);
+      if (note)
+	remove_note (insn, note);
+      add_reg_note (insn, REG_FRAME_RELATED_EXPR, frame_pat);
+    }
+}
+
+static unsigned
+blinker_dwarf2out (void)
+{
+  rtx insn;
+
+  for (insn = get_insns(); insn; insn = NEXT_INSN (insn))
+    {
+      if (!NONJUMP_INSN_P (insn) || GET_CODE (PATTERN (insn)) != SEQUENCE)
+	continue;
+      rtx delay = XVECEXP (PATTERN (insn), 0, 1);
+      if (!RTX_FRAME_RELATED_P (delay))
+	continue;
+      blinker_dwarf2out_1 (delay);
+    }
+  return 0;
 }
 
 /* Return the offset relative to the stack pointer where the return address
