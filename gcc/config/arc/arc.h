@@ -548,7 +548,8 @@ if (GET_MODE_CLASS (MODE) == MODE_INT		\
    This is ordinarily the length in words of a value of mode MODE
    but can be less for certain modes in special long registers.  */
 #define HARD_REGNO_NREGS(REGNO, MODE) \
-((GET_MODE_SIZE (MODE) == 16 && REGNO >= 64 && REGNO < 88) ? 1 \
+((GET_MODE_SIZE (MODE) == 16 \
+  && REGNO >= ARC_FIRST_SIMD_VR_REG && REGNO <= ARC_LAST_SIMD_VR_REG) ? 1 \
  : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.  */

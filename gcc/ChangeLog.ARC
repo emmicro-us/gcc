@@ -1,3 +1,10 @@
+2013-09-06  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.h (HARD_REGNO_NREGS): Use ARC_FIRST_SIMD_VR_REG /
+	ARC_LAST_SIMD_VR_REG.
+	* config/arc/arc.c (arc_conditional_register_usage): Likewise.
+	Also set reg_alloc_order for DMA config regs.
+
 2013-09-03  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_text_label): Test JUMP_TABLE_DATA_P.
