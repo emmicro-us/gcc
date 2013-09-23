@@ -1336,7 +1336,11 @@ extern void protected_set_expr_location (tree, location_t);
 
 /* Attributes for SSA_NAMEs for pointer-type variables.  */
 #define SSA_NAME_PTR_INFO(N) \
-    SSA_NAME_CHECK (N)->ssa_name.ptr_info
+   SSA_NAME_CHECK (N)->ssa_name.info.ptr_info
+
+/* Value range info attributes for SSA_NAMEs of non pointer-type variables.  */
+#define SSA_NAME_RANGE_INFO(N) \
+    SSA_NAME_CHECK (N)->ssa_name.info.range_info
 
 /* Return the immediate_use information for an SSA_NAME. */
 #define SSA_NAME_IMM_USE_NODE(NODE) SSA_NAME_CHECK (NODE)->ssa_name.imm_uses
@@ -2542,11 +2546,6 @@ extern vec<tree, va_gc> **decl_debug_args_insert (tree);
    the method is final.  */
 #define DECL_FINAL_P(NODE)\
    (FUNCTION_DECL_CHECK (NODE)->decl_with_vis.final)
-
-/* FUNCTION_DECL inherits from DECL_NON_COMMON because of the use of the
-   arguments/result/saved_tree fields by front ends.   It was either inherit
-   FUNCTION_DECL from non_common, or inherit non_common from FUNCTION_DECL,
-   which seemed a bit strange.  */
 
 /* The source language of the translation-unit.  */
 #define TRANSLATION_UNIT_LANGUAGE(NODE) \
@@ -4745,10 +4744,6 @@ extern unsigned int tree_decl_map_hash (const void *);
 #define tree_vec_map_eq tree_map_base_eq
 #define tree_vec_map_hash tree_decl_map_hash
 #define tree_vec_map_marked_p tree_map_base_marked_p
-
-/* In tree-ssa.c */
-
-tree target_for_debug_bind (tree);
 
 /* In tree-ssa-address.c.  */
 extern tree tree_mem_ref_addr (tree, tree);

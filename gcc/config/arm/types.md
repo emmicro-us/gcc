@@ -23,23 +23,41 @@
 ;
 ; Instruction classification:
 ;
-; arlo_imm           any arithmetic or logical instruction that doesn't have
-;                    a shifted operand and has an immediate operand.  This
+; adc_imm            add/subtract with carry and with an immediate operand.
+; adc_reg            add/subtract with carry and no immediate operand.
+; adcs_imm           as adc_imm, setting condition flags.
+; adcs_reg           as adc_reg, setting condition flags.
+; adr                calculate address.
+; alu_ext            From ARMv8-A: any arithmetic instruction that has a
+;                    sign/zero-extended.
+;                    AArch64 Only.
+;                    source operand
+; alu_imm            any arithmetic instruction that doesn't have a shifted
+;                    operand and has an immediate operand.  This
 ;                    excludes MOV, MVN and RSB(S) immediate.
-; arlo_reg           any arithmetic or logical instruction that doesn't have
-;                    a shifted or an immediate operand.  This excludes
+; alu_reg            any arithmetic instruction that doesn't have a shifted
+;                    or an immediate operand.  This excludes
 ;                    MOV and MVN but includes MOVT.  This is also the default.
-; arlo_shift         any arithmetic or logical instruction that has a source
-;                    operand shifted by a constant.  This excludes
-;                    simple shifts.
-; arlo_shift_reg     as arlo_shift, with the shift amount specified in a
+; alu_shift_imm      any arithmetic instruction that has a source operand
+;                    shifted by a constant.  This excludes simple shifts.
+; alu_shift_reg      as alu_shift_imm, with the shift amount specified in a
 ;                    register.
+; alus_ext           From ARMv8-A: as alu_ext, setting condition flags.
+;                    AArch64 Only.
+; alus_imm           as alu_imm, setting condition flags.
+; alus_reg           as alu_reg, setting condition flags.
+; alus_shift_imm     as alu_shift_imm, setting condition flags.
+; alus_shift_reg     as alu_shift_reg, setting condition flags.
+; bfm                bitfield move operation.
 ; block              blockage insn, this blocks all functional units.
 ; branch             branch.
 ; call               subroutine call.
 ; clz                count leading zeros (CLZ).
+; csel               From ARMv8-A: conditional select.
 ; extend             extend instruction (SXTB, SXTH, UXTB, UXTH).
-; f_cvt              conversion between float and integral.
+; f_cvt              conversion between float representations.
+; f_cvtf2i           conversion between float and integral types.
+; f_cvti2f           conversion between integral and float types.
 ; f_flag             transfer of co-processor flags to the CPSR.
 ; f_load[d,s]        double/single load from memory.  Used for VFP unit.
 ; f_mcr              transfer arm to vfp reg.
@@ -53,19 +71,33 @@
 ; fadd[d,s]          double/single floating-point scalar addition.
 ; fcmp[d,s]          double/single floating-point compare.
 ; fconst[d,s]        double/single load immediate.
-; fcpys              single precision floating point cpy.
+; fcsel              From ARMv8-A: Floating-point conditional select.
 ; fdiv[d,s]          double/single precision floating point division.
 ; ffarith[d,s]       double/single floating point abs/neg/cpy.
 ; ffma[d,s]          double/single floating point fused multiply-accumulate.
 ; float              floating point arithmetic operation.
 ; fmac[d,s]          double/single floating point multiply-accumulate.
+; fmov               floating point to floating point register move.
 ; fmul[d,s]          double/single floating point multiply.
+; fsqrt[d,s]         double/single precision floating point square root.
 ; load_acq           load-acquire.
 ; load_byte          load byte(s) from memory to arm registers.
 ; load1              load 1 word from memory to arm registers.
 ; load2              load 2 words from memory to arm registers.
 ; load3              load 3 words from memory to arm registers.
 ; load4              load 4 words from memory to arm registers.
+; logic_imm          any logical instruction that doesn't have a shifted
+;                    operand and has an immediate operand.
+; logic_reg          any logical instruction that doesn't have a shifted
+;                    operand or an immediate operand.
+; logic_shift_imm    any logical instruction that has a source operand
+;                    shifted by a constant.  This excludes simple shifts.
+; logic_shift_reg    as logic_shift_imm, with the shift amount specified in a
+;                    register.
+; logics_imm         as logic_imm, setting condition flags.
+; logics_reg         as logic_reg, setting condition flags.
+; logics_shift_imm   as logic_shift_imm, setting condition flags.
+; logics_shift_reg   as logic_shift_reg, setting condition flags.
 ; mla                integer multiply accumulate.
 ; mlas               integer multiply accumulate, flag setting.
 ; mov_imm            simple MOV instruction that moves an immediate to
@@ -74,14 +106,21 @@
 ;                    register.  This includes MOVW, but not MOVT.
 ; mov_shift          simple MOV instruction, shifted operand by a constant.
 ; mov_shift_reg      simple MOV instruction, shifted operand by a register.
+; mrs                system/special/co-processor register move.
 ; mul                integer multiply.
 ; muls               integer multiply, flag setting.
+; multiple           more than one instruction, candidate for future
+;                    splitting, or better modeling.
 ; mvn_imm            inverting move instruction, immediate.
 ; mvn_reg            inverting move instruction, register.
 ; mvn_shift          inverting move instruction, shifted operand by a constant.
 ; mvn_shift_reg      inverting move instruction, shifted operand by a register.
+; no_insn            an insn which does not represent an instruction in the
+;                    final output, thus having no impact on scheduling.
+; rbit               reverse bits.
+; rev                reverse bytes.
 ; sdiv               signed division.
-; shift              simple shift operation (LSL, LSR, ASR, ROR) with an
+; shift_imm          simple shift operation (LSL, LSR, ASR, ROR) with an
 ;                    immediate.
 ; shift_reg          simple shift by a register.
 ; smlad              signed multiply accumulate dual.
@@ -119,6 +158,8 @@
 ; umlals             unsigned multiply accumulate long, flag setting.
 ; umull              unsigned multiply long.
 ; umulls             unsigned multiply long, flag setting.
+; untyped            insn without type information - default, and error,
+;                    case.
 ;
 ; The classification below is for instructions used by the Wireless MMX
 ; Technology. Each attribute value is used to classify an instruction of the
@@ -250,16 +291,32 @@
 ; neon_vst3_vst4
 
 (define_attr "type"
- "arlo_imm,\
-  arlo_reg,\
-  arlo_shift,\
-  arlo_shift_reg,\
+ "adc_imm,\
+  adc_reg,\
+  adcs_imm,\
+  adcs_reg,\
+  adr,\
+  alu_ext,\
+  alu_imm,\
+  alu_reg,\
+  alu_shift_imm,\
+  alu_shift_reg,\
+  alus_ext,\
+  alus_imm,\
+  alus_reg,\
+  alus_shift_imm,\
+  alus_shift_reg,\
+  bfm,\
   block,\
   branch,\
   call,\
   clz,\
+  no_insn,\
+  csel,\
   extend,\
   f_cvt,\
+  f_cvtf2i,\
+  f_cvti2f,\
   f_flag,\
   f_loadd,\
   f_loads,\
@@ -281,7 +338,7 @@
   fcmps,\
   fconstd,\
   fconsts,\
-  fcpys,\
+  fcsel,\
   fdivd,\
   fdivs,\
   ffarithd,\
@@ -291,28 +348,44 @@
   float,\
   fmacd,\
   fmacs,\
+  fmov,\
   fmuld,\
   fmuls,\
+  fsqrts,\
+  fsqrtd,\
   load_acq,\
   load_byte,\
   load1,\
   load2,\
   load3,\
   load4,\
+  logic_imm,\
+  logic_reg,\
+  logic_shift_imm,\
+  logic_shift_reg,\
+  logics_imm,\
+  logics_reg,\
+  logics_shift_imm,\
+  logics_shift_reg,\
   mla,\
   mlas,\
   mov_imm,\
   mov_reg,\
   mov_shift,\
   mov_shift_reg,\
+  mrs,\
   mul,\
   muls,\
+  multiple,\
   mvn_imm,\
   mvn_reg,\
   mvn_shift,\
   mvn_shift_reg,\
+  nop,\
+  rbit,\
+  rev,\
   sdiv,\
-  shift,\
+  shift_imm,\
   shift_reg,\
   smlad,\
   smladx,\
@@ -348,6 +421,7 @@
   umlals,\
   umull,\
   umulls,\
+  untyped,\
   wmmx_tandc,\
   wmmx_tbcst,\
   wmmx_textrc,\
@@ -469,7 +543,7 @@
   neon_vst2_4_regs_vst3_vst4,\
   neon_vst3_vst4_lane,\
   neon_vst3_vst4"
-    (const_string "arlo_reg"))
+    (const_string "untyped"))
 
 ; Is this an (integer side) multiply with a 32-bit (or smaller) result?
 (define_attr "mul32" "no,yes"
