@@ -1,3 +1,48 @@
+2013-09-20  Simon Cook  <simon.cook@embecosm.com>
+
+	* testsuite/gcc.target/arc/barrel-shifter-1.c: New test.
+	* testsuite/gcc.target/arc/barrel-shifter-2.c: Likewise.
+	* testsuite/gcc.target/arc/long-calls.c: Likewise.
+	* testsuite/gcc.target/arc/mA6.c: Likewise.
+	* testsuite/gcc.target/arc/mA7.c: Likewise.
+	* testsuite/gcc.target/arc/mARC600.c: Likewise.
+	* testsuite/gcc.target/arc/mARC601.c: Likewise.
+	* testsuite/gcc.target/arc/mARC700.c: Likewise.
+	* testsuite/gcc.target/arc/mcpu-arc600.c: Likewise.
+	* testsuite/gcc.target/arc/mcpu-arc601.c: Likewise.
+	* testsuite/gcc.target/arc/mcpu-arc700.c: Likewise.
+	* testsuite/gcc.target/arc/mdpfp.c: Likewise.
+	* testsuite/gcc.target/arc/mdsp-packa.c: Likewise.
+	* testsuite/gcc.target/arc/mdvbf.c: Likewise.
+	* testsuite/gcc.target/arc/mlock.c: Likewise.
+	* testsuite/gcc.target/arc/mmac-24.c: Likewise.
+	* testsuite/gcc.target/arc/mmac-d16.c: Likewise.
+	* testsuite/gcc.target/arc/mno-dsp-packa.c: Likewise.
+	* testsuite/gcc.target/arc/mno-dvbf.c: Likewise.
+	* testsuite/gcc.target/arc/mno-lock.c: Likewise.
+	* testsuite/gcc.target/arc/mno-mac-24.c: Likewise.
+	* testsuite/gcc.target/arc/mno-mac-d16.c: Likewise.
+	* testsuite/gcc.target/arc/mno-rtsc.c: Likewise.
+	* testsuite/gcc.target/arc/mno-swape.c: Likewise.
+	* testsuite/gcc.target/arc/mrtsc.c: Likewise.
+	* testsuite/gcc.target/arc/mspfp.c: Likewise.
+	* testsuite/gcc.target/arc/mswape.c: Likewise.
+	* testsuite/gcc.target/arc/mtune-ARC600.c: Likewise.
+	* testsuite/gcc.target/arc/mtune-ARC601.c: Likewise.
+	* testsuite/gcc.target/arc/mtune-ARC700-xmac: Likewise.
+	* testsuite/gcc.target/arc/mtune-ARC700.c: Likewise.
+	* testsuite/gcc.target/arc/mtune-ARC725D.c: Likewise.
+	* testsuite/gcc.target/arc/mtune-ARC750D.c: Likewise.
+	* testsuite/gcc.target/arc/mul64.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-dsp-packa.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-dvbf.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-lock.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-mac-24.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-mac-d16.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-rtsc.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-swape.c: Likewise.
+	* testsuite/gcc.target/arc/no-dpfp-lrsr.c: Likewise.
+
 2013-09-06  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.h (HARD_REGNO_NREGS): Use ARC_FIRST_SIMD_VR_REG /
