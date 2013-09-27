@@ -1,3 +1,21 @@
+2013-09-27  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	Remove tests that give spurious XFAIL instead of PASS:
+	* testsuite/gcc.target/arc/mno-dsp-packa.c: Remove
+	* testsuite/gcc.target/arc/mno-dvbf.c: Likewise.
+	* testsuite/gcc.target/arc/mno-lock.c: Likewise.
+	* testsuite/gcc.target/arc/mno-mac-24.c: Likewise.
+	* testsuite/gcc.target/arc/mno-mac-d16.c: Likewise.
+	* testsuite/gcc.target/arc/mno-rtsc.c: Likewise.
+	* testsuite/gcc.target/arc/mno-swape.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-dsp-packa.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-dvbf.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-lock.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-mac-24.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-mac-d16.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-rtsc.c: Likewise.
+	* testsuite/gcc.target/arc/mwithout-swape.c: Likewise.
+
 2013-09-20  Simon Cook  <simon.cook@embecosm.com>
 
 	* testsuite/gcc.target/arc/barrel-shifter-1.c: New test.
@@ -17,13 +35,6 @@
 	* testsuite/gcc.target/arc/mlock.c: Likewise.
 	* testsuite/gcc.target/arc/mmac-24.c: Likewise.
 	* testsuite/gcc.target/arc/mmac-d16.c: Likewise.
-	* testsuite/gcc.target/arc/mno-dsp-packa.c: Likewise.
-	* testsuite/gcc.target/arc/mno-dvbf.c: Likewise.
-	* testsuite/gcc.target/arc/mno-lock.c: Likewise.
-	* testsuite/gcc.target/arc/mno-mac-24.c: Likewise.
-	* testsuite/gcc.target/arc/mno-mac-d16.c: Likewise.
-	* testsuite/gcc.target/arc/mno-rtsc.c: Likewise.
-	* testsuite/gcc.target/arc/mno-swape.c: Likewise.
 	* testsuite/gcc.target/arc/mrtsc.c: Likewise.
 	* testsuite/gcc.target/arc/mspfp.c: Likewise.
 	* testsuite/gcc.target/arc/mswape.c: Likewise.
