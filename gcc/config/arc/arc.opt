@@ -186,19 +186,19 @@ mmultcost=
 Target RejectNegative Joined UInteger Var(arc_multcost) Init(-1)
 Cost to assume for a multiply instruction, with 4 being equal to a normal insn.
 
-mtune=arc600
+mtune=ARC600
 Target RejectNegative Var(arc_tune, TUNE_ARC600)
 Tune for ARC600 cpu.
 
-mtune=arc601
+mtune=ARC601
 Target RejectNegative Var(arc_tune, TUNE_ARC600)
 Tune for ARC601 cpu.
 
-mtune=arc700
+mtune=ARC700
 Target RejectNegative Var(arc_tune, TUNE_ARC700_4_2_STD)
 Tune for ARC700 R4.2 Cpu with standard multiplier block.
 
-mtune=arc700-xmac
+mtune=ARC700-xmac
 Target RejectNegative Var(arc_tune, TUNE_ARC700_4_2_XMAC)
 Tune for ARC700 R4.2 Cpu with XMAC block.
 
