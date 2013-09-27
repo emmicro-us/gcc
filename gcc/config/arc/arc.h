@@ -144,9 +144,9 @@ along with GCC; see the file COPYING3.  If not see
 %{mswap} %{mEA} %{mmin-max} %{mspfp*} %{mdpfp*} \
 %{msimd} \
 %{mmac-d16} %{mmac-24} %{mdsp-packa} %{mcrc} %{mdvbf} %{mtelephony} %{mxy} \
-%{mcpu=ARC700:%{mlock}} \
-%{mcpu=ARC700:%{mswape}} \
-%{mcpu=ARC700:%{mrtsc}} \
+%{mcpu=ARC700|!mcpu=*:%{mlock}} \
+%{mcpu=ARC700|!mcpu=*:%{mswape}} \
+%{mcpu=ARC700|!mcpu=*:%{mrtsc}} \
 "
 
 #if DEFAULT_LIBC == LIBC_UCLIBC

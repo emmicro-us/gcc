@@ -2,8 +2,11 @@
 /* { dg-options "-mlock" } */
 /* { dg-do assemble } */
 
-int f (int i)
+int f (void *p)
 {
-  __asm__("llock %1, %1" : "=r"(i) : "r"(i));
+  int i;
+
+  __asm__("llock %0, [%1]\n\t"
+	  "scond %0, [%1]" : "=&r"(i) : "r"(p));
   return i;
 }

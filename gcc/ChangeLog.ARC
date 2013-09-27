@@ -1,7 +1,7 @@
 2013-09-27  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	Remove tests that give spurious XFAIL instead of PASS:
-	* testsuite/gcc.target/arc/mno-dsp-packa.c: Remove
+	* testsuite/gcc.target/arc/mno-dsp-packa.c: Remove.
 	* testsuite/gcc.target/arc/mno-dvbf.c: Likewise.
 	* testsuite/gcc.target/arc/mno-lock.c: Likewise.
 	* testsuite/gcc.target/arc/mno-mac-24.c: Likewise.
@@ -15,6 +15,12 @@
 	* testsuite/gcc.target/arc/mwithout-mac-d16.c: Likewise.
 	* testsuite/gcc.target/arc/mwithout-rtsc.c: Likewise.
 	* testsuite/gcc.target/arc/mwithout-swape.c: Likewise.
+
+	* config/arc/arc.h (ASM_SPEC): Also pass -mlock/-mswape/-mrtsc to
+	assembler in default CPU case.
+
+	* testsuite/gcc.target/arc/mlock.c (f): Fix llock syntax.
+	Add scond use.
 
 2013-09-20  Simon Cook  <simon.cook@embecosm.com>
 
