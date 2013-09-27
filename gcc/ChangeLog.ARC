@@ -25,6 +25,9 @@
 	* config/arc/arc.opt (mtune=): Capitalize architecture variants to
 	match documentation.
 
+	* testsuite/gcc.target/arc/mtune-ARC600.c: Fix .cpu check.
+	* testsuite/gcc.target/arc/mtune-ARC601.c: Likewise.
+
 2013-09-20  Simon Cook  <simon.cook@embecosm.com>
 
 	* testsuite/gcc.target/arc/barrel-shifter-1.c: New test.
