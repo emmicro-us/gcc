@@ -15,6 +15,12 @@
 	* testsuite/gcc.target/arc/mno-rtsc.c: Likewise.
 	* testsuite/gcc.target/arc/mno-swape.c: Likewise.
 
+	* config/arc/arc.opt (mcrc, mxy): Don't RejectNegative.
+	* testsuite/gcc.target/arc/mcrc.c: New test.
+	* testsuite/gcc.target/arc/mno-crc.c: Likewise.
+	* testsuite/gcc.target/arc/mxy.c: Likewise.
+	* testsuite/gcc.target/arc/mno-xy.c: Likewise.
+
 2013-09-27  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	Remove tests that give spurious XFAIL instead of PASS:
