@@ -280,18 +280,18 @@ Target Report RejectNegative
 Enable variable polynomial CRC extension
 
 mdsp-packa
-Target Report RejectNegative
+Target Report
 Enable DSP 3.1 Pack A extensions
 
 mdvbf
-Target Report RejectNegative
+Target Report
 Enable dual viterbi butterfly extension
 
 mmac-d16
-Target Report RejectNegative Undocumented
+Target Report Undocumented
 
 mmac-24
-Target Report RejectNegative Undocumented
+Target Report Undocumented
 
 mtelephony
 Target Report RejectNegative
@@ -303,15 +303,15 @@ Enable XY Memory extension (DSP version 3)
 
 ; ARC700 4.10 extension instructions
 mlock
-Target Report RejectNegative
+Target Report
 Enable Locked Load/Store Conditional extension
 
 mswape
-Target Report RejectNegative
+Target Report
 Enable swap byte ordering extension instruction
 
 mrtsc
-Target Report RejectNegative
+Target Report
 Enable 64-bit Time-Stamp Counter extension instruction
 
 mno-epilogue-cfi

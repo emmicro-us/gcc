@@ -3,6 +3,18 @@
 	automatic dependencies adjustment:
 	* config/arc/t-arc: Delete.
 
+	* config/arc/arc.opt (mdsp-packa, mdvbf): Don't RejectNegative.
+	(mmac-d16, mmac-24, mlock, mswape, mrtsc): Likewise.
+
+	Add mno-* tests as compile-only tests:
+	* testsuite/gcc.target/arc/mno-dsp-packa.c: New test.
+	* testsuite/gcc.target/arc/mno-dvbf.c: Likewise.
+	* testsuite/gcc.target/arc/mno-lock.c: Likewise.
+	* testsuite/gcc.target/arc/mno-mac-24.c: Likewise.
+	* testsuite/gcc.target/arc/mno-mac-d16.c: Likewise.
+	* testsuite/gcc.target/arc/mno-rtsc.c: Likewise.
+	* testsuite/gcc.target/arc/mno-swape.c: Likewise.
+
 2013-09-27  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	Remove tests that give spurious XFAIL instead of PASS:
