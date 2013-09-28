@@ -1,3 +1,8 @@
+2013-09-28  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	automatic dependencies adjustment:
+	* config/arc/t-arc: Delete.
+
 2013-09-27  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	Remove tests that give spurious XFAIL instead of PASS:
