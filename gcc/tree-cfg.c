@@ -273,8 +273,8 @@ const pass_data pass_data_build_cfg =
 class pass_build_cfg : public gimple_opt_pass
 {
 public:
-  pass_build_cfg(gcc::context *ctxt)
-    : gimple_opt_pass(pass_data_build_cfg, ctxt)
+  pass_build_cfg (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_build_cfg, ctxt)
   {}
 
   /* opt_pass methods: */
@@ -1013,6 +1013,9 @@ make_abnormal_goto_edges (basic_block bb, bool for_call)
 	      break;
 	    }
 	}
+      if (!gsi_end_p (gsi)
+	  && is_gimple_debug (gsi_stmt (gsi)))
+	gsi_next_nondebug (&gsi);
       if (!gsi_end_p (gsi))
 	{
 	  /* Make an edge to every setjmp-like call.  */
@@ -1511,49 +1514,6 @@ gimple_can_merge_blocks_p (basic_block a, basic_block b)
     }
 
   return true;
-}
-
-/* Return true if the var whose chain of uses starts at PTR has no
-   nondebug uses.  */
-bool
-has_zero_uses_1 (const ssa_use_operand_t *head)
-{
-  const ssa_use_operand_t *ptr;
-
-  for (ptr = head->next; ptr != head; ptr = ptr->next)
-    if (!is_gimple_debug (USE_STMT (ptr)))
-      return false;
-
-  return true;
-}
-
-/* Return true if the var whose chain of uses starts at PTR has a
-   single nondebug use.  Set USE_P and STMT to that single nondebug
-   use, if so, or to NULL otherwise.  */
-bool
-single_imm_use_1 (const ssa_use_operand_t *head,
-		  use_operand_p *use_p, gimple *stmt)
-{
-  ssa_use_operand_t *ptr, *single_use = 0;
-
-  for (ptr = head->next; ptr != head; ptr = ptr->next)
-    if (!is_gimple_debug (USE_STMT (ptr)))
-      {
-	if (single_use)
-	  {
-	    single_use = NULL;
-	    break;
-	  }
-	single_use = ptr;
-      }
-
-  if (use_p)
-    *use_p = single_use;
-
-  if (stmt)
-    *stmt = single_use ? single_use->loc.stmt : NULL;
-
-  return !!single_use;
 }
 
 /* Replaces all uses of NAME by VAL.  */
@@ -3360,7 +3320,7 @@ verify_gimple_assign_unary (gimple stmt)
       {
 	if ((!INTEGRAL_TYPE_P (rhs1_type) || !SCALAR_FLOAT_TYPE_P (lhs_type))
 	    && (!VECTOR_INTEGER_TYPE_P (rhs1_type)
-	        || !VECTOR_FLOAT_TYPE_P(lhs_type)))
+	        || !VECTOR_FLOAT_TYPE_P (lhs_type)))
 	  {
 	    error ("invalid types in conversion to floating point");
 	    debug_generic_expr (lhs_type);
@@ -3375,7 +3335,7 @@ verify_gimple_assign_unary (gimple stmt)
       {
         if ((!INTEGRAL_TYPE_P (lhs_type) || !SCALAR_FLOAT_TYPE_P (rhs1_type))
             && (!VECTOR_INTEGER_TYPE_P (lhs_type)
-                || !VECTOR_FLOAT_TYPE_P(rhs1_type)))
+                || !VECTOR_FLOAT_TYPE_P (rhs1_type)))
 	  {
 	    error ("invalid types in conversion to integer");
 	    debug_generic_expr (lhs_type);
@@ -7957,14 +7917,14 @@ const pass_data pass_data_split_crit_edges =
 class pass_split_crit_edges : public gimple_opt_pass
 {
 public:
-  pass_split_crit_edges(gcc::context *ctxt)
-    : gimple_opt_pass(pass_data_split_crit_edges, ctxt)
+  pass_split_crit_edges (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_split_crit_edges, ctxt)
   {}
 
   /* opt_pass methods: */
   unsigned int execute () { return split_critical_edges (); }
 
-  opt_pass * clone () { return new pass_split_crit_edges (ctxt_); }
+  opt_pass * clone () { return new pass_split_crit_edges (m_ctxt); }
 }; // class pass_split_crit_edges
 
 } // anon namespace
@@ -8129,8 +8089,8 @@ const pass_data pass_data_warn_function_return =
 class pass_warn_function_return : public gimple_opt_pass
 {
 public:
-  pass_warn_function_return(gcc::context *ctxt)
-    : gimple_opt_pass(pass_data_warn_function_return, ctxt)
+  pass_warn_function_return (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_warn_function_return, ctxt)
   {}
 
   /* opt_pass methods: */
@@ -8183,8 +8143,8 @@ const pass_data pass_data_warn_function_noreturn =
 class pass_warn_function_noreturn : public gimple_opt_pass
 {
 public:
-  pass_warn_function_noreturn(gcc::context *ctxt)
-    : gimple_opt_pass(pass_data_warn_function_noreturn, ctxt)
+  pass_warn_function_noreturn (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_warn_function_noreturn, ctxt)
   {}
 
   /* opt_pass methods: */
@@ -8300,8 +8260,8 @@ const pass_data pass_data_warn_unused_result =
 class pass_warn_unused_result : public gimple_opt_pass
 {
 public:
-  pass_warn_unused_result(gcc::context *ctxt)
-    : gimple_opt_pass(pass_data_warn_unused_result, ctxt)
+  pass_warn_unused_result (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_warn_unused_result, ctxt)
   {}
 
   /* opt_pass methods: */

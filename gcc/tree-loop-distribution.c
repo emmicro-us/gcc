@@ -240,7 +240,7 @@ dot_rdg (struct graph *rdg)
 {
   /* When debugging, you may want to enable the following code.  */
 #if 1
-  FILE *file = popen("dot -Tx11", "w");
+  FILE *file = popen ("dot -Tx11", "w");
   if (!file)
     return;
   dot_rdg_1 (file, rdg);
@@ -569,6 +569,7 @@ typedef struct partition_s
   /* data-references a kind != PKIND_NORMAL partition is about.  */
   data_reference_p main_dr;
   data_reference_p secondary_dr;
+  tree niter;
 } *partition_t;
 
 
@@ -848,21 +849,17 @@ generate_memset_builtin (struct loop *loop, partition_t partition)
 {
   gimple_stmt_iterator gsi;
   gimple stmt, fn_call;
-  tree nb_iter, mem, fn, nb_bytes;
+  tree mem, fn, nb_bytes;
   location_t loc;
   tree val;
 
   stmt = DR_STMT (partition->main_dr);
   loc = gimple_location (stmt);
-  if (gimple_bb (stmt) == loop->latch)
-    nb_iter = number_of_latch_executions (loop);
-  else
-    nb_iter = number_of_exit_cond_executions (loop);
 
   /* The new statements will be placed before LOOP.  */
   gsi = gsi_last_bb (loop_preheader_edge (loop)->src);
 
-  nb_bytes = build_size_arg_loc (loc, partition->main_dr, nb_iter);
+  nb_bytes = build_size_arg_loc (loc, partition->main_dr, partition->niter);
   nb_bytes = force_gimple_operand_gsi (&gsi, nb_bytes, true, NULL_TREE,
 				       false, GSI_CONTINUE_LINKING);
   mem = build_addr_arg_loc (loc, partition->main_dr, nb_bytes);
@@ -908,21 +905,17 @@ generate_memcpy_builtin (struct loop *loop, partition_t partition)
 {
   gimple_stmt_iterator gsi;
   gimple stmt, fn_call;
-  tree nb_iter, dest, src, fn, nb_bytes;
+  tree dest, src, fn, nb_bytes;
   location_t loc;
   enum built_in_function kind;
 
   stmt = DR_STMT (partition->main_dr);
   loc = gimple_location (stmt);
-  if (gimple_bb (stmt) == loop->latch)
-    nb_iter = number_of_latch_executions (loop);
-  else
-    nb_iter = number_of_exit_cond_executions (loop);
 
   /* The new statements will be placed before LOOP.  */
   gsi = gsi_last_bb (loop_preheader_edge (loop)->src);
 
-  nb_bytes = build_size_arg_loc (loc, partition->main_dr, nb_iter);
+  nb_bytes = build_size_arg_loc (loc, partition->main_dr, partition->niter);
   nb_bytes = force_gimple_operand_gsi (&gsi, nb_bytes, true, NULL_TREE,
 				       false, GSI_CONTINUE_LINKING);
   dest = build_addr_arg_loc (loc, partition->main_dr, nb_bytes);
@@ -1125,6 +1118,7 @@ classify_partition (loop_p loop, struct graph *rdg, partition_t partition)
   partition->kind = PKIND_NORMAL;
   partition->main_dr = NULL;
   partition->secondary_dr = NULL;
+  partition->niter = NULL_TREE;
 
   EXECUTE_IF_SET_IN_BITMAP (partition->stmts, 0, i, bi)
     {
@@ -1149,10 +1143,6 @@ classify_partition (loop_p loop, struct graph *rdg, partition_t partition)
   /* Perform general partition disqualification for builtins.  */
   if (volatiles_p
       || !flag_tree_loop_distribute_patterns)
-    return;
-
-  nb_iter = number_of_exit_cond_executions (loop);
-  if (!nb_iter || nb_iter == chrec_dont_know)
     return;
 
   /* Detect memset and memcpy.  */
@@ -1193,6 +1183,17 @@ classify_partition (loop_p loop, struct graph *rdg, partition_t partition)
 	}
     }
 
+  if (!single_store)
+    return;
+
+  if (!dominated_by_p (CDI_DOMINATORS, single_exit (loop)->src,
+		       gimple_bb (DR_STMT (single_store))))
+    nb_iter = number_of_latch_executions (loop);
+  else
+    nb_iter = number_of_exit_cond_executions (loop);
+  if (!nb_iter || nb_iter == chrec_dont_know)
+    return;
+
   if (single_store && !single_load)
     {
       gimple stmt = DR_STMT (single_store);
@@ -1206,10 +1207,13 @@ classify_partition (loop_p loop, struct graph *rdg, partition_t partition)
 	  && !SSA_NAME_IS_DEFAULT_DEF (rhs)
 	  && flow_bb_inside_loop_p (loop, gimple_bb (SSA_NAME_DEF_STMT (rhs))))
 	return;
-      if (!adjacent_dr_p (single_store))
+      if (!adjacent_dr_p (single_store)
+	  || !dominated_by_p (CDI_DOMINATORS,
+			      loop->latch, gimple_bb (stmt)))
 	return;
       partition->kind = PKIND_MEMSET;
       partition->main_dr = single_store;
+      partition->niter = nb_iter;
     }
   else if (single_store && single_load)
     {
@@ -1222,7 +1226,9 @@ classify_partition (loop_p loop, struct graph *rdg, partition_t partition)
       if (!adjacent_dr_p (single_store)
 	  || !adjacent_dr_p (single_load)
 	  || !operand_equal_p (DR_STEP (single_store),
-			       DR_STEP (single_load), 0))
+			       DR_STEP (single_load), 0)
+	  || !dominated_by_p (CDI_DOMINATORS,
+			      loop->latch, gimple_bb (store)))
 	return;
       /* Now check that if there is a dependence this dependence is
          of a suitable form for memmove.  */
@@ -1264,6 +1270,7 @@ classify_partition (loop_p loop, struct graph *rdg, partition_t partition)
       partition->kind = PKIND_MEMCPY;
       partition->main_dr = single_store;
       partition->secondary_dr = single_load;
+      partition->niter = nb_iter;
     }
 }
 
@@ -1719,6 +1726,7 @@ out:
 	{
 	  if (!cd)
 	    {
+	      calculate_dominance_info (CDI_DOMINATORS);
 	      calculate_dominance_info (CDI_POST_DOMINATORS);
 	      cd = new control_dependences (create_edge_list ());
 	      free_dominance_info (CDI_POST_DOMINATORS);
@@ -1784,8 +1792,8 @@ const pass_data pass_data_loop_distribution =
 class pass_loop_distribution : public gimple_opt_pass
 {
 public:
-  pass_loop_distribution(gcc::context *ctxt)
-    : gimple_opt_pass(pass_data_loop_distribution, ctxt)
+  pass_loop_distribution (gcc::context *ctxt)
+    : gimple_opt_pass (pass_data_loop_distribution, ctxt)
   {}
 
   /* opt_pass methods: */
