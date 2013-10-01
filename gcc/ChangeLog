@@ -1,3 +1,13 @@
+2013-10-01  Jeff Law  <law@redhat.com>
+
+	* tree-ssa-threadupdate.c (struct redirection_data): Delete
+	outgoing_edge and intermediate_edge fields.  Instead store the path.
+	(redirection_data::hash): Hash on the last edge's destination index.
+	(redirection_data::equal): Check the entire thread path.
+	(lookup_redirectio_data): Corresponding changes.
+	(create_edge_and_update_destination_phis): Likewise.
+	(thread_single_edge): Likewise.
+
 2013-10-01  Joern Rennecke  <joern.rennecke@embecosm.com>
 	    Diego Novillo <dnovillo@google.com>
 
@@ -8,6 +18,16 @@
 
 	* doc/extend.texi (long_call/medium_call/short_call): Typo fix.
 	(__builtin_arc_aligned): Likewise.
+
+	* config/arc/arc.md: Expand adc_0 comment stating the intended
+	purpose and why it isn't ready.
+	Replace commented out call_value_via_label_mixed with a
+	plain comment about bl_s.
+
+	* config/arc/arc.c (stdio.h): Don't include directly.
+	(arc_expand_epilogue): Remove [0]: Remove fp_restored_p.
+	Remove if (1) condition.
+	(arc_encode_section_info): Fix comment.
 
 2013-10-01  Joern Rennecke  <joern.rennecke@embecosm.com>
 
