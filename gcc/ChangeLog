@@ -1,3 +1,45 @@
+2013-10-02  Yufeng Zhang  <yufeng.zhang@arm.com>
+
+	* gimple-ssa-strength-reduction.c (backtrace_base_for_ref):
+	Fix whitespace.
+
+2013-10-02  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* config/t-sol2 (sol2-c.o): Remove header dependencies.
+	Use $(COMPILE) and $(POSTCOMPILE).
+	(sol2-cxx.o): Likewise.
+	(sol2-stubs.o): Likewise.
+	(sol2.o): Likewise.
+	* config/x-solaris (host-solaris.o): Likewise.
+
+	* config/sparc/t-sparc (sparc.o): Remove.
+	(sparc-c.o): Remove header dependencies.
+	Use $(COMPILE) and $(POSTCOMPILE).
+	* config/sparc/x-sparc: Likewise.
+
+2013-10-02  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc-opts.h: Add 2013 to Copyright years.
+	* config/arc/arc700.md: Likewise.
+	* config/arc/arc-modes.def: Likewise.
+	* config/arc/arc-simd.h: Likewise.
+	* config/arc/t-arc-uClibc: Likewise.
+	* config/arc/t-arc-newlib: Likewise.
+
+2013-10-02  Renlin Li  <renlin.li@arm.com>
+
+	* config/aarch64/aarch64.c (aarch64_expand_prologue): Use plus_constant.
+	(aarch64_expand_epilogue): Likewise.
+
+2013-10-02  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+	    Yufeng Zhang  <yufeng.zhang@arm.com>
+
+	* gimple-ssa-strength-reduction.c (legal_cast_p_1): Forward
+	declaration.
+	(backtrace_base_for_ref): Call get_unwidened with 'base_in' if
+	'base_in' represent a conversion and legal_cast_p_1 holds; set
+	'base_in' with the returned value from get_unwidened.
+
 2013-10-02  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
 
 	* config/arm/arm.c (arm_legitimize_reload_address): Explain why
