@@ -28,6 +28,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "function.h"
 #include "expr.h"
 #include "langhooks.h"
+#include "bitmap.h"
+#include "gimple.h"
+#include "gimple-ssa.h"
+#include "cgraph.h"
+#include "tree-cfg.h"
+#include "tree-phinodes.h"
+#include "ssa-iterators.h"
+#include "tree-ssanames.h"
+#include "tree-dfa.h"
 #include "tree-ssa.h"
 #include "tree-pass.h"
 #include "except.h"
@@ -41,12 +50,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "value-prof.h"
 #include "target.h"
 #include "tree-outof-ssa.h"
-#include "bitmap.h"
 #include "sbitmap.h"
 #include "cfgloop.h"
 #include "regs.h" /* For reg_renumber.  */
 #include "insn-attr.h" /* For INSN_SCHEDULING.  */
 #include "asan.h"
+#include "tree-ssa-address.h"
 
 /* This variable holds information helping the rewriting of SSA trees
    into RTL.  */
@@ -1131,7 +1140,9 @@ defer_stack_allocation (tree var, bool toplevel)
      other hand, we don't want the function's stack frame size to
      get completely out of hand.  So we avoid adding scalars and
      "small" aggregates to the list at all.  */
-  if (optimize == 0 && tree_low_cst (DECL_SIZE_UNIT (var), 1) < 32)
+  if (optimize == 0
+      && (tree_low_cst (DECL_SIZE_UNIT (var), 1)
+          < PARAM_VALUE (PARAM_MIN_SIZE_FOR_STACK_SHARING)))
     return false;
 
   return true;
