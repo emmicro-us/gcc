@@ -3720,6 +3720,8 @@ arc_ccfsm_post_advance (rtx insn, struct arc_ccfsm *state)
 	   && GET_CODE (PATTERN (insn)) != ADDR_DIFF_VEC
 	   && ((type = get_attr_type (insn)) == TYPE_BRANCH
 	       || (type == TYPE_UNCOND_BRANCH
+		   /* ??? Maybe should also handle TYPE_RETURN here,
+		      but we don't have a testcase for that.  */
 		   && ARC_CCFSM_BRANCH_DELETED_P (state))))
     {
       if (ARC_CCFSM_BRANCH_DELETED_P (state))
@@ -8201,6 +8203,30 @@ arc_ifcvt (void)
 	    {
 	      /* ??? don't conditionalize if all side effects are dead
 		 in the not-execute case.  */
+
+	      /* For commutative operators, we generally prefer to have
+		 the first source match the destination.  */
+	      if (GET_CODE (pat) == SET)
+		{
+		  rtx src = SET_SRC (pat);
+
+		  if (COMMUTATIVE_P (src))
+		    {
+		      rtx src0 = XEXP (src, 0);
+		      rtx src1 = XEXP (src, 1);
+		      rtx dst = SET_DEST (pat);
+
+		      if (rtx_equal_p (src1, dst) && !rtx_equal_p (src0, dst)
+			  /* Leave add_n alone - the canonical form is to
+			     have the complex summand first.  */
+			  && REG_P (src0))
+			pat = gen_rtx_SET (VOIDmode, dst,
+					   gen_rtx_fmt_ee (GET_CODE (src),
+							   GET_MODE (src),
+							   src1, src0));
+		    }
+		}
+
 	      /* dwarf2out.c:dwarf2out_frame_debug_expr doesn't know
 		 what to do with COND_EXEC.  */
 	      if (RTX_FRAME_RELATED_P (insn))

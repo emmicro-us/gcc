@@ -2461,9 +2461,16 @@ build_new_1 (vec<tree, va_gc> **placement, tree type, tree nelts,
   if (vec_safe_is_empty (*placement) && TYPE_FOR_JAVA (elt_type))
     {
       tree class_addr;
-      tree class_decl = build_java_class_ref (elt_type);
+      tree class_decl;
       static const char alloc_name[] = "_Jv_AllocObject";
 
+      if (!MAYBE_CLASS_TYPE_P (elt_type))
+	{
+	  error ("%qT isn%'t a valid Java class type", elt_type);
+	  return error_mark_node;
+	}
+
+      class_decl = build_java_class_ref (elt_type);
       if (class_decl == error_mark_node)
 	return error_mark_node;
 
@@ -3667,7 +3674,7 @@ build_vec_init (tree base, tree maxindex, tree init,
       finish_for_init_stmt (for_stmt);
       finish_for_cond (build2 (NE_EXPR, boolean_type_node, iterator,
 			       build_int_cst (TREE_TYPE (iterator), -1)),
-		       for_stmt);
+		       for_stmt, false);
       elt_init = cp_build_unary_op (PREDECREMENT_EXPR, iterator, 0,
 				    complain);
       if (elt_init == error_mark_node)
@@ -4130,7 +4137,7 @@ push_base_cleanups (void)
 	  || TREE_CODE (member) != FIELD_DECL
 	  || DECL_ARTIFICIAL (member))
 	continue;
-      if (ANON_UNION_TYPE_P (this_type))
+      if (ANON_AGGR_TYPE_P (this_type))
 	continue;
       if (type_build_dtor_call (this_type))
 	{

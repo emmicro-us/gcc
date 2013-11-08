@@ -559,28 +559,55 @@ ao_ref_alias_set (ao_ref *ref)
 }
 
 /* Init an alias-oracle reference representation from a gimple pointer
-   PTR and a gimple size SIZE in bytes.  If SIZE is NULL_TREE the the
+   PTR and a gimple size SIZE in bytes.  If SIZE is NULL_TREE then the
    size is assumed to be unknown.  The access is assumed to be only
    to or after of the pointer target, not before it.  */
 
 void
 ao_ref_init_from_ptr_and_size (ao_ref *ref, tree ptr, tree size)
 {
-  HOST_WIDE_INT t1, t2;
+  HOST_WIDE_INT t, extra_offset = 0;
   ref->ref = NULL_TREE;
+  if (TREE_CODE (ptr) == SSA_NAME)
+    {
+      gimple stmt = SSA_NAME_DEF_STMT (ptr);
+      if (gimple_assign_single_p (stmt)
+	  && gimple_assign_rhs_code (stmt) == ADDR_EXPR)
+	ptr = gimple_assign_rhs1 (stmt);
+      else if (is_gimple_assign (stmt)
+	       && gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR
+	       && TREE_CODE (gimple_assign_rhs2 (stmt)) == INTEGER_CST)
+	{
+	  ptr = gimple_assign_rhs1 (stmt);
+	  extra_offset = BITS_PER_UNIT
+			 * int_cst_value (gimple_assign_rhs2 (stmt));
+	}
+    }
+
   if (TREE_CODE (ptr) == ADDR_EXPR)
-    ref->base = get_ref_base_and_extent (TREE_OPERAND (ptr, 0),
-					 &ref->offset, &t1, &t2);
+    {
+      ref->base = get_addr_base_and_unit_offset (TREE_OPERAND (ptr, 0), &t);
+      if (ref->base)
+	ref->offset = BITS_PER_UNIT * t;
+      else
+	{
+	  size = NULL_TREE;
+	  ref->offset = 0;
+	  ref->base = get_base_address (TREE_OPERAND (ptr, 0));
+	}
+    }
   else
     {
       ref->base = build2 (MEM_REF, char_type_node,
 			  ptr, null_pointer_node);
       ref->offset = 0;
     }
+  ref->offset += extra_offset;
   if (size
       && host_integerp (size, 0)
-      && TREE_INT_CST_LOW (size) * 8 / 8 == TREE_INT_CST_LOW (size))
-    ref->max_size = ref->size = TREE_INT_CST_LOW (size) * 8;
+      && TREE_INT_CST_LOW (size) * BITS_PER_UNIT / BITS_PER_UNIT
+	 == TREE_INT_CST_LOW (size))
+    ref->max_size = ref->size = TREE_INT_CST_LOW (size) * BITS_PER_UNIT;
   else
     ref->max_size = ref->size = -1;
   ref->ref_alias_set = 0;
@@ -728,11 +755,8 @@ aliasing_component_refs_p (tree ref1,
 static bool
 nonoverlapping_component_refs_of_decl_p (tree ref1, tree ref2)
 {
-  vec<tree, va_stack> component_refs1;
-  vec<tree, va_stack> component_refs2;
-
-  vec_stack_alloc (tree, component_refs1, 16);
-  vec_stack_alloc (tree, component_refs2, 16);
+  stack_vec<tree, 16> component_refs1;
+  stack_vec<tree, 16> component_refs2;
 
   /* Create the stack of handled components for REF1.  */
   while (handled_component_p (ref1))
@@ -2052,6 +2076,16 @@ stmt_kills_ref_p_1 (gimple stmt, ao_ref *ref)
 	  && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
 	switch (DECL_FUNCTION_CODE (callee))
 	  {
+	  case BUILT_IN_FREE:
+	    {
+	      tree ptr = gimple_call_arg (stmt, 0);
+	      tree base = ao_ref_base (ref);
+	      if (base && TREE_CODE (base) == MEM_REF
+		  && TREE_OPERAND (base, 0) == ptr)
+		return true;
+	      break;
+	    }
+
 	  case BUILT_IN_MEMCPY:
 	  case BUILT_IN_MEMPCPY:
 	  case BUILT_IN_MEMMOVE:

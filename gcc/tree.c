@@ -1221,7 +1221,8 @@ build_int_cst_wide (tree type, unsigned HOST_WIDE_INT low, HOST_WIDE_INT hi)
 
     case POINTER_TYPE:
     case REFERENCE_TYPE:
-      /* Cache NULL pointer.  */
+    case POINTER_BOUNDS_TYPE:
+      /* Cache NULL pointer and zero bounds.  */
       if (!hi && !low)
 	{
 	  limit = 1;
@@ -2211,6 +2212,119 @@ tree_floor_log2 (const_tree expr)
 
   return (high != 0 ? HOST_BITS_PER_WIDE_INT + floor_log2 (high)
 	  : floor_log2 (low));
+}
+
+/* Return number of known trailing zero bits in EXPR, or, if the value of
+   EXPR is known to be zero, the precision of it's type.  */
+
+unsigned int
+tree_ctz (const_tree expr)
+{
+  if (!INTEGRAL_TYPE_P (TREE_TYPE (expr))
+      && !POINTER_TYPE_P (TREE_TYPE (expr)))
+    return 0;
+
+  unsigned int ret1, ret2, prec = TYPE_PRECISION (TREE_TYPE (expr));
+  switch (TREE_CODE (expr))
+    {
+    case INTEGER_CST:
+      ret1 = tree_to_double_int (expr).trailing_zeros ();
+      return MIN (ret1, prec);
+    case SSA_NAME:
+      ret1 = get_nonzero_bits (expr).trailing_zeros ();
+      return MIN (ret1, prec);
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case BIT_IOR_EXPR:
+    case BIT_XOR_EXPR:
+    case MIN_EXPR:
+    case MAX_EXPR:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+      if (ret1 == 0)
+	return ret1;
+      ret2 = tree_ctz (TREE_OPERAND (expr, 1));
+      return MIN (ret1, ret2);
+    case POINTER_PLUS_EXPR:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+      ret2 = tree_ctz (TREE_OPERAND (expr, 1));
+      /* Second operand is sizetype, which could be in theory
+	 wider than pointer's precision.  Make sure we never
+	 return more than prec.  */
+      ret2 = MIN (ret2, prec);
+      return MIN (ret1, ret2);
+    case BIT_AND_EXPR:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+      ret2 = tree_ctz (TREE_OPERAND (expr, 1));
+      return MAX (ret1, ret2);
+    case MULT_EXPR:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+      ret2 = tree_ctz (TREE_OPERAND (expr, 1));
+      return MIN (ret1 + ret2, prec);
+    case LSHIFT_EXPR:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+      if (host_integerp (TREE_OPERAND (expr, 1), 1)
+	  && ((unsigned HOST_WIDE_INT) tree_low_cst (TREE_OPERAND (expr, 1), 1)
+	      < (unsigned HOST_WIDE_INT) prec))
+	{
+	  ret2 = tree_low_cst (TREE_OPERAND (expr, 1), 1);
+	  return MIN (ret1 + ret2, prec);
+	}
+      return ret1;
+    case RSHIFT_EXPR:
+      if (host_integerp (TREE_OPERAND (expr, 1), 1)
+	  && ((unsigned HOST_WIDE_INT) tree_low_cst (TREE_OPERAND (expr, 1), 1)
+	      < (unsigned HOST_WIDE_INT) prec))
+	{
+	  ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+	  ret2 = tree_low_cst (TREE_OPERAND (expr, 1), 1);
+	  if (ret1 > ret2)
+	    return ret1 - ret2;
+	}
+      return 0;
+    case TRUNC_DIV_EXPR:
+    case CEIL_DIV_EXPR:
+    case FLOOR_DIV_EXPR:
+    case ROUND_DIV_EXPR:
+    case EXACT_DIV_EXPR:
+      if (TREE_CODE (TREE_OPERAND (expr, 1)) == INTEGER_CST
+	  && tree_int_cst_sgn (TREE_OPERAND (expr, 1)) == 1)
+	{
+	  int l = tree_log2 (TREE_OPERAND (expr, 1));
+	  if (l >= 0)
+	    {
+	      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+	      ret2 = l;
+	      if (ret1 > ret2)
+		return ret1 - ret2;
+	    }
+	}
+      return 0;
+    CASE_CONVERT:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 0));
+      if (ret1 && ret1 == TYPE_PRECISION (TREE_TYPE (TREE_OPERAND (expr, 0))))
+	ret1 = prec;
+      return MIN (ret1, prec);
+    case SAVE_EXPR:
+      return tree_ctz (TREE_OPERAND (expr, 0));
+    case COND_EXPR:
+      ret1 = tree_ctz (TREE_OPERAND (expr, 1));
+      if (ret1 == 0)
+	return 0;
+      ret2 = tree_ctz (TREE_OPERAND (expr, 2));
+      return MIN (ret1, ret2);
+    case COMPOUND_EXPR:
+      return tree_ctz (TREE_OPERAND (expr, 1));
+    case ADDR_EXPR:
+      ret1 = get_pointer_alignment (CONST_CAST_TREE (expr));
+      if (ret1 > BITS_PER_UNIT)
+	{
+	  ret1 = ctz_hwi (ret1 / BITS_PER_UNIT);
+	  return MIN (ret1, prec);
+	}
+      return 0;
+    default:
+      return 0;
+    }
 }
 
 /* Return 1 if EXPR is the real constant zero.  Trailing zeroes matter for
@@ -3273,6 +3387,7 @@ type_contains_placeholder_1 (const_tree type)
   switch (TREE_CODE (type))
     {
     case VOID_TYPE:
+    case POINTER_BOUNDS_TYPE:
     case COMPLEX_TYPE:
     case ENUMERAL_TYPE:
     case BOOLEAN_TYPE:
@@ -4699,7 +4814,7 @@ attribute_value_equal (const_tree attr1, const_tree attr2)
     return (simple_cst_list_equal (TREE_VALUE (attr1),
 				   TREE_VALUE (attr2)) == 1);
 
-  if (flag_openmp
+  if ((flag_openmp || flag_openmp_simd)
       && TREE_VALUE (attr1) && TREE_VALUE (attr2)
       && TREE_CODE (TREE_VALUE (attr1)) == OMP_CLAUSE
       && TREE_CODE (TREE_VALUE (attr2)) == OMP_CLAUSE)
@@ -5007,7 +5122,7 @@ free_lang_data_in_decl (tree decl)
     {
       struct cgraph_node *node;
       if (!(node = cgraph_get_node (decl))
-	  || (!node->symbol.definition && !node->clones))
+	  || (!node->definition && !node->clones))
 	{
 	  if (node)
 	    cgraph_release_function_body (node);
@@ -5421,14 +5536,14 @@ find_decls_types_in_node (struct cgraph_node *n, struct free_lang_data_d *fld)
   unsigned ix;
   tree t;
 
-  find_decls_types (n->symbol.decl, fld);
+  find_decls_types (n->decl, fld);
 
-  if (!gimple_has_body_p (n->symbol.decl))
+  if (!gimple_has_body_p (n->decl))
     return;
 
   gcc_assert (current_function_decl == NULL_TREE && cfun == NULL);
 
-  fn = DECL_STRUCT_FUNCTION (n->symbol.decl);
+  fn = DECL_STRUCT_FUNCTION (n->decl);
 
   /* Traverse locals. */
   FOR_EACH_LOCAL_DECL (fn, ix, t)
@@ -5484,7 +5599,7 @@ find_decls_types_in_node (struct cgraph_node *n, struct free_lang_data_d *fld)
 static void
 find_decls_types_in_var (struct varpool_node *v, struct free_lang_data_d *fld)
 {
-  find_decls_types (v->symbol.decl, fld);
+  find_decls_types (v->decl, fld);
 }
 
 /* If T needs an assembler name, have one created for it.  */
@@ -6087,6 +6202,7 @@ set_type_quals (tree type, int type_quals)
   TYPE_READONLY (type) = (type_quals & TYPE_QUAL_CONST) != 0;
   TYPE_VOLATILE (type) = (type_quals & TYPE_QUAL_VOLATILE) != 0;
   TYPE_RESTRICT (type) = (type_quals & TYPE_QUAL_RESTRICT) != 0;
+  TYPE_ATOMIC (type) = (type_quals & TYPE_QUAL_ATOMIC) != 0;
   TYPE_ADDR_SPACE (type) = DECODE_QUAL_ADDR_SPACE (type_quals);
 }
 
@@ -6118,6 +6234,48 @@ check_aligned_type (const_tree cand, const_tree base, unsigned int align)
 	  && TYPE_ALIGN (cand) == align
 	  && attribute_list_equal (TYPE_ATTRIBUTES (cand),
 				   TYPE_ATTRIBUTES (base)));
+}
+
+/* This function checks to see if TYPE matches the size one of the built-in 
+   atomic types, and returns that core atomic type.  */
+
+static tree
+find_atomic_core_type (tree type)
+{
+  tree base_atomic_type;
+
+  /* Only handle complete types.  */
+  if (TYPE_SIZE (type) == NULL_TREE)
+    return NULL_TREE;
+
+  HOST_WIDE_INT type_size = tree_low_cst (TYPE_SIZE (type), 1);
+  switch (type_size)
+    {
+    case 8:
+      base_atomic_type = atomicQI_type_node;
+      break;
+
+    case 16:
+      base_atomic_type = atomicHI_type_node;
+      break;
+
+    case 32:
+      base_atomic_type = atomicSI_type_node;
+      break;
+
+    case 64:
+      base_atomic_type = atomicDI_type_node;
+      break;
+
+    case 128:
+      base_atomic_type = atomicTI_type_node;
+      break;
+
+    default:
+      base_atomic_type = NULL_TREE;
+    }
+
+  return base_atomic_type;
 }
 
 /* Return a version of the TYPE, qualified as indicated by the
@@ -6158,6 +6316,19 @@ build_qualified_type (tree type, int type_quals)
     {
       t = build_variant_type_copy (type);
       set_type_quals (t, type_quals);
+
+      if (((type_quals & TYPE_QUAL_ATOMIC) == TYPE_QUAL_ATOMIC))
+	{
+	  /* See if this object can map to a basic atomic type.  */
+	  tree atomic_type = find_atomic_core_type (type);
+	  if (atomic_type)
+	    {
+	      /* Ensure the alignment of this type is compatible with
+		 the required alignment of the atomic type.  */
+	      if (TYPE_ALIGN (atomic_type) > TYPE_ALIGN (t))
+		TYPE_ALIGN (t) = TYPE_ALIGN (atomic_type);
+	    }
+	}
 
       if (TYPE_STRUCTURAL_EQUALITY_P (type))
 	/* Propagate structural equality. */
@@ -9659,6 +9830,28 @@ make_or_reuse_accum_type (unsigned size, int unsignedp, int satp)
   return make_accum_type (size, unsignedp, satp);
 }
 
+
+/* Create an atomic variant node for TYPE.  This routine is called
+   during initialization of data types to create the 5 basic atomic
+   types. The generic build_variant_type function requires these to
+   already be set up in order to function properly, so cannot be
+   called from there.  */
+
+static tree
+build_atomic_base (tree type)
+{
+  tree t;
+
+  /* Make sure its not already registered.  */
+  if ((t = get_qualified_type (type, TYPE_QUAL_ATOMIC)))
+    return t;
+  
+  t = build_variant_type_copy (type);
+  set_type_quals (t, TYPE_QUAL_ATOMIC);
+
+  return t;
+}
+
 /* Create nodes for all integer types (and error_mark_node) using the sizes
    of C datatypes.  SIGNED_CHAR specifies whether char is signed,
    SHORT_DOUBLE specifies whether double should be of the same precision
@@ -9741,6 +9934,16 @@ build_common_tree_nodes (bool signed_char, bool short_double)
   unsigned_intDI_type_node = make_or_reuse_type (GET_MODE_BITSIZE (DImode), 1);
   unsigned_intTI_type_node = make_or_reuse_type (GET_MODE_BITSIZE (TImode), 1);
 
+  /* Don't call build_qualified type for atomics.  That routine does
+     special processing for atomics, and until they are initialized
+     it's better not to make that call.  */
+
+  atomicQI_type_node = build_atomic_base (unsigned_intQI_type_node);
+  atomicHI_type_node = build_atomic_base (unsigned_intHI_type_node);
+  atomicSI_type_node = build_atomic_base (unsigned_intSI_type_node);
+  atomicDI_type_node = build_atomic_base (unsigned_intDI_type_node);
+  atomicTI_type_node = build_atomic_base (unsigned_intTI_type_node);
+
   access_public_node = get_identifier ("public");
   access_protected_node = get_identifier ("protected");
   access_private_node = get_identifier ("private");
@@ -9762,6 +9965,8 @@ build_common_tree_nodes (bool signed_char, bool short_double)
 
   void_type_node = make_node (VOID_TYPE);
   layout_type (void_type_node);
+
+  pointer_bounds_type_node = targetm.chkp_bound_type ();
 
   /* We are not going to have real types in C with less than byte alignment,
      so we might as well not have any types that claim to have it.  */
@@ -12423,6 +12628,25 @@ get_tree_code_name (enum tree_code code)
     return invalid;
 
   return tree_code_name[code];
+}
+
+/* Drops the TREE_OVERFLOW flag from T.  */
+
+tree
+drop_tree_overflow (tree t)
+{
+  gcc_checking_assert (TREE_OVERFLOW (t));
+
+  /* For tree codes with a sharing machinery re-build the result.  */
+  if (TREE_CODE (t) == INTEGER_CST)
+    return build_int_cst_wide (TREE_TYPE (t),
+			       TREE_INT_CST_LOW (t), TREE_INT_CST_HIGH (t));
+
+  /* Otherwise, as all tcc_constants are possibly shared, copy the node
+     and drop the flag.  */
+  t = copy_node (t);
+  TREE_OVERFLOW (t) = 0;
+  return t;
 }
 
 #include "gt-tree.h"

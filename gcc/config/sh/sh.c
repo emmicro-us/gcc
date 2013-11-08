@@ -63,9 +63,6 @@ along with GCC; see the file COPYING3.  If not see
 
 int code_for_indirect_jump_scratch = CODE_FOR_indirect_jump_scratch;
 
-#define MSW (TARGET_LITTLE_ENDIAN ? 1 : 0)
-#define LSW (TARGET_LITTLE_ENDIAN ? 0 : 1)
-
 /* These are some macros to abstract register modes.  */
 #define CONST_OK_FOR_I10(VALUE) (((HOST_WIDE_INT)(VALUE)) >= -512 \
 				 && ((HOST_WIDE_INT)(VALUE)) <= 511)
@@ -1208,12 +1205,12 @@ sh_print_operand (FILE *stream, rtx x, int code)
       if (REG_P (x) || GET_CODE (x) == SUBREG)
 	{
 	  regno = true_regnum (x);
-	  regno += FP_REGISTER_P (regno) ? 1 : LSW;
+	  regno += FP_REGISTER_P (regno) ? 1 : SH_REG_LSW_OFFSET;
 	  fputs (reg_names[regno], (stream));
 	}
       else if (MEM_P (x))
 	{
-	  x = adjust_address (x, SImode, 4 * LSW);
+	  x = adjust_address (x, SImode, 4 * SH_REG_LSW_OFFSET);
 	  sh_print_operand_address (stream, XEXP (x, 0));
 	}
       else
@@ -1224,7 +1221,7 @@ sh_print_operand (FILE *stream, rtx x, int code)
 	  if (mode == VOIDmode)
 	    mode = DImode;
 	  if (GET_MODE_SIZE (mode) >= 8)
-	    sub = simplify_subreg (SImode, x, mode, 4 * LSW);
+	    sub = simplify_subreg (SImode, x, mode, 4 * SH_REG_LSW_OFFSET);
 	  if (sub)
 	    sh_print_operand (stream, sub, 0);
 	  else
@@ -1235,12 +1232,12 @@ sh_print_operand (FILE *stream, rtx x, int code)
       if (REG_P (x) || GET_CODE (x) == SUBREG)
 	{
 	  regno = true_regnum (x);
-	  regno += FP_REGISTER_P (regno) ? 0 : MSW;
+	  regno += FP_REGISTER_P (regno) ? 0 : SH_REG_MSW_OFFSET;
 	  fputs (reg_names[regno], (stream));
 	}
       else if (MEM_P (x))
 	{
-	  x = adjust_address (x, SImode, 4 * MSW);
+	  x = adjust_address (x, SImode, 4 * SH_REG_MSW_OFFSET);
 	  sh_print_operand_address (stream, XEXP (x, 0));
 	}
       else
@@ -1251,7 +1248,7 @@ sh_print_operand (FILE *stream, rtx x, int code)
 	  if (mode == VOIDmode)
 	    mode = DImode;
 	  if (GET_MODE_SIZE (mode) >= 8)
-	    sub = simplify_subreg (SImode, x, mode, 4 * MSW);
+	    sub = simplify_subreg (SImode, x, mode, 4 * SH_REG_MSW_OFFSET);
 	  if (sub)
 	    sh_print_operand (stream, sub, 0);
 	  else
@@ -3162,6 +3159,35 @@ and_xor_ior_costs (rtx x, int code)
 static inline int
 addsubcosts (rtx x)
 {
+  if (GET_MODE (x) == SImode)
+    {
+      /* The addc or subc patterns will eventually become one or two
+	 instructions.  Below are some costs for some of the patterns
+	 which combine would reject because the costs of the individual
+	 insns in the patterns are lower.
+
+	 FIXME: It would be much easier if we had something like insn cost
+	 attributes and the cost calculation machinery used those attributes
+	 in the first place.  This would eliminate redundant recog-like C
+	 code to calculate costs of complex patterns.  */
+      rtx op0 = XEXP (x, 0);
+      rtx op1 = XEXP (x, 1);
+
+      if (GET_CODE (x) == PLUS)
+	{
+	  if (GET_CODE (op0) == AND
+	      && XEXP (op0, 1) == const1_rtx
+	      && (GET_CODE (op1) == PLUS
+		  || (GET_CODE (op1) == MULT && XEXP (op1, 1) == const2_rtx)))
+	    return 1;
+
+	  if (GET_CODE (op0) == MULT && XEXP (op0, 1) == const2_rtx
+	      && GET_CODE (op1) == LSHIFTRT
+	      && CONST_INT_P (XEXP (op1, 1)) && INTVAL (XEXP (op1, 1)) == 31)
+	    return 1;
+	}
+    }
+
   /* On SH1-4 we have only max. SImode operations.
      Double the cost for modes > SImode.  */
   const int cost_scale = !TARGET_SHMEDIA
@@ -8261,8 +8287,8 @@ sh_builtin_saveregs (void)
 	  emit_insn (gen_addsi3 (fpregs, fpregs, GEN_INT (-UNITS_PER_WORD)));
 	  mem = change_address (regbuf, SFmode, fpregs);
 	  emit_move_insn (mem,
-			  gen_rtx_REG (SFmode, BASE_ARG_REG (SFmode) + regno
-						- (TARGET_LITTLE_ENDIAN != 0)));
+			  gen_rtx_REG (SFmode, BASE_ARG_REG (SFmode)
+					       + regno - SH_REG_MSW_OFFSET));
 	}
     }
   else
