@@ -1,3 +1,20 @@
+2013-11-11  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/58853
+	* gcc.target/i386/pr58853.c: New test.
+
+2013-11-11  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* gcc.dg/tree-ssa/forwprop-28.c: Adjust for ARC
+	LOGICAL_OP_NON_SHORT_CIRCUIT definition.
+	* gcc.dg/tree-ssa/ssa-dom-thread-4.c: Likewise.
+	* gcc.dg/tree-ssa/ssa-ifcombine-ccmp-1.c: Likewise.
+	* gcc.dg/tree-ssa/ssa-ifcombine-ccmp-4.c: Likewise.
+	* gcc.dg/tree-ssa/ssa-ifcombine-ccmp-5.c: Likewise.
+	* gcc.dg/tree-ssa/ssa-ifcombine-ccmp-6.c: Likewise.
+	* gcc.dg/tree-ssa/vrp47.c: Likewise.
+	* gcc.dg/tree-ssa/vrp87.c: Likewise.
+
 2013-11-08  Joseph Myers  <joseph@codesourcery.com>
 
 	* gcc.dg/atomic/stdatomic-compare-exchange-1.c,
@@ -83,7 +100,6 @@
 	gcc.dg/c11-atomic-2.c, gcc.dg/c11-atomic-3.c,
 	gcc.dg/c90-atomic-1.c, gcc.dg/c99-atomic-1.c: New tests.
 
->>>>>>> .r204589
 2013-11-07  Cong Hou  <congh@google.com>
 
 	* gcc.dg/vect/vect-alias-check.c: New.
