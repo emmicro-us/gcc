@@ -48,6 +48,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "reload.h"
 #include "cgraph.h"
 #include "gimple.h"
+#include "gimplify.h"
 #include "dwarf2.h"
 #include "df.h"
 #include "tm-constrs.h"
@@ -3974,10 +3975,10 @@ ix86_option_override_internal (bool main_args_p,
       if (flag_expensive_optimizations
 	  && !(opts_set->x_target_flags & MASK_VZEROUPPER))
 	opts->x_target_flags |= MASK_VZEROUPPER;
-      if (!ix86_tune_features[X86_TUNE_SSE_UNALIGNED_LOAD_OPTIMAL]
+      if (!ix86_tune_features[X86_TUNE_AVX256_UNALIGNED_LOAD_OPTIMAL]
 	  && !(opts_set->x_target_flags & MASK_AVX256_SPLIT_UNALIGNED_LOAD))
 	opts->x_target_flags |= MASK_AVX256_SPLIT_UNALIGNED_LOAD;
-      if (!ix86_tune_features[X86_TUNE_SSE_UNALIGNED_STORE_OPTIMAL]
+      if (!ix86_tune_features[X86_TUNE_AVX256_UNALIGNED_STORE_OPTIMAL]
 	  && !(opts_set->x_target_flags & MASK_AVX256_SPLIT_UNALIGNED_STORE))
 	opts->x_target_flags |= MASK_AVX256_SPLIT_UNALIGNED_STORE;
       /* Enable 128-bit AVX instruction generation
@@ -14853,6 +14854,11 @@ ix86_print_operand (FILE *file, rtx x, int code)
 	    fputs ("\n" ASM_BYTE "0xf3\n\t", file);
 #endif
 	  /* We do not want to print value of the operand.  */
+	  return;
+
+	case 'N':
+	  if (x == const0_rtx || x == CONST0_RTX (GET_MODE (x)))
+	    fputs ("{z}", file);
 	  return;
 
 	case '*':

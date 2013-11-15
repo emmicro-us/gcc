@@ -18,6 +18,7 @@
 
 
 load_lib gcc-dg.exp
+load_lib lto.exp
 
 if { ![check_effective_target_cilkplus] } {
     return;
@@ -32,6 +33,13 @@ set ALWAYS_CFLAGS ""
 lappend ALWAYS_CFLAGS "-L${library_var}/libcilkrts/.libs"
 
 dg-init
+
+# Run the tests that are shared with C++.
+dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/PS/*.c]] " -ftree-vectorize -fcilkplus -std=c99" " "
+# Run the C-only tests.
+dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/*.c]] \
+	"-ftree-vectorize -fcilkplus -std=c99" " "
+
 dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/AN/*.c]] " -fcilkplus" " "
 dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/AN/*.c]] " -O1 -fcilkplus" " "
 dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/AN/*.c]] " -O2 -fcilkplus" " "
@@ -48,8 +56,9 @@ dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/CK/*.c]] " -O
 dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/CK/*.c]] " -O2 -std=c99 -fcilkplus $ALWAYS_CFLAGS" " "
 dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/CK/*.c]] " -O2 -ftree-vectorize -fcilkplus $ALWAYS_CFLAGS" " "
 dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/CK/*.c]] " -O3 -g -fcilkplus $ALWAYS_CFLAGS" " "
-dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/CK/*.c]] " -O3 -flto -g -fcilkplus $ALWAYS_CFLAGS" " "
-
+if { [check_effective_target_lto] } {
+    dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cilk-plus/CK/*.c]] " -O3 -flto -g -fcilkplus $ALWAYS_CFLAGS" " "
+}
 
 
 dg-finish
