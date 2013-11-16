@@ -1,3 +1,42 @@
+2013-11-16  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/29143
+	* g++.dg/overload/addr2.C: New.
+	* g++.old-deja/g++.other/overload11.C: Adjust.
+
+2013-11-15  Mike Stump  <mikestump@comcast.net>
+
+	* lib/gcc.exp (gcc_target_compile): Add support for random runtime
+	* lib/g++.exp (g++_target_compile): Likewise.
+	* gcc.dg/cilk-plus/cilk-plus.exp: Improve support for runtime
+	libraries.  Remove debugging.
+	* g++.dg/cilk-plus/cilk-plus.exp: Add support to find runtime
+	libraries.  Remove -O0, redundant with default.
+
+2013-11-15  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-c++-common/cpp/ucnid-2011-1.c: New test.
+
+2013-11-15  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58188
+	* g++.dg/cpp0x/nsdmi-template8.C: New.
+
+2013-11-15  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58725
+	* g++.dg/cpp0x/nsdmi-template7.C: New.
+
+2013-11-15  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58829
+	* g++.dg/cpp0x/nsdmi-template6.C: New.
+
+2013-11-15  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58599
+	* g++.dg/cpp0x/nsdmi-template5.C: New.
+
 2013-11-15  Aldy Hernandez  <aldyh@redhat.com>
 
 	* c-c++-common/cilk-plus/PS: New directory.
