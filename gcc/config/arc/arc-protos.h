@@ -116,3 +116,4 @@ extern bool arc_epilogue_uses (int regno);
 extern int regno_clobbered_p (unsigned int, rtx, enum machine_mode, int);
 extern int arc_return_slot_offset (void);
 extern bool arc_legitimize_reload_address (rtx *, enum machine_mode, int, int);
+extern bool insn_is_tls_gd_dispatch (rtx);
