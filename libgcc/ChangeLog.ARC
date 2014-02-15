@@ -1,3 +1,7 @@
+2014-02-15  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/gmon/mcount.c (atomic.h): #ifdef out include.
+
 2014-01-22  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/crttls_r25.S: Fix offset off __main_tcb_end.

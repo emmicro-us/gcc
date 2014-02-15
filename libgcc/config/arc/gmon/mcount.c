@@ -43,7 +43,10 @@ static char sccsid[] = "@(#)mcount.c	8.1 (Berkeley) 6/4/93";
    and MCOUNT macros.  */
 #include <machine-gmon.h>
 
+/* This does not work with uClibc, which throws away out atomic.h header.  */
+#if 0
 #include <atomic.h>
+#endif
 
 /*
  * mcount is called on entry to each function compiled with the profiling
