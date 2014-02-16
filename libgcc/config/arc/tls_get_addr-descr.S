@@ -26,7 +26,7 @@ __tls_get_gd_addr:
 	add.f r0,r0,r11
 	jcc [blink]
 .Lrefresh_dtv:
-	ld r0,[pcl,__tls_get_addr_rfresh_dtv@gotpc]
+	ld r0,[pcl,__tls_get_addr_refresh_dtv@gotpc]
 	push_s r1
 	push_s r2
 	j_s.d [r0]
