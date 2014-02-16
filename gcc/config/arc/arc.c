@@ -4638,7 +4638,7 @@ arc_legitimize_tls_address (rtx addr, enum tls_model model)
       base = arc_legitimize_tls_address (base, TLS_MODEL_GLOBAL_DYNAMIC);
       return gen_rtx_PLUS (Pmode, force_reg (Pmode, base), addr);
     case TLS_MODEL_GLOBAL_DYNAMIC:
-      if (1) /* FIXME obsolete design.  */
+      if (0) /* FIXME obsolete design.  */
 	return arc_emit_call_tls_get_addr (addr, UNSPEC_TLS_GD, addr);
       else
 	{
@@ -9628,6 +9628,20 @@ bool
 insn_is_tls_gd_dispatch (rtx insn)
 {
   return recog_memoized (insn) == CODE_FOR_tls_gd_dispatch;
+}
+
+/* Output an assembler directive for any global tls variable definitions,
+   so that we can arrange to link into shared librarioes code for the
+   tls module descriptor.  */
+void
+arc_declare_tls_def (FILE *stream, const char *name, tree decl)
+{
+  enum tls_model model = DECL_TLS_MODEL (decl);
+  if (model != TLS_MODEL_GLOBAL_DYNAMIC)
+    return;
+  fputs ("\t.tls_gd_def\t", stream);
+  assemble_name (stream, name);
+  fputc ('\n', stream);
 }
 
 struct gcc_target targetm = TARGET_INITIALIZER;

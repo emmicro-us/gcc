@@ -1,0 +1,3 @@
+arc-c.o: $(srcdir)/config/arc/arc-c.c
+	$(COMPILE) $<
+	$(POSTCOMPILE)

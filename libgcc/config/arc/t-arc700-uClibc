@@ -38,3 +38,5 @@ PROFILE_OSDEP = prof-freq.o
 # Override t-slibgcc-elf-ver to hide some lib1func
 # routines which should not be called via PLT.
 SHLIB_MAPFILES = libgcc-std.ver $(srcdir)/config/arc/libgcc-excl.ver
+
+LIB2ADD_ST += $(srcdir)/config/arc/tls_get_addr-descr.S

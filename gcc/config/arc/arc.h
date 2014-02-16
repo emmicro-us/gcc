@@ -69,45 +69,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef CC1_SPEC
 
 /* Names to predefine in the preprocessor for this target machine.  */
-#define TARGET_CPU_CPP_BUILTINS()	\
- do {					\
-    builtin_define ("__arc__");		\
-    if (TARGET_A5)			\
-      builtin_define ("__A5__");	\
-    else if (TARGET_ARC600)			\
-      {					\
-	builtin_define ("__A6__");	\
-	builtin_define ("__ARC600__");	\
-      }					\
-    else if (TARGET_ARC601)			\
-      {					\
-	builtin_define ("__ARC601__");	\
-      }					\
-    else if (TARGET_ARC700)			\
-      {					\
-	builtin_define ("__A7__");	\
-	builtin_define ("__ARC700__");	\
-      }					\
-    if (TARGET_NORM)			\
-      {					\
-	builtin_define ("__ARC_NORM__");\
-	builtin_define ("__Xnorm");	\
-      }					\
-    if (TARGET_MUL64_SET)		\
-      builtin_define ("__ARC_MUL64__");\
-    if (TARGET_MULMAC_32BY16_SET)	\
-      builtin_define ("__ARC_MUL32BY16__");\
-    if (TARGET_SIMD_SET)        	\
-      builtin_define ("__ARC_SIMD__");	\
-    if (TARGET_BARREL_SHIFTER)		\
-      builtin_define ("__Xbarrel_shifter");\
-    builtin_assert ("cpu=arc");		\
-    builtin_assert ("machine=arc");	\
-    builtin_define (TARGET_BIG_ENDIAN	\
-		    ? "__BIG_ENDIAN__" : "__LITTLE_ENDIAN__"); \
-    if (TARGET_BIG_ENDIAN)		\
-      builtin_define ("__big_endian__"); \
-} while(0)
+#define TARGET_CPU_CPP_BUILTINS() arc_cpu_cpp_builtins (pfile)
 
 #if DEFAULT_LIBC == LIBC_UCLIBC
 
@@ -216,7 +178,7 @@ along with GCC; see the file COPYING3.  If not see
 #define LIB_SPEC  \
   "%{pthread:-lpthread} \
    %{shared:-lc} \
-   %{!shared:%{pg|p|profile:-lgmon -u profil --defsym __profil=profil} -lc}"
+   %{!shared:--defsym __tls_get_gd_dispatch=0 %{pg|p|profile:-lgmon -u profil --defsym __profil=profil} -lc}"
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
 #else
 #undef LIB_SPEC
@@ -1666,5 +1628,44 @@ enum
    the predicated varaint.  */
 #define SFUNC_CHECK_PREDICABLE \
   (GET_CODE (PATTERN (insn)) != COND_EXEC || !flag_pic || !TARGET_MEDIUM_CALLS)
+
+/* Copied from elfos.h */
+#define ELF_ASM_DECLARE_OBJECT_NAME(FILE, NAME, DECL)			\
+  do									\
+    {									\
+      HOST_WIDE_INT size;						\
+									\
+      /* For template static data member instantiations or		\
+	 inline fn local statics and their guard variables, use		\
+	 gnu_unique_object so that they will be combined even under	\
+	 RTLD_LOCAL.  Don't use gnu_unique_object for typeinfo,		\
+	 vtables and other read-only artificial decls.  */		\
+      if (USE_GNU_UNIQUE_OBJECT && DECL_ONE_ONLY (DECL)			\
+	  && (!DECL_ARTIFICIAL (DECL) || !TREE_READONLY (DECL)))	\
+	ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "gnu_unique_object");	\
+      else								\
+	ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "object");		\
+									\
+      size_directive_output = 0;					\
+      if (!flag_inhibit_size_directive					\
+	  && (DECL) && DECL_SIZE (DECL))				\
+	{								\
+	  size_directive_output = 1;					\
+	  size = int_size_in_bytes (TREE_TYPE (DECL));			\
+	  ASM_OUTPUT_SIZE_DIRECTIVE (FILE, NAME, size);			\
+	}								\
+									\
+      ASM_OUTPUT_LABEL (FILE, NAME);					\
+    }									\
+  while (0)
+
+#undef ASM_DECLARE_OBJECT_NAME
+#define ASM_DECLARE_OBJECT_NAME(FILE, NAME, DECL) \
+  do \
+    { \
+      arc_declare_tls_def (FILE, NAME, DECL); \
+      ELF_ASM_DECLARE_OBJECT_NAME (FILE, NAME, DECL); \
+    } \
+  while (0)
 
 #endif /* GCC_ARC_H */

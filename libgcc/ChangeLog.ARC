@@ -1,3 +1,8 @@
+2014-02-16  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/tls_get_addr-descr.S: New file.
+	* config/arc/t-arc700-uClibc (LIB2ADD_ST): Define.
+
 2014-02-15  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/gmon/mcount.c (atomic.h): #ifdef out include.

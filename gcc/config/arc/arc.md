@@ -135,6 +135,7 @@
    (R1_REG 1)
    (R2_REG 2)
    (R3_REG 3)
+   (R9_REG 9)
    (R10_REG 10)
    (R12_REG 12)
    (SP_REG 28)
@@ -5176,8 +5177,10 @@
 	   (match_operand:SI 1 "symbolic_operand" "X,X,X")]
 	 UNSPEC_TLS_GD))
    (clobber (reg:SI RETURN_ADDR_REGNUM))
+   (clobber (reg:DI R9_REG))
    (clobber (reg:DI R10_REG))
-   (clobber (reg:SI R12_REG))]
+   (clobber (reg:SI R12_REG))
+   (clobber (reg:CC CC_REG))]
   ""
   ".tls_gd_call %1`jl%!%* [%0]"
   [(set_attr "type" "call")

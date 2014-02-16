@@ -1,3 +1,22 @@
+2014-02-16  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config.gcc (arc*-*-*): Set c_target_objs and cxx_target_objs.
+	* config/arc/t-arc: New file.
+	* config/arc/arc-protos.h (arc_declare_tls_def): Prototype.
+	(arc_cpu_cpp_builtins): Likewise.
+	* config/arc/arc.h [DEFAULT_LIBC == LIBC_UCLIBC] (LIB_SPEC): 
+	For !shared, provide dummy definition of __tls_get_gd_dispatch.
+	(ELF_ASM_DECLARE_OBJECT_NAME): Define.
+	(ASM_DECLARE_OBJECT_NAME): Redefine.
+	(TARGET_CPU_CPP_BUILTINS): Move body from here ..
+	* config/arc/arc-c.c (arc_cpu_cpp_builtins): .. to here:
+	New function in New file.
+	* config/arc/arc.c (arc_legitimize_tls_address)
+	<TLS_MODEL_GLOBAL_DYNAMIC>: Use descriptor code.
+	(arc_declare_tls_def): New function.
+	* config/arc/arc.md (R9_REG 9): New constant.
+	(tls_gd_dispatch): Add clobbers of r9 and cc_reg.
+
 2014-02-14  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (DTPOFF_ZERO_SYM): Define.

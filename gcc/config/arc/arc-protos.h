@@ -116,3 +116,5 @@ extern int regno_clobbered_p (unsigned int, rtx, enum machine_mode, int);
 extern int arc_return_slot_offset (void);
 extern bool arc_legitimize_reload_address (rtx *, enum machine_mode, int, int);
 extern bool insn_is_tls_gd_dispatch (rtx);
+extern void arc_declare_tls_def (FILE *, const char *name, tree decl);
+extern void arc_cpu_cpp_builtins (cpp_reader* pfile);
