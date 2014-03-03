@@ -1,3 +1,12 @@
+2014-03-03  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* opts.h (CL_PCH_IGNORE): Define.
+	* targhooks.c (option_affects_pch_p):
+	Return false for options that have CL_PCH_IGNORE set.
+	* opt-functions.awk: Process PchIgnore.
+	* doc/options.texi: Document PchIgnore.
+	* config/arc/arc.opt (misize): Add PchIgnore property.
+
 2014-02-16  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config.gcc (arc*-*-*): Set c_target_objs and cxx_target_objs.
