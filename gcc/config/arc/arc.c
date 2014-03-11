@@ -8423,7 +8423,7 @@ arc_get_ccfsm_cond (struct arc_ccfsm *statep, bool reverse)
 /* Return version of PAT conditionalized with COND, which is part of INSN.
    ANNULLED indicates if INSN is an annulled delay-slot insn.
    Register further changes if necessary.  */
-rtx
+static rtx
 conditionalize_nonjump (rtx pat, rtx cond, rtx insn, bool annulled)
 {
   /* For commutative operators, we generally prefer to have
@@ -8461,6 +8461,7 @@ conditionalize_nonjump (rtx pat, rtx cond, rtx insn, bool annulled)
       validate_change (insn, &REG_NOTES (insn), note, 1);
     }
   pat = gen_rtx_COND_EXEC (VOIDmode, cond, pat);
+  return pat;
 }
 
 /* Use the ccfsm machinery to do if conversion.  */
