@@ -1,3 +1,10 @@
+2014-03-11  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (conditionalize_nonjump): New function, broken
+	out of:
+	(arc_ifcvt) .
+	(arc_predicate_delay_insns): Use it.
+
 2014-03-10  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/predicates.md (extend_operand): During/after reload,
