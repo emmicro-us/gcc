@@ -1,3 +1,8 @@
+2014-03-24  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_print_operand_address): Handle
+	ARC_UNSPEC_GOTOFFPC with addend.
+
 2014-03-12  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_predicate_delay_insns): 
