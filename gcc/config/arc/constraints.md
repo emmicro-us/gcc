@@ -1,5 +1,5 @@
 ;; Constraint definitions for Synopsys DesignWare ARC.
-;; Copyright (C) 2007-2013 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2014 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -157,6 +157,12 @@
   (and (match_code "const_int")
        (match_test "ival == 0")))
 
+(define_constraint "Cn0"
+  "@internal
+   Negative or zero"
+  (and (match_code "const_int")
+       (match_test "ival <= 0")))
+
 (define_constraint "Cca"
   "@internal
    Conditional or three-address add / sub constant"
@@ -254,8 +260,6 @@
        (match_test "1")))
 
 ;; Memory constraints
-;; Return true if OP is an acceptable memory operand for ARCompact
-;; 16-bit load instructions.
 (define_memory_constraint "T"
   "@internal
    A valid memory operand for ARCompact load instructions"
@@ -282,7 +286,7 @@
 
 (define_memory_constraint "Usc"
   "@internal
-   A valid memory operand for storing long immediate constants"
+   A valid memory operand for storing constants"
   (and (match_code "mem")
        (match_test "!CONSTANT_P (XEXP (op,0))")
 ;; ??? the assembler rejects stores of immediates to small data.
@@ -335,7 +339,7 @@
   (match_test "arc_legitimate_pc_offset_p (op)"))
 
 (define_constraint "Clb"
-  "A local label"
+  "label"
   (and (match_code "label_ref")
        (match_test "arc_text_label (XEXP (op, 0))")))
 
@@ -367,7 +371,7 @@
   (and (match_code "REG")
        (match_test "TARGET_Rcq
 		    && !arc_ccfsm_cond_exec_p ()
-		    && ((((REGNO (op) & 7) ^ 4) - 4) & 15) == REGNO (op)")))
+		    && IN_RANGE (REGNO (op) ^ 4, 4, 11)")))
 
 ; If we need a reload, we generally want to steer reload to use three-address
 ; alternatives in preference of two-address alternatives, unless the

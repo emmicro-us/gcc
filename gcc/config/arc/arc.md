@@ -1,6 +1,5 @@
 ;; Machine description of the Synopsys DesignWare ARC cpu for GNU C compiler
-;; Copyright (C) 1994, 1997, 1999, 2006-2013
-;; Free Software Foundation, Inc.
+;; Copyright (C) 1994-2014 Free Software Foundation, Inc.
 
 ;; Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
 ;; behalf of Synopsys Inc.
@@ -107,9 +106,7 @@
 
 
 (define_constants
-  [(UNSPEC_NORM 11) ; norm generation through builtins. candidate for scheduling
-   (UNSPEC_NORMW 12) ; normw generation through builtins. candidate for scheduling
-   (UNSPEC_SWAP 13) ; swap generation through builtins. candidate for scheduling
+  [(UNSPEC_SWAP 13) ; swap generation through builtins. candidate for scheduling
    (UNSPEC_MUL64 14) ; mul64 generation through builtins. candidate for scheduling
    (UNSPEC_MULU64 15) ; mulu64 generation through builtins. candidate for scheduling
    (UNSPEC_DIVAW 16) ; divaw generation through builtins. candidate for scheduling
@@ -499,6 +496,12 @@
 	 (eq_attr "cond_delay_insn" "no") (const_string "no")]
 	(const_string "yes")))
 
+(define_attr "annul_ret_delay_insn" "no,yes"
+  (cond [(eq_attr "cond_ret_delay_insn" "yes") (const_string "yes")
+	 (match_test "TARGET_AT_DBR_CONDEXEC") (const_string "no")
+	 (eq_attr "type" "!call,branch,uncond_branch,jump,brcc,return,sfunc")
+	   (const_string "yes")]
+   (const_string "no")))
 
 ;; Delay slot definition for ARCompact ISA
 ;; ??? FIXME:
@@ -524,9 +527,10 @@
    (nil)
    (nil)])
 
-(define_delay (eq_attr "type" "return")
+(define_delay
+  (eq_attr "type" "return")
   [(eq_attr "in_ret_delay_slot" "yes")
-   (eq_attr "type" "!call,branch,uncond_branch,jump,brcc,return,sfunc")
+   (eq_attr "annul_ret_delay_insn" "yes")
    (eq_attr "cond_ret_delay_insn" "yes")])
 
 ;; For ARC600, unexposing the delay sloy incurs a penalty also in the
@@ -1125,8 +1129,8 @@
     ; the combine pass will end up replacing uses of it with 0
   ]
   "operands[3] = CONST0_RTX (DFmode);
-   operands[4] = simplify_gen_subreg(SImode,operands[0],DFmode,0);
-   operands[5] = simplify_gen_subreg(SImode,operands[0],DFmode,4);"
+   operands[4] = simplify_gen_subreg (SImode, operands[0], DFmode, 0);
+   operands[5] = simplify_gen_subreg (SImode, operands[0], DFmode, 4);"
   [(set_attr "type" "move")])
 
 ;; Load/Store with update instructions.
@@ -1905,7 +1909,6 @@
   [(set_attr "is_sfunc" "yes")
    (set_attr "predicable" "yes")])
 
-
 (define_insn_and_split "mulsidi_600"
   [(set (match_operand:DI 0 "nonimmediate_operand"                          "=mc,mc,mc,mc")
 	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand"   "Rcq#q, c, c,%c"))
@@ -1934,7 +1937,6 @@
    (set_attr "type" "multi,multi,multi,multi")
    (set_attr "predicable" "yes,yes,no,yes")
    (set_attr "cond" "canuse,canuse,canuse_limm,canuse")])
-
 
 (define_insn_and_split "umulsidi_600"
   [(set (match_operand:DI 0 "nonimmediate_operand"                       "=mc,mc,mc")
@@ -1997,7 +1999,6 @@
   (set_attr "type" "umulti")
   (set_attr "predicable" "no,yes,no,no,yes,no")
   (set_attr "cond" "nocond,canuse,nocond,canuse_limm,canuse,nocond")])
-
 
 (define_expand "mulsidi3"
   [(set (match_operand:DI 0 "nonimmediate_operand" "")
@@ -2602,6 +2603,8 @@
       (set (match_dup 0)
 	   (plus:SI (match_dup 1) (match_dup 2)))])])
 
+; ??? need to delve into combine to find out why this is not useful.
+; We'd like to be able to grok various C idioms for carry bit usage.
 ;(define_insn "*adc_0"
 ;  [(set (match_operand:SI 0 "dest_reg_operand" "=w")
 ;	(plus:SI (ltu:SI (reg:CC_C CC_REG) (const_int 0))
@@ -3474,7 +3477,6 @@
 }
   [(set_attr "type" "unary")])
 
-
 ;; ??? At least for ARC600, we should use sbc b,b,s12 if we want a value
 ;; that is one lower if the carry flag is set.
 
@@ -3795,7 +3797,7 @@
   ""
   "*
 {
-  rtx diff_vec = PATTERN (next_real_insn (operands[3]));
+  rtx diff_vec = PATTERN (next_nonnote_insn (operands[3]));
 
   if (GET_CODE (diff_vec) != ADDR_DIFF_VEC)
     {
@@ -3823,10 +3825,10 @@
   [(set_attr "type" "load")
    (set_attr_alternative "iscompact"
      [(cond
-	[(ne (symbol_ref "GET_MODE (PATTERN (next_real_insn (operands[3])))")
+	[(ne (symbol_ref "GET_MODE (PATTERN (next_nonnote_insn (operands[3])))")
 	     (symbol_ref "QImode"))
 	 (const_string "false")
-	 (match_test "!ADDR_DIFF_VEC_FLAGS (PATTERN (next_real_insn (operands[3]))).offset_unsigned")
+	 (match_test "!ADDR_DIFF_VEC_FLAGS (PATTERN (next_nonnote_insn (operands[3]))).offset_unsigned")
 	 (const_string "false")]
 	(const_string "true"))
       (const_string "false")
@@ -3858,7 +3860,7 @@
   "TARGET_COMPACT_CASESI"
   "*
 {
-  rtx diff_vec = PATTERN (next_real_insn (operands[1]));
+  rtx diff_vec = PATTERN (next_nonnote_insn (operands[1]));
   int unalign = arc_get_unalign ();
   rtx xop[3];
   const char *s;
@@ -4073,7 +4075,6 @@
    (set_attr "predicable" "no,no,yes,yes,no,yes,no,yes")
    (set_attr "length" "*,*,4,4,4,4,4,8")])
 
-
 ;; TODO - supporting 16-bit short "branch and link" insns if required.
 ;(define_insn "*call_value_via_label_mixed"
 ;  [(set (match_operand 0 "register_operand" "=r")
@@ -4083,6 +4084,9 @@
 ;  "TARGET_MIXED_CODE"
 ;  "bl_s %1"
 ;  [(set_attr "type" "call")])
+; There is a bl_s instruction (16 bit opcode branch-and-link), but we can't
+; use it for lack of inter-procedural branch shortening.
+; Link-time relaxation would help...
 
 (define_insn "call_value_prof"
   [(set (match_operand 0 "dest_reg_operand" "=r,r")
@@ -4262,10 +4266,9 @@
 
 ;; Instructions generated through builtins
 
-(define_insn "norm"
+(define_insn "clrsbsi2"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_NORM))]
+	(clrsb:SI (match_operand:SI 1 "general_operand" "cL,Cal")))]
   "TARGET_NORM"
   "@
    norm \t%0, %1
@@ -4275,8 +4278,7 @@
 
 (define_insn "norm_f"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_NORM))
+	(clrsb:SI (match_operand:SI 1 "general_operand" "cL,Cal")))
    (set (reg:CC_ZN CC_REG)
 	(compare:CC_ZN (match_dup 1) (const_int 0)))]
   "TARGET_NORM"
@@ -4286,10 +4288,19 @@
   [(set_attr "length" "4,8")
    (set_attr "type" "two_cycle_core,two_cycle_core")])
 
+(define_insn_and_split "clrsbhi2"
+  [(set (match_operand:HI  0 "dest_reg_operand" "=w,w")
+	(clrsb:HI (match_operand:HI 1 "general_operand" "cL,Cal")))]
+  "TARGET_NORM"
+  "#"
+  "reload_completed"
+  [(set (match_dup 0) (zero_extend:SI (clrsb:HI (match_dup 1))))]
+  "operands[0] = simplify_gen_subreg (SImode, operands[0], HImode, 0);")
+
 (define_insn "normw"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:HI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_NORMW))]
+	(zero_extend:SI
+	  (clrsb:HI (match_operand:HI 1 "general_operand" "cL,Cal"))))]
   "TARGET_NORM"
   "*
    switch (which_alternative)
@@ -4339,7 +4350,7 @@
     temp = gen_reg_rtx (SImode);
   emit_insn (gen_addsi3 (temp, operands[1], constm1_rtx));
   emit_insn (gen_bic_f_zn (temp, temp, operands[1]));
-  emit_insn (gen_norm (temp, temp));
+  emit_insn (gen_clrsbsi2 (temp, temp));
   emit_insn
     (gen_rtx_COND_EXEC
       (VOIDmode,
@@ -4804,17 +4815,17 @@
 		      (simple_return) (pc)))]
   "reload_completed"
 {
-  rtx xop
+  rtx xop[2];
+  xop[0] = operands[0];
+  xop[1]
     = gen_rtx_REG (Pmode,
 		   arc_return_address_regs[arc_compute_function_type (cfun)]);
-  rtx cond = operands[0];
 
   if (TARGET_PAD_RETURN)
     arc_pad_return ();
-
-  current_insn_predicate = cond;
-  output_asm_insn (\"j%!%# [%0]%&\", &xop);
-  arc_ccfsm_record_condition (cond, false, insn, 0);
+  output_asm_insn (\"j%d0%!%# [%1]%&\", xop);
+  /* record the condition in case there is a delay insn.  */
+  arc_ccfsm_record_condition (xop[0], false, insn, 0);
   return \"\";
 }
   [(set_attr "type" "return")
@@ -5008,22 +5019,22 @@
 })
 
 ; operand 0 is the loop count pseudo register
-; operand 1 is the number of loop iterations or 0 if it is unknown
-; operand 2 is the maximum number of loop iterations
-; operand 3 is the number of levels of enclosed loops
-; operand 4 is the loop end pattern
+; operand 1 is the loop end pattern
 (define_expand "doloop_begin"
   [(use (match_operand 0 "register_operand" ""))
-   (use (match_operand:QI 1 "const_int_operand" ""))
-   (use (match_operand:QI 2 "const_int_operand" ""))
-   (use (match_operand:QI 3 "const_int_operand" ""))
-   (use (match_operand 4 "" ""))]
+   (use (match_operand 1 "" ""))]
   ""
 {
-  if (INTVAL (operands[3]) > 1)
-    FAIL;
-  emit_insn (gen_doloop_begin_i (operands[0], const0_rtx,
-				 GEN_INT (INSN_UID (operands[4])),
+  /* Using the INSN_UID of the loop end pattern to identify it causes
+     trouble with -fcompare-debug, so allocate a debug-independent
+     id instead.  We use negative numbers so that we can use the same
+     slot in doloop_end_i where we later store a CODE_LABEL_NUMBER, and
+     still be able to tell what kind of number this is.  */
+  static HOST_WIDE_INT loop_end_id = 0;
+
+  rtx id = GEN_INT (--loop_end_id);
+  XEXP (XVECEXP (PATTERN (operands[1]), 0, 4), 0) = id;
+  emit_insn (gen_doloop_begin_i (operands[0], const0_rtx, id,
 				 const0_rtx, const0_rtx));
   DONE;
 })
@@ -5200,36 +5211,22 @@
 )
 
 ; operand 0 is the loop count pseudo register
-; operand 1 is the number of loop iterations or 0 if it is unknown
-; operand 2 is the maximum number of loop iterations
-; operand 3 is the number of levels of enclosed loops
-; operand 4 is the label to jump to at the top of the loop
-; operand 5 is nonzero if the loop is entered at its top.
-; Use this for the ARC600 and ARC700.  For ARCtangent, this is unsafe
+; operand 1 is the label to jump to at the top of the loop
+; Use this for the ARC600 and ARC700.  For ARCtangent-A5, this is unsafe
 ; without further checking for nearby branches etc., and without proper
 ; annotation of shift patterns that clobber lp_count
 ; ??? ARC600 might want to check if the loop has few iteration and only a
 ; single insn - loop setup is expensive then.
 (define_expand "doloop_end"
   [(use (match_operand 0 "register_operand" ""))
-   (use (match_operand:QI 1 "const_int_operand" ""))
-   (use (match_operand:QI 2 "const_int_operand" ""))
-   (use (match_operand:QI 3 "const_int_operand" ""))
-   (use (label_ref (match_operand 4 "" "")))
-   (use (match_operand:QI 5 "const_int_operand" ""))]
+   (use (label_ref (match_operand 1 "" "")))]
   "TARGET_ARC600 || TARGET_ARC700 || TARGET_V2"
 {
-  if (INTVAL (operands[3]) > 1)
-    FAIL;
-  /* Setting up the loop with two sr isntructions costs 6 cycles.  */
-  if (TARGET_ARC700 && !INTVAL (operands[5])
-      && INTVAL (operands[1]) && INTVAL (operands[1]) <= (flag_pic ? 6 : 3))
-    FAIL;
   /* We could do smaller bivs with biv widening, and wider bivs by having
      a high-word counter in an outer loop - but punt on this for now.  */
   if (GET_MODE (operands[0]) != SImode)
     FAIL;
-  emit_jump_insn (gen_doloop_end_i (operands[0], operands[4], const0_rtx));
+  emit_jump_insn (gen_doloop_end_i (operands[0], operands[1], const0_rtx));
   DONE;
 })
 
@@ -5242,7 +5239,7 @@
    (set (match_dup 0) (plus:SI (match_dup 0) (const_int -1)))
    (use (reg:SI LP_START))
    (use (reg:SI LP_END))
-   (use (match_operand 2 "const_int_operand" "n,???C_0,???X"))
+   (use (match_operand 2 "const_int_operand" "n,???Cn0,???X"))
    (clobber (match_scratch:SI 3 "=X,X,&????r"))]
   ""
   "*
@@ -5330,6 +5327,8 @@
   ""
   "if (arc_expand_movmem (operands)) DONE; else FAIL;")
 
+;; Close http://gcc.gnu.org/bugzilla/show_bug.cgi?id=35803 if this works
+;; to the point that we can generate cmove instructions.
 ;;branch FPU/FPX fussion
 (define_expand "cbranch<mode>4"
   [(use (match_operator 0 "fpu_comparison_operator"

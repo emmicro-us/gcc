@@ -1,6 +1,5 @@
 /* Subroutines used for code generation on the Synopsys DesignWare ARC cpu.
-   Copyright (C) 1994, 1995, 1997, 2004, 2007-2012
-   Free Software Foundation, Inc.
+   Copyright (C) 1994-2014 Free Software Foundation, Inc.
 
    Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
    behalf of Synopsys Inc.
@@ -30,11 +29,14 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#include <stdio.h>
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
+#include "varasm.h"
+#include "stor-layout.h"
+#include "stringpool.h"
+#include "calls.h"
 #include "rtl.h"
 #include "regs.h"
 #include "hard-reg-set.h"
@@ -61,6 +63,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "reload.h" /* For operands_match_p */
 #include "df.h"
 #include "tree-pass.h"
+#include "context.h"
+#include "pass_manager.h"
 #include "sched-int.h"
 
 /* Which cpu we're compiling for (ARC600, ARC601, ARC700).  */
@@ -94,7 +98,7 @@ static const char *arc_cpu_string = "";
 
 #define LEGITIMATE_SMALL_DATA_ADDRESS_P(X)				\
   (GET_CODE (X) == PLUS							\
-   && (REG_P (XEXP(X,0)) && REGNO (XEXP (X,0)) == 26)			\
+   && (REG_P (XEXP(X,0)) && REGNO (XEXP (X,0)) == SDATA_BASE_REGNUM)	\
    && ((GET_CODE (XEXP(X,1)) == SYMBOL_REF				\
 	&& SYMBOL_REF_SMALL_P (XEXP (X,1)))  ||				\
        (GET_CODE (XEXP (X,1)) == CONST &&				\
@@ -395,6 +399,7 @@ static bool arc_return_in_memory (const_tree, const_tree);
 static void arc_init_simd_builtins (void);
 static bool arc_vector_mode_supported_p (enum machine_mode);
 
+static bool arc_can_use_doloop_p (double_int, double_int, unsigned int, bool);
 static const char *arc_invalid_within_doloop (const_rtx);
 
 static void output_short_suffix (FILE *file);
@@ -521,6 +526,9 @@ static void arc_finalize_pic (void);
 
 #undef TARGET_VECTOR_MODE_SUPPORTED_P
 #define TARGET_VECTOR_MODE_SUPPORTED_P arc_vector_mode_supported_p
+
+#undef TARGET_CAN_USE_DOLOOP_P
+#define TARGET_CAN_USE_DOLOOP_P arc_can_use_doloop_p
 
 #undef TARGET_INVALID_WITHIN_DOLOOP
 #define TARGET_INVALID_WITHIN_DOLOOP arc_invalid_within_doloop
@@ -694,27 +702,82 @@ arc_secondary_reload_conv (rtx reg, rtx mem, rtx scratch, bool store_p)
   return;
 }
 
-
 static unsigned arc_ifcvt (void);
-struct rtl_opt_pass pass_arc_ifcvt =
+
+namespace {
+
+const pass_data pass_data_arc_ifcvt =
 {
- {
   RTL_PASS,
   "arc_ifcvt",				/* name */
   OPTGROUP_NONE,			/* optinfo_flags */
-  NULL,					/* gate */
-  arc_ifcvt,				/* execute */
-  NULL,					/* sub */
-  NULL,					/* next */
-  0,					/* static_pass_number */
+  false,				/* has_gate */
+  true,					/* has_execute */
   TV_IFCVT2,				/* tv_id */
   0,					/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_df_finish			/* todo_flags_finish */
- }
 };
+
+class pass_arc_ifcvt : public rtl_opt_pass
+{
+public:
+  pass_arc_ifcvt(gcc::context *ctxt)
+  : rtl_opt_pass(pass_data_arc_ifcvt, ctxt)
+  {}
+
+  /* opt_pass methods: */
+  opt_pass * clone () { return new pass_arc_ifcvt (m_ctxt); }
+  unsigned int execute () { return arc_ifcvt (); }
+};
+
+} // anon namespace
+
+rtl_opt_pass *
+make_pass_arc_ifcvt (gcc::context *ctxt)
+{
+  return new pass_arc_ifcvt (ctxt);
+}
+
+static unsigned arc_predicate_delay_insns (void);
+
+namespace {
+
+const pass_data pass_data_arc_predicate_delay_insns =
+{
+  RTL_PASS,
+  "arc_predicate_delay_insns",		/* name */
+  OPTGROUP_NONE,			/* optinfo_flags */
+  false,				/* has_gate */
+  true,					/* has_execute */
+  TV_IFCVT2,				/* tv_id */
+  0,					/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_df_finish			/* todo_flags_finish */
+};
+
+class pass_arc_predicate_delay_insns : public rtl_opt_pass
+{
+public:
+  pass_arc_predicate_delay_insns(gcc::context *ctxt)
+  : rtl_opt_pass(pass_data_arc_predicate_delay_insns, ctxt)
+  {}
+
+  /* opt_pass methods: */
+  unsigned int execute () { return arc_predicate_delay_insns (); }
+};
+
+} // anon namespace
+
+rtl_opt_pass *
+make_pass_arc_predicate_delay_insns (gcc::context *ctxt)
+{
+  return new pass_arc_predicate_delay_insns (ctxt);
+}
 
 /* Called by OVERRIDE_OPTIONS to initialize various things.  */
 
@@ -854,22 +917,28 @@ arc_init (void)
   arc_punct_chars['^'] = 1;
   arc_punct_chars['&'] = 1;
 
-  /* There are two target-independent ifcvt passes, and arc_reorg may do
-     one ore more arc_ifcvt calls.  */
-  static struct register_pass_info arc_ifcvt4_info
-    = { &pass_arc_ifcvt.pass, "dbr",
-	1, PASS_POS_INSERT_AFTER
-      };
-
-  static struct register_pass_info arc_ifcvt5_info
-    = { &pass_arc_ifcvt.pass, "shorten",
-	1, PASS_POS_INSERT_BEFORE
-      };
-
   if (optimize > 1 && !TARGET_NO_COND_EXEC)
     {
+      /* There are two target-independent ifcvt passes, and arc_reorg may do
+	 one or more arc_ifcvt calls.  */
+      opt_pass *pass_arc_ifcvt_4 = make_pass_arc_ifcvt (g);
+      struct register_pass_info arc_ifcvt4_info
+	= { pass_arc_ifcvt_4, "dbr", 1, PASS_POS_INSERT_AFTER };
+      struct register_pass_info arc_ifcvt5_info
+	= { pass_arc_ifcvt_4->clone (), "shorten", 1, PASS_POS_INSERT_BEFORE };
+
       register_pass (&arc_ifcvt4_info);
       register_pass (&arc_ifcvt5_info);
+    }
+
+  if (flag_delayed_branch)
+    {
+      opt_pass *pass_arc_predicate_delay_insns
+	= make_pass_arc_predicate_delay_insns (g);
+      struct register_pass_info arc_predicate_delay_info
+	= { pass_arc_predicate_delay_insns, "dbr", 1, PASS_POS_INSERT_AFTER };
+
+      register_pass (&arc_predicate_delay_info);
     }
 }
 
@@ -1320,9 +1389,8 @@ arc_init_reg_tables (void)
   char rname57[5] = "r57";
   char rname58[5] = "r58";
   char rname59[5] = "r59";
-
-char rname29[7] = "ilink1";
-char rname30[7] = "ilink2";
+  char rname29[7] = "ilink1";
+  char rname30[7] = "ilink2";
 
 static void
 arc_conditional_register_usage (void)
@@ -1408,7 +1476,10 @@ arc_conditional_register_usage (void)
   if (TARGET_SIMD_SET)
     {
       int i;
-      for (i=64; i<88; i++)
+      for (i = ARC_FIRST_SIMD_VR_REG; i <= ARC_LAST_SIMD_VR_REG; i++)
+	reg_alloc_order [i] = i;
+      for (i = ARC_FIRST_SIMD_DMA_CONFIG_REG;
+	   i <= ARC_LAST_SIMD_DMA_CONFIG_REG; i++)
 	reg_alloc_order [i] = i;
     }
   /* For ARC600, lp_count may not be read in an instruction following
@@ -1803,7 +1874,6 @@ arc_setup_incoming_varargs (cumulative_args_t args_so_far,
 {
   int first_anon_arg;
   CUMULATIVE_ARGS next_cum;
-
 
   if (TARGET_HS)
     {
@@ -2231,7 +2301,6 @@ arc_compute_frame_size (int size)	/* size = # of var. bytes allocated.  */
     }
 
   /* 4) Space for back trace data structure.
-
 	  <return addr reg size> (if required) + <fp size> (if required)
   */
   frame_info->save_return_addr
@@ -4033,6 +4102,8 @@ arc_ccfsm_post_advance (rtx insn, struct arc_ccfsm *state)
 	   && GET_CODE (PATTERN (insn)) != ADDR_DIFF_VEC
 	   && ((type = get_attr_type (insn)) == TYPE_BRANCH
 	       || (type == TYPE_UNCOND_BRANCH
+		   /* ??? Maybe should also handle TYPE_RETURN here,
+		      but we don't have a testcase for that.  */
 		   && ARC_CCFSM_BRANCH_DELETED_P (state))))
     {
       if (ARC_CCFSM_BRANCH_DELETED_P (state))
@@ -4152,7 +4223,7 @@ arc_verify_short (rtx insn, int, int check_attr)
   if (machine->force_short_suffix >= 0)
     return machine->force_short_suffix;
 
-  return ((get_attr_length (insn) & 2) != 0);
+  return (get_attr_length (insn) & 2) != 0;
 }
 
 /* When outputting an instruction (alternative) that can potentially be short,
@@ -4287,6 +4358,7 @@ branch_dest (rtx branch)
    faster than indirecting via memory.  Don't do this when not optimizing,
    since we won't be calculating al of the offsets necessary to do this
    simplification.  */
+/* Implement TARGET_ENCODE_SECTION_INFO hook.  */
 
 static void
 arc_encode_section_info (tree decl, rtx rtl, int first)
@@ -5568,7 +5640,7 @@ arc_expand_builtin (tree exp,
       return NULL_RTX;
 
     case ARC_BUILTIN_NORM:
-      icode = CODE_FOR_norm;
+      icode = CODE_FOR_clrsbsi2;
       arg0 = CALL_EXPR_ARG (exp, 0);
       op0 = expand_expr (arg0, NULL_RTX, VOIDmode, EXPAND_NORMAL);
       mode0 =  insn_data[icode].operand[1].mode;
@@ -5577,7 +5649,7 @@ arc_expand_builtin (tree exp,
       if (! (*insn_data[icode].operand[1].predicate) (op0, mode0))
 	op0 = copy_to_mode_reg (mode0, op0);
 
-      emit_insn (gen_norm (target, op0));
+      emit_insn (gen_clrsbsi2 (target, op0));
       return target;
 
     case ARC_BUILTIN_NORMW:
@@ -5797,58 +5869,54 @@ arc_expand_builtin (tree exp,
 
     case ARC_BUILTIN_ALIGNED:
       /* __builtin_arc_aligned (void* val, int alignval) */
-#ifdef CALL_EXPR_ARG
       arg0 = CALL_EXPR_ARG (exp, 0);
       arg1 = CALL_EXPR_ARG (exp, 1);
-#else
-      arg0 = TREE_VALUE (arglist);
-      arg1 = TREE_VALUE (TREE_CHAIN (arglist));
-#endif
       fold (arg1);
       op0 = expand_expr (arg0, NULL_RTX, VOIDmode, EXPAND_NORMAL);
       op1 = expand_expr (arg1, NULL_RTX, VOIDmode, EXPAND_NORMAL);
       target = gen_reg_rtx (SImode);
 
-      /* Default to false.  */
-      emit_insn (gen_movsi (target, const0_rtx));
-
-      if (GET_CODE (op0) == CONST_INT)
+      if (!CONST_INT_P (op1))
 	{
-	  HOST_WIDE_INT align = INTVAL (op0);
-
-	  int alignTest = 0x00;
-	  switch (INTVAL (op1))
-	    {
-	      /* Test each based on N-byte alignment.  */
-	    case 32: alignTest = 0xFF ; break ;;
-	    case 16: alignTest = 0x7F ; break ;;
-	    case 8:  alignTest = 0x3F ; break ;;
-	    default:
-	      error ("invalid alignment value for __builtin_arc_aligned");
-	      return NULL_RTX;
-	      break
-		;;
-	    }
-
-	  if ((align & alignTest) == 0)
-	    {
-	      emit_insn (gen_movsi (target, const1_rtx));
-	    }
+	  /* If we can't fold the alignment to a constant integer
+	     whilst optimizing, this is probably a user error.  */
+	  if (optimize)
+	    warning (0, "__builtin_arc_aligned with non-constant alignment");
 	}
       else
 	{
-	  int align = get_pointer_alignment (arg0);
-	  if (align)
+	  HOST_WIDE_INT alignTest = INTVAL (op1);
+	  /* Check alignTest is positive, and a power of two.  */
+	  if (alignTest <= 0 || alignTest != (alignTest & -alignTest))
 	    {
-	      int numBits = INTVAL (op1) * BITS_PER_UNIT;
-	      if (align == numBits)
-		{
-		  emit_insn (gen_movsi (target, const1_rtx));
-		}
+	      error ("invalid alignment value for __builtin_arc_aligned");
+	      return NULL_RTX;
+	    }
+
+	  if (CONST_INT_P (op0))
+	    {
+	      HOST_WIDE_INT pnt = INTVAL (op0);
+
+	      if ((pnt & (alignTest - 1)) == 0)
+		return const1_rtx;
+	    }
+	  else
+	    {
+	      unsigned  align = get_pointer_alignment (arg0);
+	      unsigned  numBits = alignTest * BITS_PER_UNIT;
+
+	      if (align && align >= numBits)
+		return const1_rtx;
+	      /* Another attempt to ascertain alignment.  Check the type
+		 we are pointing to.  */
+	      if (POINTER_TYPE_P (TREE_TYPE (arg0))
+		  && TYPE_ALIGN (TREE_TYPE (TREE_TYPE (arg0))) >= numBits)
+		return const1_rtx;
 	    }
 	}
 
-      return target;
+      /* Default to false.  */
+      return const0_rtx;
 
     case ARC_BUILTIN_KFLAG:
       icode = CODE_FOR_kflag;
@@ -6213,6 +6281,23 @@ arc_pass_by_reference (cumulative_args_t ca_v ATTRIBUTE_UNUSED,
 	      || TREE_ADDRESSABLE (type)));
 }
 
+/* Implement TARGET_CAN_USE_DOLOOP_P.  */
+
+static bool
+arc_can_use_doloop_p (double_int iterations, double_int,
+		      unsigned int loop_depth, bool entered_at_top)
+{
+  if (loop_depth > 1)
+    return false;
+  /* Setting up the loop with two sr instructions costs 6 cycles.  */
+  if (TARGET_ARC700
+      && !entered_at_top
+      && iterations.high == 0
+      && iterations.low > 0
+      && iterations.low <= (flag_pic ? 6 : 3))
+    return false;
+  return true;
+}
 
 /* NULL if INSN insn is valid within a low-overhead loop.
    Otherwise return why doloop cannot be applied.  */
@@ -6306,6 +6391,8 @@ arc_reorg (void)
 	  rtx lp_simple = NULL_RTX;
 	  rtx next = NULL_RTX;
 	  rtx op0 = XEXP (XVECEXP (PATTERN (insn), 0, 1), 0);
+	  HOST_WIDE_INT loop_end_id
+	    = -INTVAL (XEXP (XVECEXP (PATTERN (insn), 0, 4), 0));
 	  int seen_label = 0;
 
 	  for (lp = prev;
@@ -6323,7 +6410,7 @@ arc_reorg (void)
 		      if (NONJUMP_INSN_P (prev)
 			  && recog_memoized (prev) == CODE_FOR_doloop_begin_i
 			  && (INTVAL (XEXP (XVECEXP (PATTERN (prev), 0, 5), 0))
-			      == INSN_UID (insn)))
+			      == loop_end_id))
 			{
 			  lp = prev;
 			  break;
@@ -6337,7 +6424,7 @@ arc_reorg (void)
 		      if (NONJUMP_INSN_P (next)
 			  && recog_memoized (next) == CODE_FOR_doloop_begin_i
 			  && (INTVAL (XEXP (XVECEXP (PATTERN (next), 0, 5), 0))
-			      == INSN_UID (insn)))
+			      == loop_end_id))
 			{
 			  lp = next;
 			  break;
@@ -6526,7 +6613,7 @@ arc_reorg (void)
       if (optimize > 1 && !TARGET_NO_COND_EXEC)
 	{
 	  arc_ifcvt ();
-	  unsigned int flags = pass_arc_ifcvt.pass.todo_flags_finish;
+	  unsigned int flags = pass_data_arc_ifcvt.todo_flags_finish;
 	  df_finish_pass ((flags & TODO_df_verify) != 0);
 	}
 
@@ -6884,6 +6971,7 @@ arc_rewrite_small_data_1 (rtx *loc, void *data)
     {
       rtx top;
 
+      gcc_assert (SDATA_BASE_REGNUM == PIC_OFFSET_TABLE_REGNUM);
       *loc = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, *loc);
       if (loc == data)
 	return -1;
@@ -7860,7 +7948,7 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
   int neg_intval = -intval;
   int short_0 = satisfies_constraint_Rcq (operands[0]);
   int short_p = (!cond_p && short_0 && satisfies_constraint_Rcq (operands[1]));
-  static int ret = 0;
+  int ret = 0;
 
 #define ADDSI_OUTPUT1(FORMAT) do {\
   if (output_p) \
@@ -7873,22 +7961,6 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
   ADDSI_OUTPUT1 (format);\
   return ret; \
 } while (0)
-
-  /* When it is asked if the current insn is compact or not, return
-     the previous computed return value. Hence, we avoid problems like
-     add3 r0,sp,8 to be matched in the second round as add_s
-     r0,sp,64*/
-#if 0
-  /* CZI: this "shortcut" is buggy as this procedure is not called
-     successively with constant arguments and output_p set to true
-     and then set to false. */
-  if (!cond_p && !output_p && (ret != 0))
-    {
-      int tmp = ret;
-      ret = 0;
-      return tmp;
-    }
-#endif
 
   /* First try to emit a 16 bit insn.  */
   ret = 2;
@@ -8815,6 +8887,50 @@ arc_get_ccfsm_cond (struct arc_ccfsm *statep, bool reverse)
 			 copy_rtx (XEXP (cond, 0)), copy_rtx (XEXP (cond, 1)));
 }
 
+/* Return version of PAT conditionalized with COND, which is part of INSN.
+   ANNULLED indicates if INSN is an annulled delay-slot insn.
+   Register further changes if necessary.  */
+static rtx
+conditionalize_nonjump (rtx pat, rtx cond, rtx insn, bool annulled)
+{
+  /* For commutative operators, we generally prefer to have
+     the first source match the destination.  */
+  if (GET_CODE (pat) == SET)
+    {
+      rtx src = SET_SRC (pat);
+
+      if (COMMUTATIVE_P (src))
+	{
+	  rtx src0 = XEXP (src, 0);
+	  rtx src1 = XEXP (src, 1);
+	  rtx dst = SET_DEST (pat);
+
+	  if (rtx_equal_p (src1, dst) && !rtx_equal_p (src0, dst)
+	      /* Leave add_n alone - the canonical form is to
+		 have the complex summand first.  */
+	      && REG_P (src0))
+	    pat = gen_rtx_SET (VOIDmode, dst,
+			       gen_rtx_fmt_ee (GET_CODE (src), GET_MODE (src),
+					       src1, src0));
+	}
+    }
+
+  /* dwarf2out.c:dwarf2out_frame_debug_expr doesn't know
+     what to do with COND_EXEC.  */
+  if (RTX_FRAME_RELATED_P (insn))
+    {
+      /* If this is the delay slot insn of an anulled branch,
+	 dwarf2out.c:scan_trace understands the anulling semantics
+	 without the COND_EXEC.  */
+      gcc_assert (annulled);
+      rtx note = alloc_reg_note (REG_FRAME_RELATED_EXPR, pat,
+				 REG_NOTES (insn));
+      validate_change (insn, &REG_NOTES (insn), note, 1);
+    }
+  pat = gen_rtx_COND_EXEC (VOIDmode, cond, pat);
+  return pat;
+}
+
 /* Use the ccfsm machinery to do if conversion.  */
 
 static unsigned
@@ -8899,6 +9015,7 @@ arc_ifcvt (void)
 	  /* Conditionalized insn.  */
 
 	  rtx prev, pprev, *patp, pat, cond;
+	  bool annulled; annulled = false;
 
 	  /* If this is a delay slot insn in a non-annulled branch,
 	     don't conditionalize it.  N.B., this should be fine for
@@ -8908,9 +9025,12 @@ arc_ifcvt (void)
 	  prev = PREV_INSN (insn);
 	  pprev = PREV_INSN (prev);
 	  if (pprev && NEXT_INSN (NEXT_INSN (pprev)) == NEXT_INSN (insn)
-	      && JUMP_P (prev) && get_attr_cond (prev) == COND_USE
-	      && !INSN_ANNULLED_BRANCH_P (prev))
-	    break;
+	      && JUMP_P (prev) && get_attr_cond (prev) == COND_USE)
+	    {
+	      if (!INSN_ANNULLED_BRANCH_P (prev))
+		break;
+	      annulled = true;
+	    }
 
 	  patp = &PATTERN (insn);
 	  pat = *patp;
@@ -8919,22 +9039,7 @@ arc_ifcvt (void)
 	    {
 	      /* ??? don't conditionalize if all side effects are dead
 		 in the not-execute case.  */
-	      /* dwarf2out.c:dwarf2out_frame_debug_expr doesn't know
-		 what to do with COND_EXEC.  */
-	      if (RTX_FRAME_RELATED_P (insn))
-		{
-		  /* If this is the delay slot insn of an anulled branch,
-		     dwarf2out.c:scan_trace understands the anulling semantics
-		     without the COND_EXEC.  */
-		  gcc_assert
-		   (pprev && NEXT_INSN (NEXT_INSN (pprev)) == NEXT_INSN (insn)
-		    && JUMP_P (prev) && get_attr_cond (prev) == COND_USE
-		    && INSN_ANNULLED_BRANCH_P (prev));
-		  rtx note = alloc_reg_note (REG_FRAME_RELATED_EXPR, pat,
-					     REG_NOTES (insn));
-		  validate_change (insn, &REG_NOTES (insn), note, 1);
-		}
-	      pat = gen_rtx_COND_EXEC (VOIDmode, cond, pat);
+	      pat = conditionalize_nonjump (pat, cond, insn, annulled);
 	    }
 	  else if (simplejump_p (insn))
 	    {
@@ -8964,6 +9069,63 @@ arc_ifcvt (void)
 	  gcc_unreachable ();
 	}
       arc_ccfsm_post_advance (insn, statep);
+    }
+  return 0;
+}
+
+/* Find annulled delay insns and convert them to use the appropriate predicate.
+   This allows branch shortening to size up these insns properly.  */
+
+static unsigned
+arc_predicate_delay_insns (void)
+{
+  for (rtx insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    {
+      rtx pat, jump, dlay, src, cond, *patp;
+      int reverse;
+
+      if (!NONJUMP_INSN_P (insn)
+	  || GET_CODE (pat = PATTERN (insn)) != SEQUENCE)
+	continue;
+      jump = XVECEXP (pat, 0, 0);
+      dlay = XVECEXP (pat, 0, 1);
+      if (!JUMP_P (jump) || !INSN_ANNULLED_BRANCH_P (jump))
+	continue;
+      /* If the branch insn does the annulling, leave the delay insn alone.  */
+      if (!TARGET_AT_DBR_CONDEXEC && !INSN_FROM_TARGET_P (dlay))
+	continue;
+      /* ??? Could also leave DLAY un-conditionalized if its target is dead
+	 on the other path.  */
+      gcc_assert (GET_CODE (PATTERN (jump)) == SET);
+      gcc_assert (SET_DEST (PATTERN (jump)) == pc_rtx);
+      src = SET_SRC (PATTERN (jump));
+      gcc_assert (GET_CODE (src) == IF_THEN_ELSE);
+      cond = XEXP (src, 0);
+      if (XEXP (src, 2) == pc_rtx)
+	reverse = 0;
+      else if (XEXP (src, 1) == pc_rtx)
+	reverse = 1;
+      else
+	gcc_unreachable ();
+      if (!INSN_FROM_TARGET_P (dlay) != reverse)
+	{
+	  enum machine_mode ccm = GET_MODE (XEXP (cond, 0));
+	  enum rtx_code code = reverse_condition (GET_CODE (cond));
+	  if (code == UNKNOWN || ccm == CC_FP_GTmode || ccm == CC_FP_GEmode)
+	    code = reverse_condition_maybe_unordered (GET_CODE (cond));
+
+	  cond = gen_rtx_fmt_ee (code, GET_MODE (cond),
+				 copy_rtx (XEXP (cond, 0)),
+				 copy_rtx (XEXP (cond, 1)));
+	}
+      else
+	cond = copy_rtx (cond);
+      patp = &PATTERN (dlay);
+      pat = *patp;
+      pat = conditionalize_nonjump (pat, cond, dlay, true);
+      validate_change (dlay, patp, pat, 1);
+      if (!apply_change_group ())
+	gcc_unreachable ();
     }
   return 0;
 }
@@ -9246,10 +9408,12 @@ arc_pad_return (void)
 	  gcc_assert (!prev_real_insn (insn)
 		      || !arc_hazard (prev_real_insn (insn), prev));
 	  cfun->machine->force_short_suffix = !want_long;
+	  rtx save_pred = current_insn_predicate;
 	  final_scan_insn (prev, asm_out_file, optimize, 1, NULL);
 	  cfun->machine->force_short_suffix = -1;
 	  INSN_DELETED_P (prev) = 1;
 	  current_output_insn = insn;
+	  current_insn_predicate = save_pred;
 	}
       else if (want_long)
 	fputs ("\tnop\n", asm_out_file);
@@ -9731,7 +9895,7 @@ arc_text_label (rtx label)
 
   next = next_nonnote_insn (label);
   if (next)
-    return (GET_CODE (next) != JUMP_INSN
+    return (!JUMP_TABLE_DATA_P (next)
 	    || GET_CODE (PATTERN (next)) != ADDR_VEC);
   else if (!PREV_INSN (label))
     /* ??? sometimes text labels get inserted very late, see

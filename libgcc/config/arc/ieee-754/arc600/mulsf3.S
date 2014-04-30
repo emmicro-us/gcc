@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2013 Free Software Foundation, Inc.  
+/* Copyright (C) 2008-2014 Free Software Foundation, Inc.
    Contributor: Joern Rennecke <joern.rennecke@embecosm.com>
 		on behalf of Synopsys Inc.
 
@@ -74,7 +74,7 @@ __mulsf3:
 	lsr.f r7,r2
 ; We could so this a bit faster here with a 32 bit shift register and
 ; inserting the r2 factor / retrieving the low result a byte at a time,
-; but that's increase code size.
+; but that'd increase code size.
 	mov lp_count,24
 	.balign 4
 	lp 0f

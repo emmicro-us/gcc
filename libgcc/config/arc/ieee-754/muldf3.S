@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2012 Free Software Foundation, Inc.  
+/* Copyright (C) 2008-2014 Free Software Foundation, Inc.
    Contributor: Joern Rennecke <joern.rennecke@embecosm.com>
 		on behalf of Synopsys Inc.
 
@@ -184,7 +184,7 @@ __muldf3:
 	j_s.d [blink]
 	bset.mi DBL0H,DBL0H,31
 
-/* We have checked for infinitey / NaN input before, and transformed
+/* We have checked for infinity / NaN input before, and transformed
    denormalized inputs into normalized inputs.  Thus, the worst case
    exponent overflows are:
        1 +     1 - 0x400 == 0xc02 : maximum underflow

@@ -2,7 +2,7 @@
  * Copyright (c) 1983, 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
- * Copyright (C) 2007-2012 Free Software Foundation, Inc.
+ * Copyright (C) 2007-2014 Free Software Foundation, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -81,7 +81,7 @@ _MCOUNT_DECL(count_ptr, selfpc)	/* _mcount; may be static, inline, etc */
 						   GMON_PROF_ON))
 	  return;
 #elif defined (__ARC700__)
-/* ??? This could temporrarily loose the ERROR / OFF condition in a race,
+/* ??? This could temporarily lose the ERROR / OFF condition in a race,
    but doing an actual compare_and_exchange would be too costly.  It would
    be better if we had a semaphore independent of the 'sticky' state, but
    then we could run into ABI compatibility problems with the size of struct

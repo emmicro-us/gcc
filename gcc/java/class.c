@@ -1,5 +1,5 @@
 /* Functions related to building classes and their related objects.
-   Copyright (C) 1996-2013 Free Software Foundation, Inc.
+   Copyright (C) 1996-2014 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,6 +27,9 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
+#include "stringpool.h"
+#include "stor-layout.h"
+#include "varasm.h"
 #include "flags.h"
 #include "java-tree.h"
 #include "jcf.h"
@@ -917,7 +920,7 @@ hashUtf8String (const char *str, int len)
 {
   const unsigned char* ptr = (const unsigned char*) str;
   const unsigned char *limit = ptr + len;
-  int32 hash = 0;
+  uint32 hash = 0;
   for (; ptr < limit;)
     {
       int ch = UTF8_GET (ptr, limit);
@@ -1576,14 +1579,14 @@ get_dispatch_vector (tree type)
       HOST_WIDE_INT i;
       tree method;
       tree super = CLASSTYPE_SUPER (type);
-      HOST_WIDE_INT nvirtuals = tree_low_cst (TYPE_NVIRTUALS (type), 0);
+      HOST_WIDE_INT nvirtuals = tree_to_shwi (TYPE_NVIRTUALS (type));
       vtable = make_tree_vec (nvirtuals);
       TYPE_VTABLE (type) = vtable;
       if (super != NULL_TREE)
 	{
 	  tree super_vtable = get_dispatch_vector (super);
 
-	  for (i = tree_low_cst (TYPE_NVIRTUALS (super), 0); --i >= 0; )
+	  for (i = tree_to_shwi (TYPE_NVIRTUALS (super)); --i >= 0; )
 	    TREE_VEC_ELT (vtable, i) = TREE_VEC_ELT (super_vtable, i);
 	}
 
@@ -1592,8 +1595,8 @@ get_dispatch_vector (tree type)
 	{
 	  tree method_index = get_method_index (method);
 	  if (method_index != NULL_TREE
-	      && host_integerp (method_index, 0))
-	    TREE_VEC_ELT (vtable, tree_low_cst (method_index, 0)) = method;
+	      && tree_fits_shwi_p (method_index))
+	    TREE_VEC_ELT (vtable, tree_to_shwi (method_index)) = method;
 	}
     }
 
@@ -2412,7 +2415,7 @@ maybe_layout_super_class (tree super_class, tree this_class ATTRIBUTE_UNUSED)
 }
 
 /* safe_layout_class just makes sure that we can load a class without
-   disrupting the current_class, input_file, input_line, etc, information
+   disrupting the current_class, input_location, etc, information
    about the class processed currently.  */
 
 void
@@ -2814,10 +2817,10 @@ emit_register_classes_in_jcr_section (void)
   TREE_CONSTANT (cdecl) = 1;
   DECL_ARTIFICIAL (cdecl) = 1;
   DECL_IGNORED_P (cdecl) = 1;
+  DECL_PRESERVE_P (cdecl) = 1;
   pushdecl_top_level (cdecl);
   relayout_decl (cdecl);
   rest_of_decl_compilation (cdecl, 1, 0);
-  mark_decl_referenced (cdecl);
 #else
   /* A target has defined TARGET_USE_JCR_SECTION,
      but doesn't have a JCR_SECTION_NAME.  */
@@ -2958,9 +2961,14 @@ emit_symbol_table (tree name, tree the_table,
                                           null_pointer_node);
   CONSTRUCTOR_APPEND_ELT (v, NULL_TREE, null_symbol);
 
-  table = build_constructor (symbols_array_type, v);
+  tree symbols_arr_type
+    = build_prim_array_type (symbol_type, vec_safe_length (v));
+
+  table = build_constructor (symbols_arr_type, v);
 
   /* Make it the initial value for otable_syms and emit the decl. */
+  TREE_TYPE (the_syms_decl) = symbols_arr_type;
+  relayout_decl (the_syms_decl);
   DECL_INITIAL (the_syms_decl) = table;
   DECL_ARTIFICIAL (the_syms_decl) = 1;
   DECL_IGNORED_P (the_syms_decl) = 1;
@@ -3109,12 +3117,15 @@ emit_assertion_table (tree klass)
                                             null_pointer_node);
   
   CONSTRUCTOR_APPEND_ELT (v, NULL_TREE, null_entry);
+
+  tree type
+    = build_prim_array_type (assertion_entry_type, vec_safe_length (v));
   
-  ctor = build_constructor (assertion_table_type, v);
+  ctor = build_constructor (type, v);
 
   table_decl = build_decl (input_location,
 			   VAR_DECL, mangled_classname ("_type_assert_", klass),
-			   assertion_table_type);
+			   type);
 
   TREE_STATIC (table_decl) = 1;
   TREE_READONLY (table_decl) = 1;

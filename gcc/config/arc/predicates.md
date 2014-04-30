@@ -1,5 +1,5 @@
 ;; Predicate definitions for Synopsys DesignWare ARC.
-;; Copyright (C) 2007-2012 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2014 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -209,8 +209,8 @@
     {
     case REG:
       return (REGNO (addr) >= FIRST_PSEUDO_REGISTER
-                || COMPACT_GP_REG_P (REGNO (addr))
-	      || (SP_REG_P (REGNO (addr)) && (size != 2)));
+		    || COMPACT_GP_REG_P (REGNO (addr))
+		    || (SP_REG_P (REGNO (addr)) && (size != 2)));
 	/* stw_s does not support SP as a parameter.  */
     case PLUS:
       plus0 = XEXP (addr, 0);
@@ -463,8 +463,10 @@
     /* From combiner.  */
     case QImode: case HImode: case DImode: case SFmode: case DFmode:
       return 0;
+
     case VOIDmode: /* Two constants comparison. */
       return 0;
+
     default:
       gcc_unreachable ();
   }
@@ -704,10 +706,14 @@
   (and (match_code "reg")
        (match_test "REGNO (op) == (TARGET_BIG_ENDIAN ? 58 : 59)")))
 
+; Unfortunately, we can not allow a const_int_operand before reload, because
+; reload needs a non-void mode to guide it how to reload the inside of a
+; {sign_}extend.
 (define_predicate "extend_operand"
-  (ior (match_test "register_operand (op, mode)")
-       (and (match_test "immediate_operand (op, mode)")
-	    (not (match_test "const_int_operand (op, mode)")))))
+  (ior (match_operand 0 "register_operand")
+       (and (match_operand 0 "immediate_operand")
+	    (ior (not (match_operand 0 "const_int_operand"))
+		 (match_test "reload_in_progress || reload_completed")))))
 
 (define_predicate "millicode_store_operation"
   (match_code "parallel")

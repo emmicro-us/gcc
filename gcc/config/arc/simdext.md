@@ -1,5 +1,5 @@
 ;; Machine description of the Synopsys DesignWare ARC cpu for GNU C compiler
-;; Copyright (C) 2007-2012 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2014 Free Software Foundation, Inc.
 
 ;; This file is part of GCC.
 
@@ -1195,24 +1195,6 @@
    (set_attr "length" "4")
    (set_attr "cond" "nocond")])
 
-;; Va, [Ib,u8] instructions
-;; (define_insn "vld32wh_insn"
-;;   [(set (match_operand:V8HI 0 "vector_register_operand"           "=v")
-;; 	(vec_concat:V8HI (unspec:V4HI [(match_operand:SI 1 "immediate_operand" "P")
-;; 				      (vec_select:HI (match_operand:V8HI 2 "vector_register_operand"  "v")
-;; 						      (parallel [(match_operand:SI 3 "immediate_operand" "L")]))] UNSPEC_ARC_SIMD_VLD32WH)
-;; 			 (vec_select:V4HI (match_dup 0)
-;; 					  (parallel[(const_int 0)]))))]
-;; (define_insn "vld32wl_insn"
-;;   [(set (match_operand:V8HI 0 "vector_register_operand"           "=v")
-;; 	(unspec:V8HI [(match_operand:SI 1 "immediate_operand" "L")
-;; 		     (match_operand:SI 2 "immediate_operand" "P")
-;; 		     (match_operand:V8HI 3 "vector_register_operand"  "v")
-;; 		     (match_dup 0)] UNSPEC_ARC_SIMD_VLD32WL))]
-;;   "TARGET_SIMD_SET"
-;;   "vld32wl %0, [I%1,%2]"
-;;   [(set_attr "length" "4")
-;;   (set_attr "cond" "nocond")])
 (define_insn "vld32wh_insn"
   [(set (match_operand:V8HI 0 "vector_register_operand"           "=v")
 	(vec_concat:V8HI (zero_extend:V4HI (mem:V4QI (plus:SI (match_operand:SI 1 "immediate_operand" "P")

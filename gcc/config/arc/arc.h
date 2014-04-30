@@ -1,6 +1,5 @@
 /* Definitions of target machine for GNU compiler, Synopsys DesignWare ARC cpu.
-   Copyright (C) 1994, 1995, 1997, 1998, 2007-2013
-   Free Software Foundation, Inc.
+   Copyright (C) 1994-2014 Free Software Foundation, Inc.
 
    Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
    behalf of Synopsys Inc.
@@ -206,7 +205,8 @@ along with GCC; see the file COPYING3.  If not see
     %(linker) %l " LINK_PIE_SPEC "%X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} %{r}\
     %{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S}}}\
     %{static:} %{L*} %(mfwrap) %(link_libgcc) %o\
-    %{fopenmp:%:include(libgomp.spec)%(link_gomp)} %(mflib)\
+    %{fopenmp|ftree-parallelize-loops=*:%:include(libgomp.spec)%(link_gomp)}\
+    %(mflib)\
     %{fprofile-arcs|fprofile-generate|coverage:-lgcov}\
     %{!nostdlib:%{!nodefaultlibs:%(link_ssp) %(link_gcc_c_sequence)}}\
     %{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} }}}}}}"
@@ -267,7 +267,8 @@ along with GCC; see the file COPYING3.  If not see
   "%{mspfp_*: -mspfp-%* %<mspfp_*}" \
   "%{mdpfp_*: -mdpfp-%* %<mdpfp_*}" \
   "%{mdsp_pack*: -mdsp-pack%* %<mdsp_pack*}" \
-  "%{mmac_*: -mmac-%* %<mmac_*}"
+  "%{mmac_*: -mmac-%* %<mmac_*}" \
+  "%{multcost=*: -mmultcost=%* %<multcost=*}"
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
@@ -590,14 +591,15 @@ if (GET_MODE_CLASS (MODE) == MODE_INT		\
    to hold something of mode MODE.
    This is ordinarily the length in words of a value of mode MODE
    but can be less for certain modes in special long registers.  */
-#define HARD_REGNO_NREGS(REGNO, MODE) \
-((GET_MODE_SIZE (MODE) == 16 && REGNO >= 64 && REGNO < 88) ? 1 \
- : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+#define HARD_REGNO_NREGS(REGNO, MODE)					\
+  ((GET_MODE_SIZE (MODE) == 16						\
+    && REGNO >= ARC_FIRST_SIMD_VR_REG && REGNO <= ARC_LAST_SIMD_VR_REG) ? 1 \
+   : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.  */
 extern unsigned int arc_hard_regno_mode_ok[];
 extern unsigned int arc_mode_class[];
-#define HARD_REGNO_MODE_OK(REGNO, MODE) \
+#define HARD_REGNO_MODE_OK(REGNO, MODE)				\
 ((arc_hard_regno_mode_ok[REGNO] & arc_mode_class[MODE]) != 0)
 
 /* A C expression that is nonzero if it is desirable to choose
@@ -609,7 +611,7 @@ extern unsigned int arc_mode_class[];
    MODE2)' must be zero.  */
 
 /* Tie QI/HI/SI modes together.  */
-#define MODES_TIEABLE_P(MODE1, MODE2) \
+#define MODES_TIEABLE_P(MODE1, MODE2)		\
 (GET_MODE_CLASS (MODE1) == MODE_INT		\
  && GET_MODE_CLASS (MODE2) == MODE_INT		\
  && GET_MODE_SIZE (MODE1) <= UNITS_PER_WORD	\
@@ -619,7 +621,7 @@ extern unsigned int arc_mode_class[];
    general purpose register for compact insns (r0-r3,r12-r15), or
    stack pointer (r28).  */
 
-#define COMPACT_GP_REG_P(REGNO) \
+#define COMPACT_GP_REG_P(REGNO)			\
   (((signed)(REGNO) >= 0 && (REGNO) <= 3) || ((REGNO) >= 12 && (REGNO) <= 15))
 #define SP_REG_P(REGNO)  ((REGNO) == 28)
 #define CODE_DENSITY_REG_P(REGNO) ((signed)(REGNO) >= 0 && (REGNO) <= 3)
@@ -1036,11 +1038,11 @@ extern int arc_initial_elimination_offset(int from, int to);
    a special predicate for the memory operand of stores, like for the SH.  */
 
 /* Recognize any constant value that is a valid address.  */
-#define CONSTANT_ADDRESS_P(X) \
-(flag_pic?arc_legitimate_pic_addr_p (X): \
- (GET_CODE (X) == LABEL_REF || GET_CODE (X) == SYMBOL_REF	\
-  || GET_CODE (X) == CONST_INT \
-  || ((GET_CODE (X) == CONST) && !optimize_size)))
+#define CONSTANT_ADDRESS_P(X)					\
+  (flag_pic?arc_legitimate_pic_addr_p (X):			\
+   (GET_CODE (X) == LABEL_REF || GET_CODE (X) == SYMBOL_REF	\
+    || GET_CODE (X) == CONST_INT				\
+    || ((GET_CODE (X) == CONST) && !optimize_size)))
 
 /* Is the argument a const_int rtx, containing an exact power of 2 */
 #define  IS_POWEROF2_P(X) (! ( (X) & ((X) - 1)) && (X))
@@ -1059,18 +1061,18 @@ extern int arc_initial_elimination_offset(int from, int to);
 
 /* Nonzero if X is a hard reg that can be used as an index
    or if it is a pseudo reg.  */
-#define REG_OK_FOR_INDEX_P_NONSTRICT(X) \
-((unsigned) REGNO (X) >= FIRST_PSEUDO_REGISTER || \
- (unsigned) REGNO (X) < 29 || \
- (unsigned) REGNO (X) == 63 || \
- (unsigned) REGNO (X) == ARG_POINTER_REGNUM)
+#define REG_OK_FOR_INDEX_P_NONSTRICT(X)			\
+  ((unsigned) REGNO (X) >= FIRST_PSEUDO_REGISTER ||	\
+   (unsigned) REGNO (X) < 29 ||				\
+   (unsigned) REGNO (X) == 63 ||			\
+   (unsigned) REGNO (X) == ARG_POINTER_REGNUM)
 /* Nonzero if X is a hard reg that can be used as a base reg
    or if it is a pseudo reg.  */
-#define REG_OK_FOR_BASE_P_NONSTRICT(X) \
-((unsigned) REGNO (X) >= FIRST_PSEUDO_REGISTER || \
- (unsigned) REGNO (X) < 29 || \
- (unsigned) REGNO (X) == 63 || \
- (unsigned) REGNO (X) == ARG_POINTER_REGNUM)
+#define REG_OK_FOR_BASE_P_NONSTRICT(X)			\
+  ((unsigned) REGNO (X) >= FIRST_PSEUDO_REGISTER ||	\
+   (unsigned) REGNO (X) < 29 ||				\
+   (unsigned) REGNO (X) == 63 ||			\
+   (unsigned) REGNO (X) == ARG_POINTER_REGNUM)
 
 /* Nonzero if X is a hard reg that can be used as an index.  */
 #define REG_OK_FOR_INDEX_P_STRICT(X) REGNO_OK_FOR_INDEX_P (REGNO (X))
@@ -1086,12 +1088,12 @@ extern int arc_initial_elimination_offset(int from, int to);
    The only thing we can do is only allow the most strict case `st' and hope
    other parts optimize out the restrictions for `ld'.  */
 
-#define RTX_OK_FOR_BASE_P(X, STRICT) \
-(REG_P (X) \
- && ((STRICT) ? REG_OK_FOR_BASE_P_STRICT (X) : REG_OK_FOR_BASE_P_NONSTRICT (X)))
+#define RTX_OK_FOR_BASE_P(X, STRICT)					\
+  (REG_P (X)								\
+   && ((STRICT) ? REG_OK_FOR_BASE_P_STRICT (X) : REG_OK_FOR_BASE_P_NONSTRICT (X)))
 
-#define RTX_OK_FOR_INDEX_P(X, STRICT) \
-(REG_P (X) \
+#define RTX_OK_FOR_INDEX_P(X, STRICT)					\
+  (REG_P (X)								\
  && ((STRICT) ? REG_OK_FOR_INDEX_P_STRICT (X) : REG_OK_FOR_INDEX_P_NONSTRICT (X)))
 
 /* A C compound statement that attempts to replace X, which is an address
@@ -1140,6 +1142,22 @@ arc_select_cc_mode (OP, X, Y)
 /* ??? What's the right value here?  Branches are certainly more
    expensive than reg->reg moves.  */
 #define BRANCH_COST(speed_p, predictable_p) 2
+
+/* Scc sets the destination to 1 and then conditionally zeroes it.
+   Best case, ORed SCCs can be made into clear - condset - condset.
+   But it could also end up as five insns.  So say it costs four on
+   average.
+   These extra instructions - and the second comparison - will also be
+   an extra cost if the first comparison would have been decisive.
+   So get an average saving, with a probability of the first branch
+   beging decisive of p0, we want:
+   p0 * (branch_cost - 4) > (1 - p0) * 5
+   ??? We don't get to see that probability to evaluate, so we can
+   only wildly guess that it might be 50%.
+   ??? The compiler also lacks the notion of branch predictability.  */
+#define LOGICAL_OP_NON_SHORT_CIRCUIT \
+  (BRANCH_COST (optimize_function_for_speed_p (cfun), \
+		false) > 9)
 
 /* Nonzero if access to memory by bytes is slow and undesirable.
    For RISC chips, it means that access to memory by bytes is no
@@ -1207,6 +1225,9 @@ arc_select_cc_mode (OP, X, Y)
    position independent code.  */
 #define LEGITIMATE_PIC_OPERAND_P(X)  (arc_legitimate_pic_operand_p(X))
 
+/* PIC and small data don't mix on ARC because they use the same register.  */
+#define SDATA_BASE_REGNUM 26
+
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) \
   (flag_pic \
    ? (GLOBAL ? DW_EH_PE_indirect : 0) | DW_EH_PE_pcrel | DW_EH_PE_sdata4 \
@@ -1232,60 +1253,60 @@ arc_select_cc_mode (OP, X, Y)
 #define GLOBAL_ASM_OP "\t.global\t"
 
 /* This is how to output an assembler line defining a `char' constant.  */
-#define ASM_OUTPUT_CHAR(FILE, VALUE) \
-( fprintf (FILE, "\t.byte\t"),			\
-  output_addr_const (FILE, (VALUE)),		\
-  fprintf (FILE, "\n"))
+#define ASM_OUTPUT_CHAR(FILE, VALUE)		\
+  ( fprintf (FILE, "\t.byte\t"),		\
+    output_addr_const (FILE, (VALUE)),		\
+    fprintf (FILE, "\n"))
 
 /* This is how to output an assembler line defining a `short' constant.  */
-#define ASM_OUTPUT_SHORT(FILE, VALUE) \
-( fprintf (FILE, "\t.hword\t"),			\
-  output_addr_const (FILE, (VALUE)),		\
-  fprintf (FILE, "\n"))
+#define ASM_OUTPUT_SHORT(FILE, VALUE)		\
+  ( fprintf (FILE, "\t.hword\t"),		\
+    output_addr_const (FILE, (VALUE)),		\
+    fprintf (FILE, "\n"))
 
 /* This is how to output an assembler line defining an `int' constant.
    We also handle symbol output here.  Code addresses must be right shifted
    by 2 because that's how the jump instruction wants them.  */
-#define ASM_OUTPUT_INT(FILE, VALUE) \
-do {									\
-  fprintf (FILE, "\t.word\t");						\
-  if (GET_CODE (VALUE) == LABEL_REF)					\
-    {									\
-      fprintf (FILE, "%%st(@");						\
+#define ASM_OUTPUT_INT(FILE, VALUE)					\
+  do {									\
+    fprintf (FILE, "\t.word\t");					\
+    if (GET_CODE (VALUE) == LABEL_REF)					\
+      {									\
+	fprintf (FILE, "%%st(@");					\
+	output_addr_const (FILE, (VALUE));				\
+	fprintf (FILE, ")");						\
+      }									\
+    else								\
       output_addr_const (FILE, (VALUE));				\
-      fprintf (FILE, ")");						\
-    }									\
-  else									\
-    output_addr_const (FILE, (VALUE));					\
-  fprintf (FILE, "\n");					                \
-} while (0)
+    fprintf (FILE, "\n");						\
+  } while (0)
 
 /* This is how to output an assembler line defining a `float' constant.  */
-#define ASM_OUTPUT_FLOAT(FILE, VALUE) \
-{							\
-  long t;						\
-  char str[30];						\
-  REAL_VALUE_TO_TARGET_SINGLE ((VALUE), t);		\
-  REAL_VALUE_TO_DECIMAL ((VALUE), "%.20e", str);	\
-  fprintf (FILE, "\t.word\t0x%lx %s %s\n",		\
-	   t, ASM_COMMENT_START, str);			\
-}
+#define ASM_OUTPUT_FLOAT(FILE, VALUE)			\
+  {							\
+    long t;						\
+    char str[30];					\
+    REAL_VALUE_TO_TARGET_SINGLE ((VALUE), t);		\
+    REAL_VALUE_TO_DECIMAL ((VALUE), "%.20e", str);	\
+    fprintf (FILE, "\t.word\t0x%lx %s %s\n",		\
+	     t, ASM_COMMENT_START, str);		\
+  }
 
 /* This is how to output an assembler line defining a `double' constant.  */
-#define ASM_OUTPUT_DOUBLE(FILE, VALUE) \
-{							\
-  long t[2];						\
-  char str[30];						\
-  REAL_VALUE_TO_TARGET_DOUBLE ((VALUE), t);		\
-  REAL_VALUE_TO_DECIMAL ((VALUE), "%.20e", str);	\
-  fprintf (FILE, "\t.word\t0x%lx %s %s\n\t.word\t0x%lx\n", \
-	   t[0], ASM_COMMENT_START, str, t[1]);		\
-}
+#define ASM_OUTPUT_DOUBLE(FILE, VALUE)				\
+  {								\
+    long t[2];							\
+    char str[30];						\
+    REAL_VALUE_TO_TARGET_DOUBLE ((VALUE), t);			\
+    REAL_VALUE_TO_DECIMAL ((VALUE), "%.20e", str);		\
+    fprintf (FILE, "\t.word\t0x%lx %s %s\n\t.word\t0x%lx\n",	\
+	     t[0], ASM_COMMENT_START, str, t[1]);		\
+  }
 
 /* This is how to output the definition of a user-level label named NAME,
    such as the label on a static function or variable NAME.  */
-#define ASM_OUTPUT_LABEL(FILE, NAME) \
-do { assemble_name (FILE, NAME); fputs (":\n", FILE); } while (0)
+#define ASM_OUTPUT_LABEL(FILE, NAME)					\
+  do { assemble_name (FILE, NAME); fputs (":\n", FILE); } while (0)
 
 #define ASM_NAME_P(NAME) ( NAME[0]=='*')
 
@@ -1294,24 +1315,24 @@ do { assemble_name (FILE, NAME); fputs (":\n", FILE); } while (0)
 /* We work around a dwarfout.c deficiency by watching for labels from it and
    not adding the '_' prefix.  There is a comment in
    dwarfout.c that says it should be using ASM_OUTPUT_INTERNAL_LABEL.  */
-#define ASM_OUTPUT_LABELREF(FILE, NAME1) \
-do {							\
-  const char *NAME;					\
-  NAME = (*targetm.strip_name_encoding)(NAME1);		\
-  if ((NAME)[0] == '.' && (NAME)[1] == 'L')		\
-    fprintf (FILE, "%s", NAME);				\
-  else							\
-    {							\
-      if (!ASM_NAME_P (NAME1))				\
-	fprintf (FILE, "%s", user_label_prefix);	\
+#define ASM_OUTPUT_LABELREF(FILE, NAME1)		\
+  do {							\
+    const char *NAME;					\
+    NAME = (*targetm.strip_name_encoding)(NAME1);	\
+    if ((NAME)[0] == '.' && (NAME)[1] == 'L')		\
       fprintf (FILE, "%s", NAME);			\
-    }							\
-} while (0)
+    else						\
+      {							\
+	if (!ASM_NAME_P (NAME1))			\
+	  fprintf (FILE, "%s", user_label_prefix);	\
+	fprintf (FILE, "%s", NAME);			\
+      }							\
+  } while (0)
 
 /* This is how to output a reference to a symbol_ref / label_ref as
    (part of) an operand.  To disambiguate from register names like
    a1 / a2 / status etc, symbols are preceded by '@'.  */
-#define ASM_OUTPUT_SYMBOL_REF(FILE,SYM) \
+#define ASM_OUTPUT_SYMBOL_REF(FILE,SYM)			\
   ASM_OUTPUT_LABEL_REF ((FILE), XSTR ((SYM), 0))
 #define ASM_OUTPUT_LABEL_REF(FILE,STR)			\
   do							\
@@ -1324,9 +1345,9 @@ do {							\
 /* Store in OUTPUT a string (made with alloca) containing
    an assembler-name for a local static variable named NAME.
    LABELNO is an integer which is different for each call.  */
-#define ASM_FORMAT_PRIVATE_NAME(OUTPUT, NAME, LABELNO) \
-( (OUTPUT) = (char *) alloca (strlen ((NAME)) + 10),	\
-  sprintf ((OUTPUT), "%s.%d", (NAME), (LABELNO)))
+#define ASM_FORMAT_PRIVATE_NAME(OUTPUT, NAME, LABELNO)	\
+  ( (OUTPUT) = (char *) alloca (strlen ((NAME)) + 10),	\
+    sprintf ((OUTPUT), "%s.%d", (NAME), (LABELNO)))
 
 /* The following macro defines the format used to output the second
    operand of the .type assembler directive.  Different svr4 assemblers
@@ -1406,41 +1427,41 @@ arc_print_operand (FILE, X, CODE)
 arc_print_operand_address (FILE, ADDR)
 
 /* This is how to output an element of a case-vector that is absolute.  */
-#define ASM_OUTPUT_ADDR_VEC_ELT(FILE, VALUE)  \
-do {							\
-  char label[30];					\
-  ASM_GENERATE_INTERNAL_LABEL (label, "L", VALUE);	\
-  fprintf (FILE, "\t.word ");				\
-  assemble_name (FILE, label);				\
-  fprintf(FILE, "\n");					\
-} while (0)
+#define ASM_OUTPUT_ADDR_VEC_ELT(FILE, VALUE)		\
+  do {							\
+    char label[30];					\
+    ASM_GENERATE_INTERNAL_LABEL (label, "L", VALUE);	\
+    fprintf (FILE, "\t.word ");				\
+    assemble_name (FILE, label);			\
+    fprintf(FILE, "\n");				\
+  } while (0)
 
 /* This is how to output an element of a case-vector that is relative.  */
-#define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) \
-do {							\
-  char label[30];					\
-  ASM_GENERATE_INTERNAL_LABEL (label, "L", VALUE);	\
-  switch (GET_MODE (BODY))				\
-    {							\
-    case QImode: fprintf (FILE, "\t.byte "); break;	\
-    case HImode: fprintf (FILE, "\t.hword "); break;	\
-    case SImode: fprintf (FILE, "\t.word "); break;	\
-    default: gcc_unreachable ();			\
-    }							\
-  assemble_name (FILE, label);				\
-  fprintf (FILE, "-");					\
-  ASM_GENERATE_INTERNAL_LABEL (label, "L", REL);	\
-  assemble_name (FILE, label);				\
-  if (TARGET_COMPACT_CASESI)				\
-    fprintf (FILE, " + %d", 4 + arc_get_unalign ());	\
-  fprintf(FILE, "\n");                                  \
-} while (0)
+#define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL)	\
+  do {								\
+    char label[30];						\
+    ASM_GENERATE_INTERNAL_LABEL (label, "L", VALUE);		\
+    switch (GET_MODE (BODY))					\
+      {								\
+      case QImode: fprintf (FILE, "\t.byte "); break;		\
+      case HImode: fprintf (FILE, "\t.hword "); break;		\
+      case SImode: fprintf (FILE, "\t.word "); break;		\
+      default: gcc_unreachable ();				\
+      }								\
+    assemble_name (FILE, label);				\
+    fprintf (FILE, "-");					\
+    ASM_GENERATE_INTERNAL_LABEL (label, "L", REL);		\
+    assemble_name (FILE, label);				\
+    if (TARGET_COMPACT_CASESI)					\
+      fprintf (FILE, " + %d", 4 + arc_get_unalign ());		\
+    fprintf(FILE, "\n");					\
+  } while (0)
 
 /* ADDR_DIFF_VECs are in the text section and thus can affect the
    current alignment.  */
-#define ASM_OUTPUT_CASE_END(FILE, NUM, JUMPTABLE)       \
-  do                                                    \
-    {                                                   \
+#define ASM_OUTPUT_CASE_END(FILE, NUM, JUMPTABLE)	  \
+  do							  \
+    {							  \
       if (GET_CODE (PATTERN (JUMPTABLE)) == ADDR_DIFF_VEC \
 	  && ((GET_MODE_SIZE (GET_MODE (PATTERN (JUMPTABLE))) \
 	       * XVECLEN (PATTERN (JUMPTABLE), 1) + 1)	\
@@ -1450,9 +1471,9 @@ do {							\
   while (0)
 
 #define JUMP_ALIGN(LABEL) (arc_size_opt_level < 2 ? 2 : 0)
-#define LABEL_ALIGN_AFTER_BARRIER(LABEL) \
-  (JUMP_ALIGN(LABEL) \
-   ? JUMP_ALIGN(LABEL) \
+#define LABEL_ALIGN_AFTER_BARRIER(LABEL)			    \
+  (JUMP_ALIGN(LABEL)						    \
+   ? JUMP_ALIGN(LABEL)						    \
    : GET_CODE (PATTERN (prev_active_insn (LABEL))) == ADDR_DIFF_VEC \
    ? 1 : 0)
 /* The desired alignment for the location counter at the beginning
@@ -1466,12 +1487,12 @@ do {							\
 /* This is how to output an assembler line
    that says to advance the location counter
    to a multiple of 2**LOG bytes.  */
-#define ASM_OUTPUT_ALIGN(FILE,LOG) \
-do { \
-  if ((LOG) != 0) fprintf (FILE, "\t.align %d\n", 1 << (LOG));	\
-  if ((LOG)  > 1) \
-    arc_clear_unalign (); \
-} while (0)
+#define ASM_OUTPUT_ALIGN(FILE,LOG)					\
+  do {									\
+    if ((LOG) != 0) fprintf (FILE, "\t.align %d\n", 1 << (LOG));	\
+    if ((LOG)  > 1)							\
+      arc_clear_unalign ();						\
+  } while (0)
 
 /*  ASM_OUTPUT_ALIGNED_DECL_LOCAL (STREAM, DECL, NAME, SIZE, ALIGNMENT)
     Define this macro when you need to see the variable's decl in order to
@@ -1501,15 +1522,15 @@ extern int arc_return_address_regs[4];
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
 /* How to renumber registers for dbx and gdb.  */
-#define DBX_REGISTER_NUMBER(REGNO) \
+#define DBX_REGISTER_NUMBER(REGNO)				\
   ((TARGET_MULMAC_32BY16_SET && (REGNO) >= 56 && (REGNO) <= 57) \
-   ? ((REGNO) ^ !TARGET_BIG_ENDIAN) \
-   : (TARGET_MUL64_SET && (REGNO) >= 57 && (REGNO) <= 59) \
-   ? ((REGNO) == 57 \
-      ? 58 /* MMED */ \
-      : ((REGNO) & 1) ^ TARGET_BIG_ENDIAN \
-      ? 59 /* MHI */ \
-      : 57 + !!TARGET_MULMAC_32BY16_SET) /* MLO */ \
+   ? ((REGNO) ^ !TARGET_BIG_ENDIAN)				\
+   : (TARGET_MUL64_SET && (REGNO) >= 57 && (REGNO) <= 59)	\
+   ? ((REGNO) == 57						\
+      ? 58 /* MMED */						\
+      : ((REGNO) & 1) ^ TARGET_BIG_ENDIAN			\
+      ? 59 /* MHI */						\
+      : 57 + !!TARGET_MULMAC_32BY16_SET) /* MLO */		\
    : (REGNO))
 
 #define DWARF_FRAME_REGNUM(REG) (REG)
@@ -1529,7 +1550,7 @@ extern int arc_return_address_regs[4];
 #define DWARF2_UNWIND_INFO 0
 #endif
 
-#define EH_RETURN_DATA_REGNO(N)	\
+#define EH_RETURN_DATA_REGNO(N)			\
   ((N) < 4 ? (N) : INVALID_REGNUM)
 
 /* Turn off splitting of long stabs.  */
@@ -1541,7 +1562,7 @@ extern int arc_return_address_regs[4];
    for the index in the tablejump instruction.
    If we have pc relative case vectors, we start the case vector shortening
    with QImode.  */
-#define CASE_VECTOR_MODE \
+#define CASE_VECTOR_MODE						\
   ((optimize && (CASE_VECTOR_PC_RELATIVE || flag_pic)) ? QImode : Pmode)
 
 /* Define as C expression which evaluates to nonzero if the tablejump
@@ -1550,9 +1571,9 @@ extern int arc_return_address_regs[4];
    Do not define this if the table should contain absolute addresses.  */
 #define CASE_VECTOR_PC_RELATIVE TARGET_CASE_VECTOR_PC_RELATIVE
 
-#define CASE_VECTOR_SHORTEN_MODE(MIN_OFFSET, MAX_OFFSET, BODY) \
-  CASE_VECTOR_SHORTEN_MODE_1 \
-    (MIN_OFFSET, TARGET_COMPACT_CASESI ? MAX_OFFSET + 6 : MAX_OFFSET, BODY)
+#define CASE_VECTOR_SHORTEN_MODE(MIN_OFFSET, MAX_OFFSET, BODY)		\
+  CASE_VECTOR_SHORTEN_MODE_1						\
+  (MIN_OFFSET, TARGET_COMPACT_CASESI ? MAX_OFFSET + 6 : MAX_OFFSET, BODY)
 
 #define CASE_VECTOR_SHORTEN_MODE_1(MIN_OFFSET, MAX_OFFSET, BODY) \
 ((MIN_OFFSET) >= 0 && (MAX_OFFSET) <= 255 \
@@ -1685,7 +1706,7 @@ extern enum arc_function_type arc_compute_function_type (struct function *);
    && GET_CODE (PATTERN (X)) != CLOBBER \
    && get_attr_is_##NAME (X) == IS_##NAME##_YES) \
 
-#define REVERSE_CONDITION(CODE,MODE) \
+#define REVERSE_CONDITION(CODE,MODE)				 \
   (((MODE) == CC_FP_GTmode || (MODE) == CC_FP_GEmode		 \
     || (MODE) == CC_FP_UNEQmode || (MODE) == CC_FP_ORDmode	 \
     || (MODE) == CC_FPXmode || (MODE) == CC_FPUmode              \
@@ -1693,20 +1714,20 @@ extern enum arc_function_type arc_compute_function_type (struct function *);
    ? reverse_condition_maybe_unordered ((CODE))			 \
    : reverse_condition ((CODE)))
 
-#define ADJUST_INSN_LENGTH(X, LENGTH) \
-  ((LENGTH) \
-   = (GET_CODE (PATTERN (X)) == SEQUENCE \
-      ? ((LENGTH) \
-	 + arc_adjust_insn_length (XVECEXP (PATTERN (X), 0, 0), \
+#define ADJUST_INSN_LENGTH(X, LENGTH)					\
+  ((LENGTH)								\
+   = (GET_CODE (PATTERN (X)) == SEQUENCE				\
+      ? ((LENGTH)							\
+	 + arc_adjust_insn_length (XVECEXP (PATTERN (X), 0, 0),		\
 				   get_attr_length (XVECEXP (PATTERN (X), \
-						    0, 0)), \
-				   true) \
-	 - get_attr_length (XVECEXP (PATTERN (X), 0, 0)) \
-	 + arc_adjust_insn_length (XVECEXP (PATTERN (X), 0, 1), \
+							     0, 0)),	\
+				   true)				\
+	 - get_attr_length (XVECEXP (PATTERN (X), 0, 0))		\
+	 + arc_adjust_insn_length (XVECEXP (PATTERN (X), 0, 1),		\
 				   get_attr_length (XVECEXP (PATTERN (X), \
-						    0, 1)), \
-				   true) \
-	 - get_attr_length (XVECEXP (PATTERN (X), 0, 1))) \
+							     0, 1)),	\
+				   true)				\
+	 - get_attr_length (XVECEXP (PATTERN (X), 0, 1)))		\
       : arc_adjust_insn_length ((X), (LENGTH), false)))
 
 #define IS_ASM_LOGICAL_LINE_SEPARATOR(C,STR) ((C) == '`')
