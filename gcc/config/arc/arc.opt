@@ -252,7 +252,7 @@ misize
 Target Report PchIgnore Var(TARGET_DUMPISIZE)
 Annotate assembler instructions with estimated addresses
 
-multcost=
+mmultcost=
 Target RejectNegative Joined UInteger Var(arc_multcost) Init(-1)
 Cost to assume for a multiply instruction, with 4 being equal to a normal insn.
 

@@ -2219,6 +2219,8 @@ proc check_effective_target_arc_atomic { } {
 	#if !defined(__atomic__)
 	#error FOO
 	#endif
+    }]
+}
 
 # Return 1 if this is a AArch64 target supporting little endian
 proc check_effective_target_aarch64_little_endian { } {
