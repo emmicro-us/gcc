@@ -1,3 +1,7 @@
+2014-05-12  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_recog): Avoid double negation of loop_end_id.
+
 2013-09-28  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	automatic dependencies adjustment:
