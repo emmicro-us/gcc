@@ -6,6 +6,11 @@
 	is a jump as the last instruction of a zero overhead loop to a
 	target where the loop counter is live.
 
+2014-05-23  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_legitimize_tls_address):
+	Don't force (const (... UNSPEC_TLS_IE ...) into a register.
+
 2014-05-12  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_eh_uses): Prototype.
