@@ -1,3 +1,9 @@
+2014-06-18  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.opt (processor_type) <arc700>: New Enum value.
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Translate -mcpu=arc700 to
+	-mcpu=ARC700.
+
 2014-05-23  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_legitimize_tls_address):
