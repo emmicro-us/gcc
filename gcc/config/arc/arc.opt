@@ -203,6 +203,9 @@ EnumValue
 Enum(processor_type) String(ARC700) Value(PROCESSOR_ARC700)
 
 EnumValue
+Enum(processor_type) String(arc700) Value(PROCESSOR_ARC700)
+
+EnumValue
 Enum(processor_type) String(ARCv2EM) Value(PROCESSOR_ARCv2EM)
 
 msize-level=

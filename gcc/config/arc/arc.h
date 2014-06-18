@@ -256,7 +256,7 @@ along with GCC; see the file COPYING3.  If not see
   "%{mARC5|mA5: -mcpu=A5 %<mARC5 %<mA5}" \
   "%{mARC600|mA6: -mcpu=ARC600 %<mARC600 %<mA6}" \
   "%{mARC601: -mcpu=ARC601 %<mARC601}" \
-  "%{mARC700|mA7: -mcpu=ARC700 %<mARC700 %<mA7}" \
+  "%{mARC700|mA7|mcpu=arc700: -mcpu=ARC700 %<mARC700 %<mA7 %<mcpu=arc700}" \
   "%{mav2em|mARCv2EM|mEM: -mcpu=ARCv2EM %<mav2em %<ARCv2EM %<mEM}" \
   "%{mmpy_option*: -mmpy-option%* %<mmpy_option*}" \
   "%{mcode_densit*: -mcode-densit%* %<mcode_densit*}" \
