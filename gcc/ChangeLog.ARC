@@ -6,6 +6,12 @@
 	is a jump as the last instruction of a zero overhead loop to a
 	target where the loop counter is live.
 
+2014-06-18  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.opt (processor_type) <arc700>: New Enum value.
+	* config/arc/arc.h (DRIVER_SELF_SPECS): Translate -mcpu=arc700 to
+	-mcpu=ARC700.
+
 2014-05-23  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.c (arc_legitimize_tls_address):
