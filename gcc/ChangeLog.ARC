@@ -1,3 +1,11 @@
+2014-06-25  Joern Rennecke  <joern.rennecke@embecosm.com>
+	    Claudiu Zissulescu  <claziss@synopsys.com>
+
+	Merged from joern-arc-4.8-dev-tls:
+	* config/arc/arc.c (arc_hazard): Indicate need for nop when there
+	is a jump as the last instruction of a zero overhead loop to a
+	target where the loop counter is live.
+
 2014-05-12  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc-protos.h (arc_eh_uses): Prototype.
