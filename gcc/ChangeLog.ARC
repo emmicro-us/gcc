@@ -1,3 +1,7 @@
+2014-06-25  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config/arc/arc.c (arc_hazard): Fix comment.
+
 2014-06-18  Joern Rennecke  <joern.rennecke@embecosm.com>
 
 	* config/arc/arc.opt (processor_type) <arc700>: New Enum value.

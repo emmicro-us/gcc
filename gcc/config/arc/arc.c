@@ -8264,10 +8264,11 @@ arc_hazard (rtx pred, rtx succ)
   /* We might have a CALL to a non-returning function before a loop
      end.  ??? Although the manual says that's OK (the target is
      outside the loop, and the loop counter unused there), the
-     assembler barfs on this for ARC600, so we must instert a nop
-     before such a call too. For ARC700, and ARCv2 is not allowed to
-     have the last ZOL instruction a jump to a location where lp_count
-     is modified. */
+     assembler barfs on this for ARC600, so we must insert a nop
+     before such a call too.
+     If the last ZOL instruction is a jump, the value of lp_count
+     at the target is undefined for V2, and when executing on the NSIM
+     simulator, even for ARC700.  */
   if (recog_memoized (succ) == CODE_FOR_doloop_end_i
       && ((TARGET_ARC600
 	   && (JUMP_P (pred) || CALL_P (pred)
