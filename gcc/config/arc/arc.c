@@ -952,8 +952,10 @@ arc_override_options (void)
     TARGET_COMPACT_CASESI = 0;
 
   /* For the time being don't support COMPACT_CASESI for ARCv2. */
-  if (TARGET_V2)
+  if (TARGET_V2) {
     TARGET_COMPACT_CASESI = 0;
+    // arc_mpy_option = 8;
+  }
 
   if (TARGET_COMPACT_CASESI)
     TARGET_CASE_VECTOR_PC_RELATIVE = 1;
