@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2013 Free Software Foundation, Inc.
+/* Copyright (C) 2008-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -100,6 +100,7 @@ struct gfc_cpp_option_data
   const char *deps_filename_user;       /* -MF <arg> */
   int deps_missing_are_generated;       /* -MG */
   int deps_phony;                       /* -MP */
+  int warn_date_time;                   /* -Wdate-time */
 
   const char *multilib;                 /* -imultilib <dir>  */
   const char *prefix;                   /* -iprefix <dir>  */
@@ -169,8 +170,8 @@ cpp_define_builtins (cpp_reader *pfile)
   cpp_define (pfile, "__GFORTRAN__=1");
   cpp_define (pfile, "_LANGUAGE_FORTRAN=1");
 
-  if (gfc_option.gfc_flag_openmp)
-    cpp_define (pfile, "_OPENMP=201107");
+  if (flag_openmp)
+    cpp_define (pfile, "_OPENMP=201307");
 
   /* The defines below are necessary for the TARGET_* macros.
 
@@ -262,6 +263,7 @@ gfc_cpp_init_options (unsigned int decoded_options_count,
   gfc_cpp_option.no_predefined = 0;
   gfc_cpp_option.standard_include_paths = 1;
   gfc_cpp_option.verbose = 0;
+  gfc_cpp_option.warn_date_time = 0;
   gfc_cpp_option.deps = 0;
   gfc_cpp_option.deps_skip_system = 0;
   gfc_cpp_option.deps_phony = 0;
@@ -359,6 +361,10 @@ gfc_cpp_handle_option (size_t scode, const char *arg, int value ATTRIBUTE_UNUSED
       gfc_cpp_option.verbose = value;
       break;
 
+    case OPT_Wdate_time:
+      gfc_cpp_option.warn_date_time = value;
+      break;
+
     case OPT_A:
     case OPT_D:
     case OPT_U:
@@ -444,7 +450,7 @@ gfc_cpp_post_options (void)
 	  || gfc_cpp_option.no_line_commands
 	  || gfc_cpp_option.dump_macros
 	  || gfc_cpp_option.dump_includes))
-    gfc_fatal_error("To enable preprocessing, use -cpp");
+    gfc_fatal_error ("To enable preprocessing, use %<-cpp%>");
 
   if (!gfc_cpp_enabled ())
     return;
@@ -464,11 +470,12 @@ gfc_cpp_post_options (void)
 
   cpp_option->cpp_pedantic = pedantic;
 
-  cpp_option->dollars_in_ident = gfc_option.flag_dollar_ok;
+  cpp_option->dollars_in_ident = flag_dollar_ok;
   cpp_option->discard_comments = gfc_cpp_option.discard_comments;
   cpp_option->discard_comments_in_macro_exp = gfc_cpp_option.discard_comments_in_macro_exp;
   cpp_option->print_include_names = gfc_cpp_option.print_include_names;
   cpp_option->preprocessed = gfc_option.flag_preprocessed;
+  cpp_option->warn_date_time = gfc_cpp_option.warn_date_time;
 
   if (gfc_cpp_makedep ())
     {
@@ -541,7 +548,7 @@ gfc_cpp_init_0 (void)
 
 	  print.outf = fopen (gfc_cpp_option.output_filename, "w");
 	  if (print.outf == NULL)
-	    gfc_fatal_error ("opening output file %s: %s",
+	    gfc_fatal_error ("opening output file %qs: %s",
 			     gfc_cpp_option.output_filename,
 			     xstrerror (errno));
 	}
@@ -552,7 +559,7 @@ gfc_cpp_init_0 (void)
     {
       print.outf = fopen (gfc_cpp_option.temporary_filename, "w");
       if (print.outf == NULL)
-	gfc_fatal_error ("opening output file %s: %s",
+	gfc_fatal_error ("opening output file %qs: %s",
 			 gfc_cpp_option.temporary_filename, xstrerror (errno));
     }
 
@@ -610,11 +617,11 @@ gfc_cpp_init (void)
     pp_dir_change (cpp_in, get_src_pwd ());
 }
 
-gfc_try
+bool
 gfc_cpp_preprocess (const char *source_file)
 {
   if (!gfc_cpp_enabled ())
-    return FAILURE;
+    return false;
 
   cpp_change_file (cpp_in, LC_RENAME, source_file);
 
@@ -637,7 +644,7 @@ gfc_cpp_preprocess (const char *source_file)
       || (gfc_cpp_preprocess_only () && gfc_cpp_option.output_filename))
     fclose (print.outf);
 
-  return SUCCESS;
+  return true;
 }
 
 void
@@ -659,7 +666,7 @@ gfc_cpp_done (void)
 	      fclose (f);
 	    }
 	  else
-	    gfc_fatal_error ("opening output file %s: %s",
+	    gfc_fatal_error ("opening output file %qs: %s",
 			     gfc_cpp_option.deps_filename,
 			     xstrerror (errno));
 	}

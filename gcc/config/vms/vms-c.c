@@ -1,5 +1,5 @@
 /* VMS specific, C compiler specific functions.
-   Copyright (C) 2011-2013 Free Software Foundation, Inc.
+   Copyright (C) 2011-2015 Free Software Foundation, Inc.
    Contributed by Tristan Gingold (gingold@adacore.com).
 
 This file is part of GCC.
@@ -287,7 +287,7 @@ vms_pragma_extern_prefix (cpp_reader * ARG_UNUSED (dummy))
 
 /* #pragma __pointer_size  */
 
-static enum machine_mode saved_pointer_mode;
+static machine_mode saved_pointer_mode;
 
 static void
 handle_pragma_pointer_size (const char *pragma_name)

@@ -175,6 +175,9 @@ SYMVER_FILE = @SYMVER_FILE@
 TOPLEVEL_INCLUDES = @TOPLEVEL_INCLUDES@
 USE_NLS = @USE_NLS@
 VERSION = @VERSION@
+VTV_CXXFLAGS = @VTV_CXXFLAGS@
+VTV_CXXLINKFLAGS = @VTV_CXXLINKFLAGS@
+VTV_PCH_CXXFLAGS = @VTV_PCH_CXXFLAGS@
 WARN_FLAGS = @WARN_FLAGS@
 WERROR = @WERROR@
 
@@ -215,6 +218,7 @@ glibcxx_POFILES = @glibcxx_POFILES@
 glibcxx_builddir = @glibcxx_builddir@
 glibcxx_compiler_pic_flag = @glibcxx_compiler_pic_flag@
 glibcxx_compiler_shared_flag = @glibcxx_compiler_shared_flag@
+glibcxx_cxx98_abi = @glibcxx_cxx98_abi@
 glibcxx_localedir = @glibcxx_localedir@
 glibcxx_lt_pic_flag = @glibcxx_lt_pic_flag@
 glibcxx_prefixdir = @glibcxx_prefixdir@
@@ -281,6 +285,8 @@ toolexecdir = $(glibcxx_toolexecdir)
 toolexeclibdir = $(glibcxx_toolexeclibdir)
 @ENABLE_WERROR_FALSE@WERROR_FLAG = 
 @ENABLE_WERROR_TRUE@WERROR_FLAG = $(WERROR)
+@ENABLE_EXTERN_TEMPLATE_FALSE@XTEMPLATE_FLAGS = 
+@ENABLE_EXTERN_TEMPLATE_TRUE@XTEMPLATE_FLAGS = -fno-implicit-templates
 
 # These bits are all figured out from configure.  Look in acinclude.m4
 # or configure.ac to see how they are set.  See GLIBCXX_EXPORT_FLAGS.
@@ -400,6 +406,7 @@ xml_sources_manual = \
 	${xml_dir}/manual/spine.xml \
 	${xml_dir}/manual/status_cxx1998.xml \
 	${xml_dir}/manual/status_cxx2011.xml \
+	${xml_dir}/manual/status_cxx2014.xml \
 	${xml_dir}/manual/status_cxxtr1.xml \
 	${xml_dir}/manual/status_cxxtr24733.xml \
 	${xml_dir}/manual/strings.xml \
@@ -521,7 +528,7 @@ xml_noinst = \
 	${xml_image_dir}/confdeps.pdf
 
 XSLT_FLAGS = --nonet --xinclude
-XSLT_PARAM = --param toc.section.depth 4
+XSLT_PARAM = --param toc.section.depth 4 --param generate.consistent.ids 1
 #XSL_STYLE_DIR = /usr/share/xml/docbook/stylesheet/docbook-xsl-ns
 #XSL_STYLE_DIR = /usr/share/sgml/docbook/xsl-ns-stylesheets
 XSL_FO_STYLE = $(XSL_STYLE_DIR)/fo/docbook.xsl

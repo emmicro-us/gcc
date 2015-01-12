@@ -1,5 +1,5 @@
 /* GCC backend definitions for the Renesas RL78 processor.
-   Copyright (C) 2011-2013 Free Software Foundation, Inc.
+   Copyright (C) 2011-2015 Free Software Foundation, Inc.
    Contributed by Red Hat.
 
    This file is part of GCC.
@@ -32,6 +32,8 @@
 	builtin_define ("__RL78_MUL_RL78__"); 	\
       if (RL78_MUL_G13)				\
 	builtin_define ("__RL78_MUL_G13__"); 	\
+      if (TARGET_G10)				\
+	builtin_define ("__RL78_G10__"); 	\
     }                                           \
   while (0)
 
@@ -40,6 +42,18 @@
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
+
+#undef  ASM_SPEC
+#define ASM_SPEC "\
+%{mrelax:-relax} \
+%{mg10} \
+"
+
+#undef  LINK_SPEC
+#define LINK_SPEC "\
+%{mrelax:-relax} \
+%{!r:--gc-sections} \
+"
 
 #undef  LIB_SPEC
 #define LIB_SPEC "					\
@@ -83,9 +97,6 @@
 #define FLOAT_TYPE_SIZE 		32
 #define DOUBLE_TYPE_SIZE 		32 /*64*/
 #define LONG_DOUBLE_TYPE_SIZE		64 /*DOUBLE_TYPE_SIZE*/
-
-#define LIBGCC2_HAS_DF_MODE		1
-#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE   64
 
 #define DEFAULT_SIGNED_CHAR		0
 
@@ -133,7 +144,6 @@
 
 #define STORE_FLAG_VALUE		1
 #define LOAD_EXTEND_OP(MODE)		ZERO_EXTEND
-#define SHORT_IMMEDIATES_SIGN_EXTEND	0
 
 
 /* The RL78 has four register banks.  Normal operation uses RB0 as
@@ -252,7 +262,7 @@ enum reg_class
   { 0x00000300, 0x00000000 }, 	/* R8 - HImode */		\
   { 0x00000c00, 0x00000000 }, 	/* R10 - HImode */		\
   { 0xff000000, 0x00000000 }, 	/* INT - HImode */		\
-  { 0x007fff00, 0x00000000 },	/* Virtual registers.  */	\
+  { 0xff7fff00, 0x00000000 },	/* Virtual registers.  */	\
   { 0xff7fffff, 0x00000002 },	/* General registers.  */	\
   { 0x04000000, 0x00000004 },	/* PSW.  */	\
   { 0xff7fffff, 0x0000001f }	/* All registers.  */		\
@@ -339,7 +349,7 @@ enum reg_class
        && reg_renumber[(REGNO)] <= (MAX)))
 
 #ifdef REG_OK_STRICT
-#define REGNO_OK_FOR_BASE_P(regno)      REGNO_IN_RANGE (regno, 16, 23)
+#define REGNO_OK_FOR_BASE_P(regno)      REGNO_IN_RANGE (regno, 16, 31)
 #else
 #define REGNO_OK_FOR_BASE_P(regno)	1
 #endif

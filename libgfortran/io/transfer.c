@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2013 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2015 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    Namelist transfer functions contributed by Paul Thomas
    F2003 I/O support contributed by Jerry DeLisle
@@ -233,7 +233,7 @@ read_sf_internal (st_parameter_dt *dtp, int * length)
     {
       *length = 0;
       /* Just return something that isn't a NULL pointer, otherwise the
-         caller thinks an error occured.  */
+         caller thinks an error occurred.  */
       return (char*) empty_string;
     }
 
@@ -292,7 +292,7 @@ read_sf (st_parameter_dt *dtp, int * length)
     {
       *length = 0;
       /* Just return something that isn't a NULL pointer, otherwise the
-         caller thinks an error occured.  */
+         caller thinks an error occurred.  */
       return (char*) empty_string;
     }
 
@@ -401,7 +401,7 @@ read_sf (st_parameter_dt *dtp, int * length)
 
 
 /* Function for reading the next couple of bytes from the current
-   file, advancing the current position. We return FAILURE on end of record or
+   file, advancing the current position. We return NULL on end of record or
    end of file. This function is only for formatted I/O, unformatted uses
    read_block_direct.
 
@@ -475,7 +475,7 @@ read_block_form (st_parameter_dt *dtp, int * nbytes)
   if (norig != *nbytes)
     {
       /* Short read, this shouldn't happen.  */
-      if (!dtp->u.p.current_unit->pad_status == PAD_YES)
+      if (dtp->u.p.current_unit->pad_status == PAD_NO)
 	{
 	  generate_error (&dtp->common, LIBERROR_EOR, NULL);
 	  source = NULL;
@@ -512,7 +512,7 @@ read_block_form4 (st_parameter_dt *dtp, int * nbytes)
     {
       *nbytes = 0;
       /* Just return something that isn't a NULL pointer, otherwise the
-         caller thinks an error occured.  */
+         caller thinks an error occurred.  */
       return empty_string;
     }
 
@@ -774,7 +774,7 @@ write_block (st_parameter_dt *dtp, int length)
    called for unformatted files.  There are three cases to consider:
    Stream I/O, unformatted direct, unformatted sequential.  */
 
-static try
+static bool
 write_buf (st_parameter_dt *dtp, void *buf, size_t nbytes)
 {
 
@@ -790,12 +790,12 @@ write_buf (st_parameter_dt *dtp, void *buf, size_t nbytes)
       if (unlikely (have_written < 0))
 	{
 	  generate_error (&dtp->common, LIBERROR_OS, NULL);
-	  return FAILURE;
+	  return false;
 	}
 
       dtp->u.p.current_unit->strm_pos += (gfc_offset) have_written; 
 
-      return SUCCESS;
+      return true;
     }
 
   /* Unformatted direct access.  */
@@ -805,23 +805,23 @@ write_buf (st_parameter_dt *dtp, void *buf, size_t nbytes)
       if (unlikely (dtp->u.p.current_unit->bytes_left < (gfc_offset) nbytes))
 	{
 	  generate_error (&dtp->common, LIBERROR_DIRECT_EOR, NULL);
-	  return FAILURE;
+	  return false;
 	}
 
       if (buf == NULL && nbytes == 0)
-	return SUCCESS;
+	return true;
 
       have_written = swrite (dtp->u.p.current_unit->s, buf, nbytes); 
       if (unlikely (have_written < 0))
 	{
 	  generate_error (&dtp->common, LIBERROR_OS, NULL);
-	  return FAILURE;
+	  return false;
 	}
 
       dtp->u.p.current_unit->strm_pos += (gfc_offset) have_written;
       dtp->u.p.current_unit->bytes_left -= (gfc_offset) have_written;
 
-      return SUCCESS;
+      return true;
     }
 
   /* Unformatted sequential.  */
@@ -854,7 +854,7 @@ write_buf (st_parameter_dt *dtp, void *buf, size_t nbytes)
       if (unlikely (to_write_subrecord < 0))
 	{
 	  generate_error (&dtp->common, LIBERROR_OS, NULL);
-	  return FAILURE;
+	  return false;
 	}
 
       dtp->u.p.current_unit->strm_pos += (gfc_offset) to_write_subrecord; 
@@ -871,9 +871,9 @@ write_buf (st_parameter_dt *dtp, void *buf, size_t nbytes)
   if (unlikely (short_record))
     {
       generate_error (&dtp->common, LIBERROR_SHORT_RECORD, NULL);
-      return FAILURE;
+      return false;
     }
-  return SUCCESS;
+  return true;
 }
 
 
@@ -2490,14 +2490,18 @@ data_transfer_init (st_parameter_dt *dtp, int read_flag)
   if ((cf & IOPARM_DT_HAS_NAMELIST_NAME) != 0 && dtp->u.p.ionml != NULL)
      {
 	if ((cf & IOPARM_DT_HAS_FORMAT) != 0)
-	   generate_error (&dtp->common, LIBERROR_OPTION_CONFLICT,
-		    "A format cannot be specified with a namelist");
+	  {
+	    generate_error (&dtp->common, LIBERROR_OPTION_CONFLICT,
+			"A format cannot be specified with a namelist");
+	    return;
+	  }
      }
   else if (dtp->u.p.current_unit->flags.form == FORM_FORMATTED &&
 	   !(cf & (IOPARM_DT_HAS_FORMAT | IOPARM_DT_LIST_FORMAT)))
     {
       generate_error (&dtp->common, LIBERROR_OPTION_CONFLICT,
 		      "Missing format for FORMATTED data transfer");
+      return;
     }
 
   if (is_internal_unit (dtp)
@@ -2666,16 +2670,22 @@ data_transfer_init (st_parameter_dt *dtp, int read_flag)
 	= !(cf & IOPARM_DT_HAS_DELIM) ? DELIM_UNSPECIFIED :
 	  find_option (&dtp->common, dtp->delim, dtp->delim_len,
 	  delim_opt, "Bad DELIM parameter in data transfer statement");
-  
+
   if (dtp->u.p.current_unit->delim_status == DELIM_UNSPECIFIED)
-    dtp->u.p.current_unit->delim_status = dtp->u.p.current_unit->flags.delim;
+    {
+      if (ionml && dtp->u.p.current_unit->flags.delim == DELIM_UNSPECIFIED)
+	dtp->u.p.current_unit->delim_status =
+	  compile_options.allow_std & GFC_STD_GNU ? DELIM_QUOTE : DELIM_NONE;
+      else
+	dtp->u.p.current_unit->delim_status = dtp->u.p.current_unit->flags.delim;
+    }
 
   /* Check the pad mode.  */
   dtp->u.p.current_unit->pad_status
 	= !(cf & IOPARM_DT_HAS_PAD) ? PAD_UNSPECIFIED :
 	  find_option (&dtp->common, dtp->pad, dtp->pad_len, pad_opt,
 			"Bad PAD parameter in data transfer statement");
-  
+
   if (dtp->u.p.current_unit->pad_status == PAD_UNSPECIFIED)
 	dtp->u.p.current_unit->pad_status = dtp->u.p.current_unit->flags.pad;
 
@@ -2860,12 +2870,26 @@ data_transfer_init (st_parameter_dt *dtp, int read_flag)
 	dtp->u.p.current_unit->read_bad = 1;
     }
 
-  /* Start the data transfer if we are doing a formatted transfer.  */
-  if (dtp->u.p.current_unit->flags.form == FORM_FORMATTED
-      && ((cf & (IOPARM_DT_LIST_FORMAT | IOPARM_DT_HAS_NAMELIST_NAME)) == 0)
-      && dtp->u.p.ionml == NULL)
-    formatted_transfer (dtp, 0, NULL, 0, 0, 1);
+  if (dtp->u.p.current_unit->flags.form == FORM_FORMATTED)
+    {
+#ifdef HAVE_USELOCALE
+      dtp->u.p.old_locale = uselocale (c_locale);
+#else
+      __gthread_mutex_lock (&old_locale_lock);
+      if (!old_locale_ctr++)
+	{
+	  old_locale = setlocale (LC_NUMERIC, NULL);
+	  setlocale (LC_NUMERIC, "C");
+	}
+      __gthread_mutex_unlock (&old_locale_lock);
+#endif
+      /* Start the data transfer if we are doing a formatted transfer.  */
+      if ((cf & (IOPARM_DT_LIST_FORMAT | IOPARM_DT_HAS_NAMELIST_NAME)) == 0
+	&& dtp->u.p.ionml == NULL)
+	formatted_transfer (dtp, 0, NULL, 0, 0, 1);
+    }
 }
+
 
 /* Initialize an array_loop_spec given the array descriptor.  The function
    returns the index of the last element of the array, and also returns
@@ -2958,7 +2982,7 @@ static void
 skip_record (st_parameter_dt *dtp, ssize_t bytes)
 {
   ssize_t rlength, readb;
-  static const ssize_t MAX_READ = 4096;
+#define MAX_READ 4096
   char p[MAX_READ];
 
   dtp->u.p.current_unit->bytes_left_subrecord += bytes;
@@ -3207,17 +3231,6 @@ next_record_w_unf (st_parameter_dt *dtp, int next_subrecord)
   m = dtp->u.p.current_unit->recl_subrecord
     - dtp->u.p.current_unit->bytes_left_subrecord;
 
-  /* Write the length tail.  If we finish a record containing
-     subrecords, we write out the negative length.  */
-
-  if (dtp->u.p.current_unit->continued)
-    m_write = -m;
-  else
-    m_write = m;
-
-  if (unlikely (write_us_marker (dtp, m_write) < 0))
-    goto io_error;
-
   if (compile_options.record_marker == 0)
     record_marker = sizeof (GFC_INTEGER_4);
   else
@@ -3226,7 +3239,7 @@ next_record_w_unf (st_parameter_dt *dtp, int next_subrecord)
   /* Seek to the head and overwrite the bogus length with the real
      length.  */
 
-  if (unlikely (sseek (dtp->u.p.current_unit->s, - m - 2 * record_marker, 
+  if (unlikely (sseek (dtp->u.p.current_unit->s, - m - record_marker, 
 		       SEEK_CUR) < 0))
     goto io_error;
 
@@ -3240,8 +3253,18 @@ next_record_w_unf (st_parameter_dt *dtp, int next_subrecord)
 
   /* Seek past the end of the current record.  */
 
-  if (unlikely (sseek (dtp->u.p.current_unit->s, m + record_marker, 
-		       SEEK_CUR) < 0))
+  if (unlikely (sseek (dtp->u.p.current_unit->s, m, SEEK_CUR) < 0))
+    goto io_error;
+
+  /* Write the length tail.  If we finish a record containing
+     subrecords, we write out the negative length.  */
+
+  if (dtp->u.p.current_unit->continued)
+    m_write = -m;
+  else
+    m_write = m;
+
+  if (unlikely (write_us_marker (dtp, m_write) < 0))
     goto io_error;
 
   return;
@@ -3259,7 +3282,7 @@ next_record_w_unf (st_parameter_dt *dtp, int next_subrecord)
 static ssize_t
 sset (stream * s, int c, ssize_t nbyte)
 {
-  static const int WRITE_CHUNK = 256;
+#define WRITE_CHUNK 256
   char p[WRITE_CHUNK];
   ssize_t bytes_left, trans;
 
@@ -3503,6 +3526,7 @@ next_record (st_parameter_dt *dtp, int done)
     pre_position (dtp);
 
   fbuf_flush (dtp->u.p.current_unit, dtp->u.p.mode);
+  smarkeor (dtp->u.p.current_unit->s);
 }
 
 
@@ -3521,14 +3545,14 @@ finalize_transfer (st_parameter_dt *dtp)
   if (dtp->u.p.eor_condition)
     {
       generate_error (&dtp->common, LIBERROR_EOR, NULL);
-      return;
+      goto done;
     }
 
   if ((dtp->common.flags & IOPARM_LIBRETURN_MASK) != IOPARM_LIBRETURN_OK)
     {
       if (dtp->u.p.current_unit && current_mode (dtp) == UNFORMATTED_SEQUENTIAL)
 	dtp->u.p.current_unit->current_record = 0;
-      return;
+      goto done;
     }
 
   if ((dtp->u.p.ionml != NULL)
@@ -3542,12 +3566,12 @@ finalize_transfer (st_parameter_dt *dtp)
 
   dtp->u.p.transfer = NULL;
   if (dtp->u.p.current_unit == NULL)
-    return;
+    goto done;
 
   if ((cf & IOPARM_DT_LIST_FORMAT) != 0 && dtp->u.p.mode == READING)
     {
       finish_list_read (dtp);
-      return;
+      goto done;
     }
 
   if (dtp->u.p.mode == WRITING)
@@ -3560,7 +3584,7 @@ finalize_transfer (st_parameter_dt *dtp)
 	  && dtp->u.p.advance_status != ADVANCE_NO)
 	next_record (dtp, 1);
 
-      return;
+      goto done;
     }
 
   dtp->u.p.current_unit->current_record = 0;
@@ -3569,7 +3593,7 @@ finalize_transfer (st_parameter_dt *dtp)
     {
       fbuf_flush (dtp->u.p.current_unit, dtp->u.p.mode);
       dtp->u.p.seen_dollar = 0;
-      return;
+      goto done;
     }
 
   /* For non-advancing I/O, save the current maximum position for use in the
@@ -3581,7 +3605,7 @@ finalize_transfer (st_parameter_dt *dtp)
       dtp->u.p.current_unit->saved_pos =
 	dtp->u.p.max_pos > 0 ? dtp->u.p.max_pos - bytes_written : 0;
       fbuf_flush (dtp->u.p.current_unit, dtp->u.p.mode);
-      return;
+      goto done;
     }
   else if (dtp->u.p.current_unit->flags.form == FORM_FORMATTED 
            && dtp->u.p.mode == WRITING && !is_internal_unit (dtp))
@@ -3590,6 +3614,23 @@ finalize_transfer (st_parameter_dt *dtp)
   dtp->u.p.current_unit->saved_pos = 0;
 
   next_record (dtp, 1);
+
+ done:
+#ifdef HAVE_USELOCALE
+  if (dtp->u.p.old_locale != (locale_t) 0)
+    {
+      uselocale (dtp->u.p.old_locale);
+      dtp->u.p.old_locale = (locale_t) 0;
+    }
+#else
+  __gthread_mutex_lock (&old_locale_lock);
+  if (!--old_locale_ctr)
+    {
+      setlocale (LC_NUMERIC, old_locale);
+      old_locale = NULL;
+    }
+  __gthread_mutex_unlock (&old_locale_lock);
+#endif
 }
 
 /* Transfer function for IOLENGTH. It doesn't actually do any
@@ -3776,9 +3817,9 @@ st_set_nml_var (st_parameter_dt *dtp, void * var_addr, char * var_name,
   if (nml->var_rank > 0)
     {
       nml->dim = (descriptor_dimension*)
-		   xmalloc (nml->var_rank * sizeof (descriptor_dimension));
+	xmallocarray (nml->var_rank, sizeof (descriptor_dimension));
       nml->ls = (array_loop_spec*)
-		  xmalloc (nml->var_rank * sizeof (array_loop_spec));
+	xmallocarray (nml->var_rank, sizeof (array_loop_spec));
     }
   else
     {

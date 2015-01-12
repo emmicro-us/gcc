@@ -1,5 +1,5 @@
 ;; GCC machine description for SPARC synchronization instructions.
-;; Copyright (C) 2005-2013 Free Software Foundation, Inc.
+;; Copyright (C) 2005-2015 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -64,11 +64,19 @@
   "stbar"
   [(set_attr "type" "multi")])
 
+;; For LEON3, STB has the effect of membar #StoreLoad.
+(define_insn "*membar_storeload_leon3"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec:BLK [(match_dup 0) (const_int 2)] UNSPEC_MEMBAR))]
+  "TARGET_LEON3"
+  "stb\t%%g0, [%%sp-1]"
+  [(set_attr "type" "store")])
+
 ;; For V8, LDSTUB has the effect of membar #StoreLoad.
 (define_insn "*membar_storeload"
   [(set (match_operand:BLK 0 "" "")
 	(unspec:BLK [(match_dup 0) (const_int 2)] UNSPEC_MEMBAR))]
-  "TARGET_V8"
+  "TARGET_V8 && !TARGET_LEON3"
   "ldstub\t[%%sp-1], %%g0"
   [(set_attr "type" "multi")])
 
@@ -92,6 +100,18 @@
   "TARGET_V9"
   "membar\t%1"
   [(set_attr "type" "multi")])
+
+(define_peephole2
+  [(set (match_operand:BLK 0 "" "")
+	(unspec:BLK [(match_dup 0) (match_operand:SI 1 "const_int_operand")]
+		    UNSPEC_MEMBAR))
+   (set (match_operand:BLK 2 "" "")
+	(unspec:BLK [(match_dup 2) (match_operand:SI 3 "const_int_operand")]
+		    UNSPEC_MEMBAR))]
+  ""
+  [(set (match_operand:BLK 0 "" "")
+	(unspec:BLK [(match_dup 0) (match_dup 1)] UNSPEC_MEMBAR))]
+{ operands[1] = GEN_INT (UINTVAL (operands[1]) | UINTVAL (operands[3])); })
 
 (define_expand "atomic_load<mode>"
   [(match_operand:I 0 "register_operand" "")

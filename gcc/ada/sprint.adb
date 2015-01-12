@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2013, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -57,6 +57,10 @@ package body Sprint is
    --  Debug_Generated_Code mode, Dump_Node is set to the current node
    --  requiring Sloc fixup, until Set_Debug_Sloc is called to set the proper
    --  value. The call clears it back to Empty.
+
+   First_Debug_Sloc : Source_Ptr;
+   --  Sloc of first byte of the current output file if we are generating a
+   --  source debug file.
 
    Debug_Sloc : Source_Ptr;
    --  Sloc of first byte of line currently being written if we are
@@ -204,7 +208,7 @@ package body Sprint is
      (Node    : Node_Id;
       Default : Node_Id);
    --  Print the end label for a Handled_Sequence_Of_Statements in a body.
-   --  If there is not end label, use the defining identifier of the enclosing
+   --  If there is no end label, use the defining identifier of the enclosing
    --  construct. If the end label is present, treat it as a reference to the
    --  defining entity of the construct: this guarantees that it carries the
    --  proper sloc information for debugging purposes.
@@ -512,7 +516,46 @@ package body Sprint is
    procedure Set_Debug_Sloc is
    begin
       if Debug_Generated_Code and then Present (Dump_Node) then
-         Set_Sloc (Dump_Node, Debug_Sloc + Source_Ptr (Column - 1));
+         declare
+            Loc : constant Source_Ptr := Sloc (Dump_Node);
+
+         begin
+            --  Do not change the location of nodes defined in package Standard
+            --  and nodes of pragmas scanned by Targparm.
+
+            if Loc <= Standard_Location then
+               null;
+
+            --  Update the location of a node which is part of the current .dg
+            --  output. This situation occurs in comma separated parameter
+            --  declarations since each parameter references the same parameter
+            --  type node (ie. obj1, obj2 : <param-type>).
+
+            --  Note: This case is needed here since we cannot use the routine
+            --  In_Extended_Main_Code_Unit with nodes whose location is a .dg
+            --  file.
+
+            elsif Loc >= First_Debug_Sloc then
+               Set_Sloc (Dump_Node, Debug_Sloc + Source_Ptr (Column - 1));
+
+            --  Do not change the location of nodes which are not part of the
+            --  generated code
+
+            elsif not In_Extended_Main_Code_Unit (Loc) then
+               null;
+
+            else
+               Set_Sloc (Dump_Node, Debug_Sloc + Source_Ptr (Column - 1));
+            end if;
+         end;
+
+         --  We do not know the actual end location in the generated code and
+         --  it could be much closer than in the source code, so play safe.
+
+         if Nkind_In (Dump_Node, N_Case_Statement, N_If_Statement) then
+            Set_End_Location (Dump_Node, Debug_Sloc + Source_Ptr (Column - 1));
+         end if;
+
          Dump_Node := Empty;
       end if;
    end Set_Debug_Sloc;
@@ -573,6 +616,7 @@ package body Sprint is
          Debug_Flag_G := False;
          Debug_Flag_O := False;
          Debug_Flag_S := False;
+         First_Debug_Sloc := No_Location;
 
          --  Dump requested units
 
@@ -590,6 +634,7 @@ package body Sprint is
                if Debug_Generated_Code then
                   Set_Special_Output (Print_Debug_Line'Access);
                   Create_Debug_Source (Source_Index (U), Debug_Sloc);
+                  First_Debug_Sloc := Debug_Sloc;
                   Write_Source_Line (1);
                   Last_Line_Printed := 1;
                   Sprint_Node (Cunit (U));
@@ -800,6 +845,7 @@ package body Sprint is
             --  do not duplicate the output at this point.
 
             if Nkind (Node) = N_Freeze_Entity
+              or else Nkind (Node) = N_Freeze_Generic_Entity
               or else Nkind (Node) = N_Implicit_Label_Declaration
             then
                Sprint_Node_Actual (Node);
@@ -1130,7 +1176,7 @@ package body Sprint is
 
             if Present (Identifier (Node))
               and then (not Has_Created_Identifier (Node)
-                          or else not Dump_Original_Only)
+                         or else not Dump_Original_Only)
             then
                Write_Rewrite_Str ("<<<");
                Write_Id (Identifier (Node));
@@ -1325,6 +1371,13 @@ package body Sprint is
                Sprint_Node (Variant_Part (Node));
             end if;
 
+         when N_Compound_Statement =>
+            Write_Indent_Str ("do");
+            Indent_Begin;
+            Sprint_Node_List (Actions (Node));
+            Indent_End;
+            Write_Indent_Str ("end;");
+
          when N_Conditional_Entry_Call =>
             Write_Indent_Str_Sloc ("select");
             Indent_Begin;
@@ -1342,10 +1395,55 @@ package body Sprint is
             Sprint_Node (Component_Definition (Node));
 
          --  A contract node should not appear in the tree. It is a semantic
-         --  node attached to entry and [generic] subprogram entities.
+         --  node attached to entry and [generic] subprogram entities. But we
+         --  still provide meaningful output, in case called from the debugger.
 
          when N_Contract =>
-            raise Program_Error;
+            declare
+               P : Node_Id;
+
+            begin
+               Indent_Begin;
+               Write_Str ("N_Contract node");
+               Write_Eol;
+
+               Write_Indent_Str ("Pre_Post_Conditions");
+               Indent_Begin;
+
+               P := Pre_Post_Conditions (Node);
+               while Present (P) loop
+                  Sprint_Node (P);
+                  P := Next_Pragma (P);
+               end loop;
+
+               Write_Eol;
+               Indent_End;
+
+               Write_Indent_Str ("Contract_Test_Cases");
+               Indent_Begin;
+
+               P := Contract_Test_Cases (Node);
+               while Present (P) loop
+                  Sprint_Node (P);
+                  P := Next_Pragma (P);
+               end loop;
+
+               Write_Eol;
+               Indent_End;
+
+               Write_Indent_Str ("Classifications");
+               Indent_Begin;
+
+               P := Classifications (Node);
+               while Present (P) loop
+                  Sprint_Node (P);
+                  P := Next_Pragma (P);
+               end loop;
+
+               Write_Eol;
+               Indent_End;
+               Indent_End;
+            end;
 
          when N_Decimal_Fixed_Point_Definition =>
             Write_Str_With_Col_Check_Sloc (" delta ");
@@ -1862,6 +1960,16 @@ package body Sprint is
                Write_Rewrite_Str (">>>");
             end if;
 
+         when N_Freeze_Generic_Entity =>
+            if Dump_Original_Only then
+               null;
+
+            else
+               Write_Indent;
+               Write_Str_With_Col_Check_Sloc ("freeze_generic ");
+               Write_Id (Entity (Node));
+            end if;
+
          when N_Full_Type_Declaration =>
             Write_Indent_Str_Sloc ("type ");
             Sprint_Node (Defining_Identifier (Node));
@@ -1993,11 +2101,12 @@ package body Sprint is
                if not Has_Parens then
                   Write_Char ('(');
                end if;
+
                Write_Str_With_Col_Check_Sloc ("if ");
                Sprint_Node (Condition);
                Write_Str_With_Col_Check (" then ");
 
-               --  Defense against junk here!
+               --  Defense against junk here
 
                if Present (Then_Expr) then
                   Sprint_Node (Then_Expr);
@@ -2228,7 +2337,33 @@ package body Sprint is
                      Write_Str_With_Col_Check ("not null ");
                   end if;
 
-                  Sprint_Node (Object_Definition (Node));
+                  --  Print type. We used to print the Object_Definition from
+                  --  the node, but it is much more useful to print the Etype
+                  --  of the defining identifier for the case where the nominal
+                  --  type is an unconstrained array type. For example, this
+                  --  will be a clear reference to the Itype with the bounds
+                  --  in the case of a type like String. The object after
+                  --  all is constrained, even if its nominal subtype is
+                  --  unconstrained.
+
+                  declare
+                     Odef : constant Node_Id := Object_Definition (Node);
+
+                  begin
+                     if Nkind (Odef) = N_Identifier
+                       and then Present (Etype (Odef))
+                       and then Is_Array_Type (Etype (Odef))
+                       and then not Is_Constrained (Etype (Odef))
+                       and then Present (Etype (Def_Id))
+                     then
+                        Sprint_Node (Etype (Def_Id));
+
+                     --  In other cases, the nominal type is fine to print
+
+                     else
+                        Sprint_Node (Odef);
+                     end if;
+                  end;
 
                   if Present (Expression (Node)) then
                      Write_Str (" := ");
@@ -2478,6 +2613,18 @@ package body Sprint is
             Sprint_Node_Sloc (Specification (Node));
             Write_Char (';');
 
+            --  If this is an instantiation, get the aspects from the original
+            --  instantiation node.
+
+            if Is_Generic_Instance (Defining_Entity (Node))
+              and then Has_Aspects
+                         (Package_Instantiation (Defining_Entity (Node)))
+            then
+               Sprint_Aspect_Specifications
+                 (Package_Instantiation (Defining_Entity (Node)),
+                   Semicolon => True);
+            end if;
+
          when N_Package_Instantiation =>
             Extra_Blank_Line;
             Write_Indent_Str_Sloc ("package ");
@@ -2498,11 +2645,27 @@ package body Sprint is
             Write_Str_With_Col_Check_Sloc ("package ");
             Sprint_Node (Defining_Unit_Name (Node));
 
-            if Nkind (Parent (Node)) = N_Package_Declaration
+            if Nkind (Parent (Node)) = N_Generic_Package_Declaration
               and then Has_Aspects (Parent (Node))
             then
                Sprint_Aspect_Specifications
                  (Parent (Node), Semicolon => False);
+
+            --  An instantiation is rewritten as a package declaration, but
+            --  the aspects belong to the instantiation node.
+
+            elsif Nkind (Parent (Node)) = N_Package_Declaration then
+               declare
+                  Pack : constant Entity_Id := Defining_Entity (Node);
+
+               begin
+                  if not Is_Generic_Instance (Pack) then
+                     if Has_Aspects (Parent (Node)) then
+                        Sprint_Aspect_Specifications
+                          (Parent (Node), Semicolon => False);
+                     end if;
+                  end if;
+               end;
             end if;
 
             Write_Str (" is");
@@ -2763,6 +2926,32 @@ package body Sprint is
             Write_Str (" => ");
             Sprint_Node (Condition (Node));
 
+         when N_Raise_Expression =>
+            declare
+               Has_Parens : constant Boolean := Paren_Count (Node) > 0;
+
+            begin
+               --  The syntax for raise_expression does not include parentheses
+               --  but sometimes parentheses are required, so unconditionally
+               --  generate them here unless already present.
+
+               if not Has_Parens then
+                  Write_Char ('(');
+               end if;
+
+               Write_Str_With_Col_Check_Sloc ("raise ");
+               Sprint_Node (Name (Node));
+
+               if Present (Expression (Node)) then
+                  Write_Str_With_Col_Check (" with ");
+                  Sprint_Node (Expression (Node));
+               end if;
+
+               if not Has_Parens then
+                  Write_Char (')');
+               end if;
+            end;
+
          when N_Raise_Constraint_Error =>
 
             --  This node can be used either as a subexpression or as a
@@ -2811,6 +3000,12 @@ package body Sprint is
          when N_Raise_Statement =>
             Write_Indent_Str_Sloc ("raise ");
             Sprint_Node (Name (Node));
+
+            if Present (Expression (Node)) then
+               Write_Str_With_Col_Check_Sloc (" with ");
+               Sprint_Node (Expression (Node));
+            end if;
+
             Write_Char (';');
 
          when N_Range =>
@@ -3025,10 +3220,6 @@ package body Sprint is
 
             Write_Char (';');
 
-         when N_Subprogram_Info =>
-            Sprint_Node (Identifier (Node));
-            Write_Str_With_Col_Check_Sloc ("'subprogram_info");
-
          when N_Subprogram_Renaming_Declaration =>
             Write_Indent;
             Sprint_Node (Specification (Node));
@@ -3238,7 +3429,7 @@ package body Sprint is
             --  correspond to the non-existent children of Text_IO.
 
             if Dump_Original_Only
-              and then Is_Text_IO_Kludge_Unit (Name (Node))
+              and then Is_Text_IO_Special_Unit (Name (Node))
             then
                null;
 
@@ -3277,7 +3468,10 @@ package body Sprint is
       --  Print aspects, except for special case of package declaration,
       --  where the aspects are printed inside the package specification.
 
-      if Has_Aspects (Node) and Nkind (Node) /= N_Package_Declaration then
+      if Has_Aspects (Node)
+         and then not Nkind_In (Node, N_Package_Declaration,
+                                      N_Generic_Package_Declaration)
+      then
          Sprint_Aspect_Specifications (Node, Semicolon => True);
       end if;
 
@@ -3942,7 +4136,7 @@ package body Sprint is
               and then Defining_Entity (P) = Typ
             then
                --  We must set Itype_Printed true before the recursive call to
-               --  print the node, otherwise we get an infinite recursion!
+               --  print the node, otherwise we get an infinite recursion.
 
                Set_Itype_Printed (Typ, True);
 
@@ -3986,7 +4180,7 @@ package body Sprint is
 
                   --  Array types and string types
 
-                  when E_Array_Type | E_String_Type =>
+                  when E_Array_Type =>
                      Write_Header;
                      Write_Str ("array (");
 
@@ -4225,6 +4419,7 @@ package body Sprint is
                         Len : constant Uint :=
                                 String_Literal_Length (Typ);
                      begin
+                        Write_Header (False);
                         Write_Str ("String (");
                         Write_Int (UI_To_Int (LB));
                         Write_Str (" .. ");

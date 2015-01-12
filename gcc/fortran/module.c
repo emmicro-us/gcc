@@ -1,6 +1,6 @@
 /* Handle modules, which amounts to loading and saving symbols and
    their attendant structures.
-   Copyright (C) 2000-2013 Free Software Foundation, Inc.
+   Copyright (C) 2000-2015 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -71,16 +71,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "arith.h"
 #include "match.h"
 #include "parse.h" /* FIXME */
-#include "md5.h"
 #include "constructor.h"
 #include "cpp.h"
 #include "tree.h"
+#include "stringpool.h"
+#include "scanner.h"
+#include <zlib.h>
 
 #define MODULE_EXTENSION ".mod"
 
-/* Don't put any single quote (') in MOD_VERSION, 
-   if yout want it to be recognized.  */
-#define MOD_VERSION "10"
+/* Don't put any single quote (') in MOD_VERSION, if you want it to be
+   recognized.  */
+#define MOD_VERSION "13"
 
 
 /* Structure that describes a position within a module file.  */
@@ -88,7 +90,7 @@ along with GCC; see the file COPYING3.  If not see
 typedef struct
 {
   int column, line;
-  fpos_t pos;
+  long pos;
 }
 module_locus;
 
@@ -180,18 +182,23 @@ pointer_info;
 
 /* Local variables */
 
-/* The FILE for the module we're reading or writing.  */
-static FILE *module_fp;
+/* The gzFile for the module we're reading or writing.  */
+static gzFile module_fp;
 
-/* MD5 context structure.  */
-static struct md5_ctx ctx;
 
 /* The name of the module we're reading (USE'ing) or writing.  */
 static const char *module_name;
 static gfc_use_list *module_list;
 
+/* If we're reading an intrinsic module, this is its ID.  */
+static intmod_id current_intmod;
+
+/* Content of module.  */
+static char* module_content;
+
+static long module_pos;
 static int module_line, module_column, only_flag;
-static int prev_module_line, prev_module_column, prev_character;
+static int prev_module_line, prev_module_column;
 
 static enum
 { IO_INPUT, IO_OUTPUT }
@@ -520,8 +527,8 @@ gfc_match_use (void)
     {
       if ((m = gfc_match (" %n ::", module_nature)) == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F2003, "module "
-			      "nature in USE statement at %C") == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F2003, "module "
+			       "nature in USE statement at %C"))
 	    goto cleanup;
 
 	  if (strcmp (module_nature, "intrinsic") == 0)
@@ -555,8 +562,7 @@ gfc_match_use (void)
     {
       m = gfc_match (" ::");
       if (m == MATCH_YES &&
-	  gfc_notify_std (GFC_STD_F2003,
-			  "\"USE :: module\" at %C") == FAILURE)
+	  !gfc_notify_std(GFC_STD_F2003, "\"USE :: module\" at %C"))
 	goto cleanup;
 
       if (m != MATCH_YES)
@@ -623,9 +629,8 @@ gfc_match_use (void)
 	  m = gfc_match (" =>");
 
 	  if (type == INTERFACE_USER_OP && m == MATCH_YES
-	      && (gfc_notify_std (GFC_STD_F2003, "Renaming "
-				  "operators in USE statements at %C")
-		 == FAILURE))
+	      && (!gfc_notify_std(GFC_STD_F2003, "Renaming "
+				  "operators in USE statements at %C")))
 	    goto cleanup;
 
 	  if (type == INTERFACE_USER_OP)
@@ -665,7 +670,7 @@ gfc_match_use (void)
 	  if (strcmp (new_use->use_name, use_list->module_name) == 0
 	      || strcmp (new_use->local_name, use_list->module_name) == 0)
 	    {
-	      gfc_error ("The name '%s' at %C has already been used as "
+	      gfc_error ("The name %qs at %C has already been used as "
 			 "an external module name.", use_list->module_name);
 	      goto cleanup;
 	    }
@@ -943,6 +948,76 @@ free_true_name (true_name *t)
 
 /* Module reading and writing.  */
 
+/* The following are versions similar to the ones in scanner.c, but
+   for dealing with compressed module files.  */
+
+static gzFile
+gzopen_included_file_1 (const char *name, gfc_directorylist *list,
+                     bool module, bool system)
+{
+  char *fullname;
+  gfc_directorylist *p;
+  gzFile f;
+
+  for (p = list; p; p = p->next)
+    {
+      if (module && !p->use_for_modules)
+       continue;
+
+      fullname = (char *) alloca(strlen (p->path) + strlen (name) + 1);
+      strcpy (fullname, p->path);
+      strcat (fullname, name);
+
+      f = gzopen (fullname, "r");
+      if (f != NULL)
+       {
+         if (gfc_cpp_makedep ())
+           gfc_cpp_add_dep (fullname, system);
+
+         return f;
+       }
+    }
+
+  return NULL;
+}
+
+static gzFile 
+gzopen_included_file (const char *name, bool include_cwd, bool module)
+{
+  gzFile f = NULL;
+
+  if (IS_ABSOLUTE_PATH (name) || include_cwd)
+    {
+      f = gzopen (name, "r");
+      if (f && gfc_cpp_makedep ())
+       gfc_cpp_add_dep (name, false);
+    }
+
+  if (!f)
+    f = gzopen_included_file_1 (name, include_dirs, module, false);
+
+  return f;
+}
+
+static gzFile
+gzopen_intrinsic_module (const char* name)
+{
+  gzFile f = NULL;
+
+  if (IS_ABSOLUTE_PATH (name))
+    {
+      f = gzopen (name, "r");
+      if (f && gfc_cpp_makedep ())
+        gfc_cpp_add_dep (name, true);
+    }
+
+  if (!f)
+    f = gzopen_included_file_1 (name, intrinsic_modules_dirs, true, true);
+
+  return f;
+}
+
+
 typedef enum
 {
   ATOM_NAME, ATOM_LPAREN, ATOM_RPAREN, ATOM_INTEGER, ATOM_STRING
@@ -973,20 +1048,21 @@ static void bad_module (const char *) ATTRIBUTE_NORETURN;
 static void
 bad_module (const char *msgid)
 {
-  fclose (module_fp);
+  XDELETEVEC (module_content);
+  module_content = NULL;
 
   switch (iomode)
     {
     case IO_INPUT:
-      gfc_fatal_error ("Reading module %s at line %d column %d: %s",
+      gfc_fatal_error ("Reading module %qs at line %d column %d: %s",
 	  	       module_name, module_line, module_column, msgid);
       break;
     case IO_OUTPUT:
-      gfc_fatal_error ("Writing module %s at line %d column %d: %s",
+      gfc_fatal_error ("Writing module %qs at line %d column %d: %s",
 	  	       module_name, module_line, module_column, msgid);
       break;
     default:
-      gfc_fatal_error ("Module %s at line %d column %d: %s",
+      gfc_fatal_error ("Module %qs at line %d column %d: %s",
 	  	       module_name, module_line, module_column, msgid);
       break;
     }
@@ -1000,7 +1076,7 @@ set_module_locus (module_locus *m)
 {
   module_column = m->column;
   module_line = m->line;
-  fsetpos (module_fp, &m->pos);
+  module_pos = m->pos;
 }
 
 
@@ -1011,7 +1087,7 @@ get_module_locus (module_locus *m)
 {
   m->column = module_column;
   m->line = module_line;
-  fgetpos (module_fp, &m->pos);
+  m->pos = module_pos;
 }
 
 
@@ -1021,16 +1097,12 @@ get_module_locus (module_locus *m)
 static int
 module_char (void)
 {
-  int c;
-
-  c = getc (module_fp);
-
-  if (c == EOF)
+  const char c = module_content[module_pos++];
+  if (c == '\0')
     bad_module ("Unexpected EOF");
 
   prev_module_line = module_line;
   prev_module_column = module_column;
-  prev_character = c;
 
   if (c == '\n')
     {
@@ -1050,7 +1122,7 @@ module_unget_char (void)
 {
   module_line = prev_module_line;
   module_column = prev_module_column;
-  ungetc (prev_character, module_fp);
+  module_pos--;
 }
 
 /* Parse a string constant.  The delimiter is guaranteed to be a
@@ -1433,12 +1505,9 @@ read_string (void)
 static void
 write_char (char out)
 {
-  if (putc (out, module_fp) == EOF)
+  if (gzputc (module_fp, out) == EOF)
     gfc_fatal_error ("Error writing modules file: %s", xstrerror (errno));
 
-  /* Add this to our MD5.  */
-  md5_process_bytes (&out, sizeof (out), &ctx);
-  
   if (out != '\n')
     module_column++;
   else
@@ -1689,7 +1758,7 @@ unquote_string (const char *s)
       if (p[1] == '\\')
 	p++;
       else if (p[1] == 'U')
-	p += 9; /* That is a "\U????????". */
+	p += 9; /* That is a "\U????????".  */
       else
 	gfc_internal_error ("unquote_string(): got bad string");
     }
@@ -1811,7 +1880,7 @@ typedef enum
   AB_IS_BIND_C, AB_IS_C_INTEROP, AB_IS_ISO_C, AB_ABSTRACT, AB_ZERO_COMP,
   AB_IS_CLASS, AB_PROCEDURE, AB_PROC_POINTER, AB_ASYNCHRONOUS, AB_CODIMENSION,
   AB_COARRAY_COMP, AB_VTYPE, AB_VTAB, AB_CONTIGUOUS, AB_CLASS_POINTER,
-  AB_IMPLICIT_PURE, AB_ARTIFICIAL, AB_UNLIMITED_POLY
+  AB_IMPLICIT_PURE, AB_ARTIFICIAL, AB_UNLIMITED_POLY, AB_OMP_DECLARE_TARGET
 }
 ab_attribute;
 
@@ -1866,6 +1935,7 @@ static const mstring attr_bits[] =
     minit ("CLASS_POINTER", AB_CLASS_POINTER),
     minit ("IMPLICIT_PURE", AB_IMPLICIT_PURE),
     minit ("UNLIMITED_POLY", AB_UNLIMITED_POLY),
+    minit ("OMP_DECLARE_TARGET", AB_OMP_DECLARE_TARGET),
     minit (NULL, -1)
 };
 
@@ -2044,6 +2114,8 @@ mio_symbol_attribute (symbol_attribute *attr)
 	MIO_NAME (ab_attribute) (AB_VTYPE, attr_bits);
       if (attr->vtab)
 	MIO_NAME (ab_attribute) (AB_VTAB, attr_bits);
+      if (attr->omp_declare_target)
+	MIO_NAME (ab_attribute) (AB_OMP_DECLARE_TARGET, attr_bits);
 
       mio_rparen ();
 
@@ -2206,6 +2278,9 @@ mio_symbol_attribute (symbol_attribute *attr)
 	      break;
 	    case AB_VTAB:
 	      attr->vtab = 1;
+	      break;
+	    case AB_OMP_DECLARE_TARGET:
+	      attr->omp_declare_target = 1;
 	      break;
 	    }
 	}
@@ -3064,6 +3139,7 @@ static const mstring intrinsics[] =
     minit ("LE", INTRINSIC_LE_OS),
     minit ("NOT", INTRINSIC_NOT),
     minit ("PARENTHESES", INTRINSIC_PARENTHESES),
+    minit ("USER", INTRINSIC_USER),
     minit (NULL, -1)
 };
 
@@ -3100,7 +3176,8 @@ fix_mio_expr (gfc_expr *e)
 	  && !e->symtree->n.sym->attr.dummy)
 	e->symtree = ns_st;
     }
-  else if (e->expr_type == EXPR_FUNCTION && e->value.function.name)
+  else if (e->expr_type == EXPR_FUNCTION
+	   && (e->value.function.name || e->value.function.isym))
     {
       gfc_symbol *sym;
 
@@ -3215,6 +3292,32 @@ mio_expr (gfc_expr **ep)
 	  mio_expr (&e->value.op.op2);
 	  break;
 
+	case INTRINSIC_USER:
+	  /* INTRINSIC_USER should not appear in resolved expressions,
+	     though for UDRs we need to stream unresolved ones.  */
+	  if (iomode == IO_OUTPUT)
+	    write_atom (ATOM_STRING, e->value.op.uop->name);
+	  else
+	    {
+	      char *name = read_string ();
+	      const char *uop_name = find_use_name (name, true);
+	      if (uop_name == NULL)
+		{
+		  size_t len = strlen (name);
+		  char *name2 = XCNEWVEC (char, len + 2);
+		  memcpy (name2, name, len);
+		  name2[len] = ' ';
+		  name2[len + 1] = '\0';
+		  free (name);
+		  uop_name = name = name2;
+		}
+	      e->value.op.uop = gfc_get_uop (uop_name);
+	      free (name);
+	    }
+	  mio_expr (&e->value.op.op1);
+	  mio_expr (&e->value.op.op2);
+	  break;
+
 	default:
 	  bad_module ("Bad operator");
 	}
@@ -3229,24 +3332,50 @@ mio_expr (gfc_expr **ep)
 	{
 	  e->value.function.name
 	    = mio_allocated_string (e->value.function.name);
-	  flag = e->value.function.esym != NULL;
-	  mio_integer (&flag);
-	  if (flag)
-	    mio_symbol_ref (&e->value.function.esym);
+	  if (e->value.function.esym)
+	    flag = 1;
+	  else if (e->ref)
+	    flag = 2;
+	  else if (e->value.function.isym == NULL)
+	    flag = 3;
 	  else
-	    write_atom (ATOM_STRING, e->value.function.isym->name);
+	    flag = 0;
+	  mio_integer (&flag);
+	  switch (flag)
+	    {
+	    case 1:
+	      mio_symbol_ref (&e->value.function.esym);
+	      break;
+	    case 2:
+	      mio_ref_list (&e->ref);
+	      break;
+	    case 3:
+	      break;
+	    default:
+	      write_atom (ATOM_STRING, e->value.function.isym->name);
+	    }
 	}
       else
 	{
 	  require_atom (ATOM_STRING);
-	  e->value.function.name = gfc_get_string (atom_string);
+	  if (atom_string[0] == '\0')
+	    e->value.function.name = NULL;
+	  else
+	    e->value.function.name = gfc_get_string (atom_string);
 	  free (atom_string);
 
 	  mio_integer (&flag);
-	  if (flag)
-	    mio_symbol_ref (&e->value.function.esym);
-	  else
+	  switch (flag)
 	    {
+	    case 1:
+	      mio_symbol_ref (&e->value.function.esym);
+	      break;
+	    case 2:
+	      mio_ref_list (&e->ref);
+	      break;
+	    case 3:
+	      break;
+	    default:
 	      require_atom (ATOM_STRING);
 	      e->value.function.isym = gfc_find_function (atom_string);
 	      free (atom_string);
@@ -3707,6 +3836,203 @@ mio_full_f2k_derived (gfc_symbol *sym)
   mio_rparen ();
 }
 
+static const mstring omp_declare_simd_clauses[] =
+{
+    minit ("INBRANCH", 0),
+    minit ("NOTINBRANCH", 1),
+    minit ("SIMDLEN", 2),
+    minit ("UNIFORM", 3),
+    minit ("LINEAR", 4),
+    minit ("ALIGNED", 5),
+    minit (NULL, -1)
+};
+
+/* Handle !$omp declare simd.  */
+
+static void
+mio_omp_declare_simd (gfc_namespace *ns, gfc_omp_declare_simd **odsp)
+{
+  if (iomode == IO_OUTPUT)
+    {
+      if (*odsp == NULL)
+	return;
+    }
+  else if (peek_atom () != ATOM_LPAREN)
+    return;
+
+  gfc_omp_declare_simd *ods = *odsp;
+
+  mio_lparen ();
+  if (iomode == IO_OUTPUT)
+    {
+      write_atom (ATOM_NAME, "OMP_DECLARE_SIMD");
+      if (ods->clauses)
+	{
+	  gfc_omp_namelist *n;
+
+	  if (ods->clauses->inbranch)
+	    mio_name (0, omp_declare_simd_clauses);
+	  if (ods->clauses->notinbranch)
+	    mio_name (1, omp_declare_simd_clauses);
+	  if (ods->clauses->simdlen_expr)
+	    {
+	      mio_name (2, omp_declare_simd_clauses);
+	      mio_expr (&ods->clauses->simdlen_expr);
+	    }
+	  for (n = ods->clauses->lists[OMP_LIST_UNIFORM]; n; n = n->next)
+	    {
+	      mio_name (3, omp_declare_simd_clauses);
+	      mio_symbol_ref (&n->sym);
+	    }
+	  for (n = ods->clauses->lists[OMP_LIST_LINEAR]; n; n = n->next)
+	    {
+	      mio_name (4, omp_declare_simd_clauses);
+	      mio_symbol_ref (&n->sym);
+	      mio_expr (&n->expr);
+	    }
+	  for (n = ods->clauses->lists[OMP_LIST_ALIGNED]; n; n = n->next)
+	    {
+	      mio_name (5, omp_declare_simd_clauses);
+	      mio_symbol_ref (&n->sym);
+	      mio_expr (&n->expr);
+	    }
+	}
+    }
+  else
+    {
+      gfc_omp_namelist **ptrs[3] = { NULL, NULL, NULL };
+
+      require_atom (ATOM_NAME);
+      *odsp = ods = gfc_get_omp_declare_simd ();
+      ods->where = gfc_current_locus;
+      ods->proc_name = ns->proc_name;
+      if (peek_atom () == ATOM_NAME)
+	{
+	  ods->clauses = gfc_get_omp_clauses ();
+	  ptrs[0] = &ods->clauses->lists[OMP_LIST_UNIFORM];
+	  ptrs[1] = &ods->clauses->lists[OMP_LIST_LINEAR];
+	  ptrs[2] = &ods->clauses->lists[OMP_LIST_ALIGNED];
+	}
+      while (peek_atom () == ATOM_NAME)
+	{
+	  gfc_omp_namelist *n;
+	  int t = mio_name (0, omp_declare_simd_clauses);
+
+	  switch (t)
+	    {
+	    case 0: ods->clauses->inbranch = true; break;
+	    case 1: ods->clauses->notinbranch = true; break;
+	    case 2: mio_expr (&ods->clauses->simdlen_expr); break;
+	    case 3:
+	    case 4:
+	    case 5:
+	      *ptrs[t - 3] = n = gfc_get_omp_namelist ();
+	      ptrs[t - 3] = &n->next;
+	      mio_symbol_ref (&n->sym);
+	      if (t != 3)
+		mio_expr (&n->expr);
+	      break;
+	    }
+	}
+    }
+
+  mio_omp_declare_simd (ns, &ods->next);
+
+  mio_rparen ();
+}
+
+
+static const mstring omp_declare_reduction_stmt[] =
+{
+    minit ("ASSIGN", 0),
+    minit ("CALL", 1),
+    minit (NULL, -1)
+};
+
+
+static void
+mio_omp_udr_expr (gfc_omp_udr *udr, gfc_symbol **sym1, gfc_symbol **sym2,
+		  gfc_namespace *ns, bool is_initializer)
+{
+  if (iomode == IO_OUTPUT)
+    {
+      if ((*sym1)->module == NULL)
+	{
+	  (*sym1)->module = module_name;
+	  (*sym2)->module = module_name;
+	}
+      mio_symbol_ref (sym1);
+      mio_symbol_ref (sym2);
+      if (ns->code->op == EXEC_ASSIGN)
+	{
+	  mio_name (0, omp_declare_reduction_stmt);
+	  mio_expr (&ns->code->expr1);
+	  mio_expr (&ns->code->expr2);
+	}
+      else
+	{
+	  int flag;
+	  mio_name (1, omp_declare_reduction_stmt);
+	  mio_symtree_ref (&ns->code->symtree);
+	  mio_actual_arglist (&ns->code->ext.actual);
+
+	  flag = ns->code->resolved_isym != NULL;
+	  mio_integer (&flag);
+	  if (flag)
+	    write_atom (ATOM_STRING, ns->code->resolved_isym->name);
+	  else
+	    mio_symbol_ref (&ns->code->resolved_sym);
+	}
+    }
+  else
+    {
+      pointer_info *p1 = mio_symbol_ref (sym1);
+      pointer_info *p2 = mio_symbol_ref (sym2);
+      gfc_symbol *sym;
+      gcc_assert (p1->u.rsym.ns == p2->u.rsym.ns);
+      gcc_assert (p1->u.rsym.sym == NULL);
+      /* Add hidden symbols to the symtree.  */
+      pointer_info *q = get_integer (p1->u.rsym.ns);
+      q->u.pointer = (void *) ns;
+      sym = gfc_new_symbol (is_initializer ? "omp_priv" : "omp_out", ns);
+      sym->ts = udr->ts;
+      sym->module = gfc_get_string (p1->u.rsym.module);
+      associate_integer_pointer (p1, sym);
+      sym->attr.omp_udr_artificial_var = 1;
+      gcc_assert (p2->u.rsym.sym == NULL);
+      sym = gfc_new_symbol (is_initializer ? "omp_orig" : "omp_in", ns);
+      sym->ts = udr->ts;
+      sym->module = gfc_get_string (p2->u.rsym.module);
+      associate_integer_pointer (p2, sym);
+      sym->attr.omp_udr_artificial_var = 1;
+      if (mio_name (0, omp_declare_reduction_stmt) == 0)
+	{
+	  ns->code = gfc_get_code (EXEC_ASSIGN);
+	  mio_expr (&ns->code->expr1);
+	  mio_expr (&ns->code->expr2);
+	}
+      else
+	{
+	  int flag;
+	  ns->code = gfc_get_code (EXEC_CALL);
+	  mio_symtree_ref (&ns->code->symtree);
+	  mio_actual_arglist (&ns->code->ext.actual);
+
+	  mio_integer (&flag);
+	  if (flag)
+	    {
+	      require_atom (ATOM_STRING);
+	      ns->code->resolved_isym = gfc_find_subroutine (atom_string);
+	      free (atom_string);
+	    }
+	  else
+	    mio_symbol_ref (&ns->code->resolved_sym);
+	}
+      ns->code->loc = gfc_current_locus;
+      ns->omp_udr_ns = 1;
+    }
+}
+
 
 /* Unlike most other routines, the address of the symbol node is already
    fixed on input and the name/module has already been filled in.
@@ -3721,6 +4047,13 @@ mio_symbol (gfc_symbol *sym)
   mio_lparen ();
 
   mio_symbol_attribute (&sym->attr);
+
+  /* Note that components are always saved, even if they are supposed
+     to be private.  Component access is checked during searching.  */
+  mio_component_list (&sym->components, sym->attr.vtype);
+  if (sym->components != NULL)
+    sym->component_access
+      = MIO_NAME (gfc_access) (sym->component_access, access_types);
 
   mio_typespec (&sym->ts);
   if (sym->ts.type == BT_CLASS)
@@ -3750,14 +4083,6 @@ mio_symbol (gfc_symbol *sym)
   if (sym->attr.cray_pointee)
     mio_symbol_ref (&sym->cp_pointer);
 
-  /* Note that components are always saved, even if they are supposed
-     to be private.  Component access is checked during searching.  */
-  mio_component_list (&sym->components, sym->attr.vtype);
-
-  if (sym->components != NULL)
-    sym->component_access
-      = MIO_NAME (gfc_access) (sym->component_access, access_types);
-
   /* Load/save the f2k_derived namespace of a derived-type symbol.  */
   mio_full_f2k_derived (sym);
 
@@ -3774,13 +4099,21 @@ mio_symbol (gfc_symbol *sym)
   else
     {
       mio_integer (&intmod);
-      sym->from_intmod = (intmod_id) intmod;
+      if (current_intmod)
+	sym->from_intmod = current_intmod;
+      else
+	sym->from_intmod = (intmod_id) intmod;
     }
   
   mio_integer (&(sym->intmod_sym_id));
 
   if (sym->attr.flavor == FL_DERIVED)
     mio_integer (&(sym->hash_value));
+
+  if (sym->formal_ns
+      && sym->formal_ns->proc_name == sym
+      && sym->formal_ns->entries == NULL)
+    mio_omp_declare_simd (sym->formal_ns, &sym->formal_ns->omp_declare_simd);
 
   mio_rparen ();
 }
@@ -4030,7 +4363,7 @@ load_generic_interfaces (void)
 	      if (st && !sym->attr.generic
 		     && !st->ambiguous
 		     && sym->module
-		     && strcmp(module, sym->module))
+		     && strcmp (module, sym->module))
 		{
 		  ambiguous_set = true;
 		  st->ambiguous = 1;
@@ -4261,6 +4594,119 @@ load_derived_extensions (void)
 }
 
 
+/* This function loads OpenMP user defined reductions.  */
+static void
+load_omp_udrs (void)
+{
+  mio_lparen ();
+  while (peek_atom () != ATOM_RPAREN)
+    {
+      const char *name, *newname;
+      char *altname;
+      gfc_typespec ts;
+      gfc_symtree *st;
+      gfc_omp_reduction_op rop = OMP_REDUCTION_USER;
+
+      mio_lparen ();
+      mio_pool_string (&name);
+      mio_typespec (&ts);
+      if (strncmp (name, "operator ", sizeof ("operator ") - 1) == 0)
+	{
+	  const char *p = name + sizeof ("operator ") - 1;
+	  if (strcmp (p, "+") == 0)
+	    rop = OMP_REDUCTION_PLUS;
+	  else if (strcmp (p, "*") == 0)
+	    rop = OMP_REDUCTION_TIMES;
+	  else if (strcmp (p, "-") == 0)
+	    rop = OMP_REDUCTION_MINUS;
+	  else if (strcmp (p, ".and.") == 0)
+	    rop = OMP_REDUCTION_AND;
+	  else if (strcmp (p, ".or.") == 0)
+	    rop = OMP_REDUCTION_OR;
+	  else if (strcmp (p, ".eqv.") == 0)
+	    rop = OMP_REDUCTION_EQV;
+	  else if (strcmp (p, ".neqv.") == 0)
+	    rop = OMP_REDUCTION_NEQV;
+	}
+      altname = NULL;
+      if (rop == OMP_REDUCTION_USER && name[0] == '.')
+	{
+	  size_t len = strlen (name + 1);
+	  altname = XALLOCAVEC (char, len);
+	  gcc_assert (name[len] == '.');
+	  memcpy (altname, name + 1, len - 1);
+	  altname[len - 1] = '\0';
+	}
+      newname = name;
+      if (rop == OMP_REDUCTION_USER)
+	newname = find_use_name (altname ? altname : name, !!altname);
+      else if (only_flag && find_use_operator ((gfc_intrinsic_op) rop) == NULL)
+	newname = NULL;
+      if (newname == NULL)
+	{
+	  skip_list (1);
+	  continue;
+	}
+      if (altname && newname != altname)
+	{
+	  size_t len = strlen (newname);
+	  altname = XALLOCAVEC (char, len + 3);
+	  altname[0] = '.';
+	  memcpy (altname + 1, newname, len);
+	  altname[len + 1] = '.';
+	  altname[len + 2] = '\0';
+	  name = gfc_get_string (altname);
+	}
+      st = gfc_find_symtree (gfc_current_ns->omp_udr_root, name);
+      gfc_omp_udr *udr = gfc_omp_udr_find (st, &ts);
+      if (udr)
+	{
+	  require_atom (ATOM_INTEGER);
+	  pointer_info *p = get_integer (atom_int);
+	  if (strcmp (p->u.rsym.module, udr->omp_out->module))
+	    {
+	      gfc_error ("Ambiguous !$OMP DECLARE REDUCTION from "
+			 "module %s at %L",
+			 p->u.rsym.module, &gfc_current_locus);
+	      gfc_error ("Previous !$OMP DECLARE REDUCTION from module "
+			 "%s at %L",
+			 udr->omp_out->module, &udr->where);
+	    }
+	  skip_list (1);
+	  continue;
+	}
+      udr = gfc_get_omp_udr ();
+      udr->name = name;
+      udr->rop = rop;
+      udr->ts = ts;
+      udr->where = gfc_current_locus;
+      udr->combiner_ns = gfc_get_namespace (gfc_current_ns, 1);
+      udr->combiner_ns->proc_name = gfc_current_ns->proc_name;
+      mio_omp_udr_expr (udr, &udr->omp_out, &udr->omp_in, udr->combiner_ns,
+			false);
+      if (peek_atom () != ATOM_RPAREN)
+	{
+	  udr->initializer_ns = gfc_get_namespace (gfc_current_ns, 1);
+	  udr->initializer_ns->proc_name = gfc_current_ns->proc_name;
+	  mio_omp_udr_expr (udr, &udr->omp_priv, &udr->omp_orig,
+			    udr->initializer_ns, true);
+	}
+      if (st)
+	{
+	  udr->next = st->n.omp_udr;
+	  st->n.omp_udr = udr;
+	}
+      else
+	{
+	  st = gfc_new_symtree (&gfc_current_ns->omp_udr_root, name);
+	  st->n.omp_udr = udr;
+	}
+      mio_rparen ();
+    }
+  mio_rparen ();
+}
+
+
 /* Recursive function to traverse the pointer_info tree and load a
    needed symbol.  We return nonzero if we load a symbol and stop the
    traversal, because the act of loading can alter the tree.  */
@@ -4409,7 +4855,7 @@ check_for_ambiguous (gfc_symbol *st_sym, pointer_info *info)
 
   if (gfc_current_ns->proc_name && st_sym->name == gfc_current_ns->proc_name->name)
     {
-      gfc_error ("'%s' of module '%s', imported at %C, is also the name of the "
+      gfc_error ("%qs of module %qs, imported at %C, is also the name of the "
 		 "current program unit", st_sym->name, module_name);
       return true;
     }
@@ -4448,7 +4894,7 @@ check_for_ambiguous (gfc_symbol *st_sym, pointer_info *info)
 static void
 read_module (void)
 {
-  module_locus operator_interfaces, user_operators, extensions;
+  module_locus operator_interfaces, user_operators, extensions, omp_udrs;
   const char *p;
   char name[GFC_MAX_SYMBOL_LEN + 1];
   int i;
@@ -4470,6 +4916,10 @@ read_module (void)
   skip_list ();
 
   get_module_locus (&extensions);
+  skip_list ();
+
+  /* Skip OpenMP UDRs.  */
+  get_module_locus (&omp_udrs);
   skip_list ();
 
   mio_lparen ();
@@ -4526,14 +4976,6 @@ read_module (void)
 	  /* First seek to the symbol's component list.  */
 	  mio_lparen (); /* symbol opening.  */
 	  skip_list (); /* skip symbol attribute.  */
-	  skip_list (); /* typespec.  */
-	  require_atom (ATOM_INTEGER); /* namespace ref.  */
-	  require_atom (ATOM_INTEGER); /* common ref.  */
-	  skip_list (); /* formal args.  */
-	  /* no value.  */
-	  skip_list (); /* array_spec.  */
-	  require_atom (ATOM_INTEGER); /* result.  */
-	  /* not a cray pointer.  */
 
 	  mio_lparen (); /* component list opening.  */
 	  for (c = sym->components; c; c = c->next)
@@ -4745,6 +5187,10 @@ read_module (void)
   load_commons ();
   load_equiv ();
 
+  /* Load OpenMP user defined reductions.  */
+  set_module_locus (&omp_udrs);
+  load_omp_udrs ();
+
   /* At this point, we read those symbols that are needed but haven't
      been loaded yet.  If one symbol requires another, the other gets
      marked as NEEDED if its previous state was UNUSED.  */
@@ -4760,20 +5206,20 @@ read_module (void)
 
       if (u->op == INTRINSIC_NONE)
 	{
-	  gfc_error ("Symbol '%s' referenced at %L not found in module '%s'",
+	  gfc_error ("Symbol %qs referenced at %L not found in module %qs",
 		     u->use_name, &u->where, module_name);
 	  continue;
 	}
 
       if (u->op == INTRINSIC_USER)
 	{
-	  gfc_error ("User operator '%s' referenced at %L not found "
-		     "in module '%s'", u->use_name, &u->where, module_name);
+	  gfc_error ("User operator %qs referenced at %L not found "
+		     "in module %qs", u->use_name, &u->where, module_name);
 	  continue;
 	}
 
-      gfc_error ("Intrinsic operator '%s' referenced at %L not found "
-		 "in module '%s'", gfc_op2string (u->op), &u->where,
+      gfc_error ("Intrinsic operator %qs referenced at %L not found "
+		 "in module %qs", gfc_op2string (u->op), &u->where,
 		 module_name);
     }
 
@@ -4803,7 +5249,7 @@ check_access (gfc_access specific_access, gfc_access default_access)
   if (specific_access == ACCESS_PRIVATE)
     return FALSE;
 
-  if (gfc_option.flag_module_private)
+  if (flag_module_private)
     return default_access == ACCESS_PUBLIC;
   else
     return default_access != ACCESS_PRIVATE;
@@ -5050,7 +5496,7 @@ write_symbol (int n, gfc_symbol *sym)
   const char *label;
 
   if (sym->attr.flavor == FL_UNKNOWN || sym->attr.flavor == FL_LABEL)
-    gfc_internal_error ("write_symbol(): bad module symbol '%s'", sym->name);
+    gfc_internal_error ("write_symbol(): bad module symbol %qs", sym->name);
 
   mio_integer (&n);
 
@@ -5120,6 +5566,80 @@ write_symbol0 (gfc_symtree *st)
     }
 
   write_symbol0 (st->right);
+}
+
+
+static void
+write_omp_udr (gfc_omp_udr *udr)
+{
+  switch (udr->rop)
+    {
+    case OMP_REDUCTION_USER:
+      /* Non-operators can't be used outside of the module.  */
+      if (udr->name[0] != '.')
+	return;
+      else
+	{
+	  gfc_symtree *st;
+	  size_t len = strlen (udr->name + 1);
+	  char *name = XALLOCAVEC (char, len);
+	  memcpy (name, udr->name, len - 1);
+	  name[len - 1] = '\0';
+	  st = gfc_find_symtree (gfc_current_ns->uop_root, name);
+	  /* If corresponding user operator is private, don't write
+	     the UDR.  */
+	  if (st != NULL)
+	    {
+	      gfc_user_op *uop = st->n.uop;
+	      if (!check_access (uop->access, uop->ns->default_access))
+		return;
+	    }
+	}
+      break;
+    case OMP_REDUCTION_PLUS:
+    case OMP_REDUCTION_MINUS:
+    case OMP_REDUCTION_TIMES:
+    case OMP_REDUCTION_AND:
+    case OMP_REDUCTION_OR:
+    case OMP_REDUCTION_EQV:
+    case OMP_REDUCTION_NEQV:
+      /* If corresponding operator is private, don't write the UDR.  */
+      if (!check_access (gfc_current_ns->operator_access[udr->rop],
+			 gfc_current_ns->default_access))
+	return;
+      break;
+    default:
+      break;
+    }
+  if (udr->ts.type == BT_DERIVED || udr->ts.type == BT_CLASS)
+    {
+      /* If derived type is private, don't write the UDR.  */
+      if (!gfc_check_symbol_access (udr->ts.u.derived))
+	return;
+    }
+
+  mio_lparen ();
+  mio_pool_string (&udr->name);
+  mio_typespec (&udr->ts);
+  mio_omp_udr_expr (udr, &udr->omp_out, &udr->omp_in, udr->combiner_ns, false);
+  if (udr->initializer_ns)
+    mio_omp_udr_expr (udr, &udr->omp_priv, &udr->omp_orig,
+		      udr->initializer_ns, true);
+  mio_rparen ();
+}
+
+
+static void
+write_omp_udrs (gfc_symtree *st)
+{
+  if (st == NULL)
+    return;
+
+  write_omp_udrs (st->left);
+  gfc_omp_udr *udr;
+  for (udr = st->n.omp_udr; udr; udr = udr->next)
+    write_omp_udr (udr);
+  write_omp_udrs (st->right);
 }
 
 
@@ -5371,6 +5891,12 @@ write_module (void)
   write_char ('\n');
   write_char ('\n');
 
+  mio_lparen ();
+  write_omp_udrs (gfc_current_ns->omp_udr_root);
+  mio_rparen ();
+  write_char ('\n');
+  write_char ('\n');
+
   /* Write symbol information.  First we traverse all symbols in the
      primary namespace, writing those that need to be written.
      Sometimes writing one symbol will cause another to need to be
@@ -5395,61 +5921,47 @@ write_module (void)
 }
 
 
-/* Read a MD5 sum from the header of a module file.  If the file cannot
-   be opened, or we have any other error, we return -1.  */
+/* Read a CRC32 sum from the gzip trailer of a module file.  Returns
+   true on success, false on failure.  */
 
-static int
-read_md5_from_module_file (const char * filename, unsigned char md5[16])
+static bool
+read_crc32_from_module_file (const char* filename, uLong* crc)
 {
   FILE *file;
-  char buf[1024];
-  int n;
+  char buf[4];
+  unsigned int val;
 
-  /* Open the file.  */
-  if ((file = fopen (filename, "r")) == NULL)
-    return -1;
+  /* Open the file in binary mode.  */
+  if ((file = fopen (filename, "rb")) == NULL)
+    return false;
 
-  /* Read the first line.  */
-  if (fgets (buf, sizeof (buf) - 1, file) == NULL)
+  /* The gzip crc32 value is found in the [END-8, END-4] bytes of the
+     file. See RFC 1952.  */
+  if (fseek (file, -8, SEEK_END) != 0)
     {
       fclose (file);
-      return -1;
+      return false;
     }
 
-  /* The file also needs to be overwritten if the version number changed.  */
-  n = strlen ("GFORTRAN module version '" MOD_VERSION "' created");
-  if (strncmp (buf, "GFORTRAN module version '" MOD_VERSION "' created", n) != 0)
+  /* Read the CRC32.  */
+  if (fread (buf, 1, 4, file) != 4)
     {
       fclose (file);
-      return -1;
-    }
- 
-  /* Read a second line.  */
-  if (fgets (buf, sizeof (buf) - 1, file) == NULL)
-    {
-      fclose (file);
-      return -1;
+      return false;
     }
 
   /* Close the file.  */
   fclose (file);
 
-  /* If the header is not what we expect, or is too short, bail out.  */
-  if (strncmp (buf, "MD5:", 4) != 0 || strlen (buf) < 4 + 16)
-    return -1;
+  val = (buf[0] & 0xFF) + ((buf[1] & 0xFF) << 8) + ((buf[2] & 0xFF) << 16) 
+    + ((buf[3] & 0xFF) << 24);
+  *crc = val;
+  
+  /* For debugging, the CRC value printed in hexadecimal should match
+     the CRC printed by "zcat -l -v filename".
+     printf("CRC of file %s is %x\n", filename, val); */
 
-  /* Now, we have a real MD5, read it into the array.  */
-  for (n = 0; n < 16; n++)
-    {
-      unsigned int x;
-
-      if (sscanf (&(buf[4+2*n]), "%02x", &x) != 1)
-       return -1;
-
-      md5[n] = x;
-    }
-
-  return 0;
+  return true;
 }
 
 
@@ -5462,8 +5974,7 @@ gfc_dump_module (const char *name, int dump_flag)
 {
   int n;
   char *filename, *filename_tmp;
-  fpos_t md5_pos;
-  unsigned char md5_new[16], md5_old[16];
+  uLong crc, crc_old;
 
   n = strlen (name) + strlen (MODULE_EXTENSION) + 1;
   if (gfc_option.module_dir != NULL)
@@ -5489,7 +6000,7 @@ gfc_dump_module (const char *name, int dump_flag)
      module file, even if it was already there.  */
   if (!dump_flag)
     {
-      unlink (filename);
+      remove (filename);
       return;
     }
 
@@ -5497,20 +6008,13 @@ gfc_dump_module (const char *name, int dump_flag)
     gfc_cpp_add_target (filename);
 
   /* Write the module to the temporary file.  */
-  module_fp = fopen (filename_tmp, "w");
+  module_fp = gzopen (filename_tmp, "w");
   if (module_fp == NULL)
-    gfc_fatal_error ("Can't open module file '%s' for writing at %C: %s",
+    gfc_fatal_error ("Can't open module file %qs for writing at %C: %s",
 		     filename_tmp, xstrerror (errno));
 
-  /* Write the header, including space reserved for the MD5 sum.  */
-  fprintf (module_fp, "GFORTRAN module version '%s' created from %s\n"
-	   "MD5:", MOD_VERSION, gfc_source_file);
-  fgetpos (module_fp, &md5_pos);
-  fputs ("00000000000000000000000000000000 -- "
-	"If you edit this, you'll get what you deserve.\n\n", module_fp);
-
-  /* Initialize the MD5 context that will be used for output.  */
-  md5_init_ctx (&ctx);
+  gzprintf (module_fp, "GFORTRAN module version '%s' created from %s\n",
+	    MOD_VERSION, gfc_source_file);
 
   /* Write the module itself.  */
   iomode = IO_OUTPUT;
@@ -5525,40 +6029,37 @@ gfc_dump_module (const char *name, int dump_flag)
 
   write_char ('\n');
 
-  /* Write the MD5 sum to the header of the module file.  */
-  md5_finish_ctx (&ctx, md5_new);
-  fsetpos (module_fp, &md5_pos);
-  for (n = 0; n < 16; n++)
-    fprintf (module_fp, "%02x", md5_new[n]);
-
-  if (fclose (module_fp))
-    gfc_fatal_error ("Error writing module file '%s' for writing: %s",
+  if (gzclose (module_fp))
+    gfc_fatal_error ("Error writing module file %qs for writing: %s",
 		     filename_tmp, xstrerror (errno));
 
-  /* Read the MD5 from the header of the old module file and compare.  */
-  if (read_md5_from_module_file (filename, md5_old) != 0
-      || memcmp (md5_old, md5_new, sizeof (md5_old)) != 0)
+  /* Read the CRC32 from the gzip trailers of the module files and
+     compare.  */
+  if (!read_crc32_from_module_file (filename_tmp, &crc)
+      || !read_crc32_from_module_file (filename, &crc_old)
+      || crc_old != crc)
     {
       /* Module file have changed, replace the old one.  */
-      if (unlink (filename) && errno != ENOENT)
-	gfc_fatal_error ("Can't delete module file '%s': %s", filename,
+      if (remove (filename) && errno != ENOENT)
+	gfc_fatal_error ("Can't delete module file %qs: %s", filename,
 			 xstrerror (errno));
       if (rename (filename_tmp, filename))
-	gfc_fatal_error ("Can't rename module file '%s' to '%s': %s",
+	gfc_fatal_error ("Can't rename module file %qs to %qs: %s",
 			 filename_tmp, filename, xstrerror (errno));
     }
   else
     {
-      if (unlink (filename_tmp))
-	gfc_fatal_error ("Can't delete temporary module file '%s': %s",
+      if (remove (filename_tmp))
+	gfc_fatal_error ("Can't delete temporary module file %qs: %s",
 			 filename_tmp, xstrerror (errno));
     }
 }
 
 
 static void
-create_intrinsic_function (const char *name, gfc_isym_id id,
-			   const char *modname, intmod_id module)
+create_intrinsic_function (const char *name, int id,
+			   const char *modname, intmod_id module,
+			   bool subroutine, gfc_symbol *result_type)
 {
   gfc_intrinsic_sym *isym;
   gfc_symtree *tmp_symtree;
@@ -5569,13 +6070,36 @@ create_intrinsic_function (const char *name, gfc_isym_id id,
     {
       if (strcmp (modname, tmp_symtree->n.sym->module) == 0)
         return;
-      gfc_error ("Symbol '%s' already declared", name);
+      gfc_error ("Symbol %qs already declared", name);
     }
 
   gfc_get_sym_tree (name, gfc_current_ns, &tmp_symtree, false);
   sym = tmp_symtree->n.sym;
 
-  isym = gfc_intrinsic_function_by_id (id);
+  if (subroutine)
+    {
+      gfc_isym_id isym_id = gfc_isym_id_by_intmod (module, id);
+      isym = gfc_intrinsic_subroutine_by_id (isym_id);
+      sym->attr.subroutine = 1;
+    }
+  else
+    {
+      gfc_isym_id isym_id = gfc_isym_id_by_intmod (module, id);
+      isym = gfc_intrinsic_function_by_id (isym_id);
+
+      sym->attr.function = 1;
+      if (result_type)
+	{
+	  sym->ts.type = BT_DERIVED;
+	  sym->ts.u.derived = result_type;
+	  sym->ts.is_c_interop = 1;
+	  isym->ts.f90_type = BT_VOID;
+	  isym->ts.type = BT_DERIVED;
+	  isym->ts.f90_type = BT_VOID;
+	  isym->ts.u.derived = result_type;
+	  isym->ts.is_c_interop = 1;
+	}
+    }
   gcc_assert (isym);
 
   sym->attr.flavor = FL_PROCEDURE;
@@ -5596,11 +6120,13 @@ create_intrinsic_function (const char *name, gfc_isym_id id,
 static void
 import_iso_c_binding_module (void)
 {
-  gfc_symbol *mod_sym = NULL;
-  gfc_symtree *mod_symtree = NULL;
+  gfc_symbol *mod_sym = NULL, *return_type;
+  gfc_symtree *mod_symtree = NULL, *tmp_symtree;
+  gfc_symtree *c_ptr = NULL, *c_funptr = NULL;
   const char *iso_c_module_name = "__iso_c_binding";
   gfc_use_rename *u;
   int i;
+  bool want_c_ptr = false, want_c_funptr = false;
 
   /* Look only in the current namespace.  */
   mod_symtree = gfc_find_symtree (gfc_current_ns->sym_root, iso_c_module_name);
@@ -5623,6 +6149,57 @@ import_iso_c_binding_module (void)
       mod_sym->from_intmod = INTMOD_ISO_C_BINDING;
     }
 
+  /* Check whether C_PTR or C_FUNPTR are in the include list, if so, load it;
+     check also whether C_NULL_(FUN)PTR or C_(FUN)LOC are requested, which
+     need C_(FUN)PTR.  */
+  for (u = gfc_rename_list; u; u = u->next)
+    {
+      if (strcmp (c_interop_kinds_table[ISOCBINDING_NULL_PTR].name,
+		  u->use_name) == 0)
+        want_c_ptr = true;
+      else if (strcmp (c_interop_kinds_table[ISOCBINDING_LOC].name,
+		       u->use_name) == 0)
+        want_c_ptr = true;
+      else if (strcmp (c_interop_kinds_table[ISOCBINDING_NULL_FUNPTR].name,
+		       u->use_name) == 0)
+        want_c_funptr = true;
+      else if (strcmp (c_interop_kinds_table[ISOCBINDING_FUNLOC].name,
+		       u->use_name) == 0)
+        want_c_funptr = true;
+      else if (strcmp (c_interop_kinds_table[ISOCBINDING_PTR].name,
+                       u->use_name) == 0)
+	{
+	  c_ptr = generate_isocbinding_symbol (iso_c_module_name,
+                                               (iso_c_binding_symbol)
+							ISOCBINDING_PTR,
+                                               u->local_name[0] ? u->local_name
+                                                                : u->use_name,
+                                               NULL, false);
+	}
+      else if (strcmp (c_interop_kinds_table[ISOCBINDING_FUNPTR].name,
+                       u->use_name) == 0)
+	{
+	  c_funptr
+	     = generate_isocbinding_symbol (iso_c_module_name,
+					    (iso_c_binding_symbol)
+							ISOCBINDING_FUNPTR,
+					     u->local_name[0] ? u->local_name
+							      : u->use_name,
+					     NULL, false);
+	}
+    }
+
+  if ((want_c_ptr || !only_flag) && !c_ptr)
+    c_ptr = generate_isocbinding_symbol (iso_c_module_name,
+					 (iso_c_binding_symbol)
+							ISOCBINDING_PTR,
+					 NULL, NULL, only_flag);
+  if ((want_c_funptr || !only_flag) && !c_funptr)
+    c_funptr = generate_isocbinding_symbol (iso_c_module_name,
+					    (iso_c_binding_symbol)
+							ISOCBINDING_FUNPTR,
+					    NULL, NULL, only_flag);
+
   /* Generate the symbols for the named constants representing
      the kinds for intrinsic data types.  */
   for (i = 0; i < ISOCBINDING_NUMBER; i++)
@@ -5643,29 +6220,27 @@ import_iso_c_binding_module (void)
 		  not_in_std = (gfc_option.allow_std & d) == 0; \
 		  name = b; \
 		  break;
-#include "iso-c-binding.def"
-#undef NAMED_FUNCTION
+#define NAMED_SUBROUTINE(a,b,c,d) \
+	        case a: \
+		  not_in_std = (gfc_option.allow_std & d) == 0; \
+		  name = b; \
+		  break;
 #define NAMED_INTCST(a,b,c,d) \
 	        case a: \
 		  not_in_std = (gfc_option.allow_std & d) == 0; \
 		  name = b; \
 		  break;
-#include "iso-c-binding.def"
-#undef NAMED_INTCST
 #define NAMED_REALCST(a,b,c,d) \
 	        case a: \
 		  not_in_std = (gfc_option.allow_std & d) == 0; \
 		  name = b; \
 		  break;
-#include "iso-c-binding.def"
-#undef NAMED_REALCST
 #define NAMED_CMPXCST(a,b,c,d) \
 	        case a: \
 		  not_in_std = (gfc_option.allow_std & d) == 0; \
 		  name = b; \
 		  break;
 #include "iso-c-binding.def"
-#undef NAMED_CMPXCST
 		default:
 		  not_in_std = false;
 		  name = "";
@@ -5673,7 +6248,7 @@ import_iso_c_binding_module (void)
 
 	    if (not_in_std)
 	      {
-		gfc_error ("The symbol '%s', referenced at %L, is not "
+		gfc_error ("The symbol %qs, referenced at %L, is not "
 			   "in the selected standard", name, &u->where);
 		continue;
 	      }
@@ -5682,20 +6257,43 @@ import_iso_c_binding_module (void)
 	      {
 #define NAMED_FUNCTION(a,b,c,d) \
 	        case a: \
+		  if (a == ISOCBINDING_LOC) \
+		    return_type = c_ptr->n.sym; \
+		  else if (a == ISOCBINDING_FUNLOC) \
+		    return_type = c_funptr->n.sym; \
+		  else \
+		    return_type = NULL; \
+		  create_intrinsic_function (u->local_name[0] \
+					     ? u->local_name : u->use_name, \
+					     a, iso_c_module_name, \
+					     INTMOD_ISO_C_BINDING, false, \
+					     return_type); \
+		  break;
+#define NAMED_SUBROUTINE(a,b,c,d) \
+	        case a: \
 		  create_intrinsic_function (u->local_name[0] ? u->local_name \
 							      : u->use_name, \
-					     (gfc_isym_id) c, \
-                                             iso_c_module_name, \
-                                             INTMOD_ISO_C_BINDING); \
+                                             a, iso_c_module_name, \
+                                             INTMOD_ISO_C_BINDING, true, NULL); \
 		  break;
 #include "iso-c-binding.def"
-#undef NAMED_FUNCTION
 
+		case ISOCBINDING_PTR:
+		case ISOCBINDING_FUNPTR:
+		  /* Already handled above.  */
+		  break;
 		default:
+		  if (i == ISOCBINDING_NULL_PTR)
+		    tmp_symtree = c_ptr;
+		  else if (i == ISOCBINDING_NULL_FUNPTR)
+		    tmp_symtree = c_funptr;
+		  else
+		    tmp_symtree = NULL;
 		  generate_isocbinding_symbol (iso_c_module_name,
 					       (iso_c_binding_symbol) i,
-					       u->local_name[0] ? u->local_name
-								: u->use_name);
+					       u->local_name[0]
+					       ? u->local_name : u->use_name,
+					       tmp_symtree, false);
 	      }
 	  }
 
@@ -5709,48 +6307,66 @@ import_iso_c_binding_module (void)
 		if ((gfc_option.allow_std & d) == 0) \
 		  continue; \
 		break;
-#include "iso-c-binding.def"
-#undef NAMED_FUNCTION
-
+#define NAMED_SUBROUTINE(a,b,c,d) \
+	      case a: \
+		if ((gfc_option.allow_std & d) == 0) \
+		  continue; \
+		break;
 #define NAMED_INTCST(a,b,c,d) \
 	      case a: \
 		if ((gfc_option.allow_std & d) == 0) \
 		  continue; \
 		break;
-#include "iso-c-binding.def"
-#undef NAMED_INTCST
 #define NAMED_REALCST(a,b,c,d) \
 	      case a: \
 		if ((gfc_option.allow_std & d) == 0) \
 		  continue; \
 		break;
-#include "iso-c-binding.def"
-#undef NAMED_REALCST
 #define NAMED_CMPXCST(a,b,c,d) \
 	      case a: \
 		if ((gfc_option.allow_std & d) == 0) \
 		  continue; \
 		break;
 #include "iso-c-binding.def"
-#undef NAMED_CMPXCST
 	      default:
-		; /* Not GFC_STD_* versioned. */
+		; /* Not GFC_STD_* versioned.  */
 	    }
 
 	  switch (i)
 	    {
 #define NAMED_FUNCTION(a,b,c,d) \
 	      case a: \
-		create_intrinsic_function (b, (gfc_isym_id) c, \
-					   iso_c_module_name, \
-					   INTMOD_ISO_C_BINDING); \
+		if (a == ISOCBINDING_LOC) \
+		  return_type = c_ptr->n.sym; \
+		else if (a == ISOCBINDING_FUNLOC) \
+		  return_type = c_funptr->n.sym; \
+		else \
+		  return_type = NULL; \
+		create_intrinsic_function (b, a, iso_c_module_name, \
+					   INTMOD_ISO_C_BINDING, false, \
+					   return_type); \
+		break;
+#define NAMED_SUBROUTINE(a,b,c,d) \
+	      case a: \
+		create_intrinsic_function (b, a, iso_c_module_name, \
+					   INTMOD_ISO_C_BINDING, true, NULL); \
 		  break;
 #include "iso-c-binding.def"
-#undef NAMED_FUNCTION
 
+	      case ISOCBINDING_PTR:
+	      case ISOCBINDING_FUNPTR:
+		/* Already handled above.  */
+		break;
 	      default:
+		if (i == ISOCBINDING_NULL_PTR)
+		  tmp_symtree = c_ptr;
+		else if (i == ISOCBINDING_NULL_FUNPTR)
+		  tmp_symtree = c_funptr;
+		else
+		  tmp_symtree = NULL;
 		generate_isocbinding_symbol (iso_c_module_name,
-					     (iso_c_binding_symbol) i, NULL);
+					     (iso_c_binding_symbol) i, NULL,
+					     tmp_symtree, false);
 	    }
 	}
    }
@@ -5760,7 +6376,7 @@ import_iso_c_binding_module (void)
       if (u->found)
 	continue;
 
-      gfc_error ("Symbol '%s' referenced at %L not found in intrinsic "
+      gfc_error ("Symbol %qs referenced at %L not found in intrinsic "
 		 "module ISO_C_BINDING", u->use_name, &u->where);
      }
 }
@@ -5781,7 +6397,7 @@ create_int_parameter (const char *name, int value, const char *modname,
       if (strcmp (modname, tmp_symtree->n.sym->module) == 0)
 	return;
       else
-	gfc_error ("Symbol '%s' already declared", name);
+	gfc_error ("Symbol %qs already declared", name);
     }
 
   gfc_get_sym_tree (name, gfc_current_ns, &tmp_symtree, false);
@@ -5814,7 +6430,7 @@ create_int_parameter_array (const char *name, int size, gfc_expr *value,
       if (strcmp (modname, tmp_symtree->n.sym->module) == 0)
 	return;
       else
-	gfc_error ("Symbol '%s' already declared", name);
+	gfc_error ("Symbol %qs already declared", name);
     }
 
   gfc_get_sym_tree (name, gfc_current_ns, &tmp_symtree, false);
@@ -5856,7 +6472,7 @@ create_derived_type (const char *name, const char *modname,
       if (strcmp (modname, tmp_symtree->n.sym->module) == 0)
 	return;
       else
-	gfc_error ("Symbol '%s' already declared", name);
+	gfc_error ("Symbol %qs already declared", name);
     }
 
   gfc_get_sym_tree (name, gfc_current_ns, &tmp_symtree, false);
@@ -5890,6 +6506,37 @@ create_derived_type (const char *name, const char *modname,
 }
 
 
+/* Read the contents of the module file into a temporary buffer.  */
+
+static void
+read_module_to_tmpbuf ()
+{
+  /* We don't know the uncompressed size, so enlarge the buffer as
+     needed.  */
+  int cursz = 4096;
+  int rsize = cursz;
+  int len = 0;
+
+  module_content = XNEWVEC (char, cursz);
+
+  while (1)
+    {
+      int nread = gzread (module_fp, module_content + len, rsize);
+      len += nread;
+      if (nread < rsize)
+	break;
+      cursz *= 2;
+      module_content = XRESIZEVEC (char, module_content, cursz);
+      rsize = cursz - len;
+    }
+
+  module_content = XRESIZEVEC (char, module_content, len + 1);
+  module_content[len] = '\0';
+
+  module_pos = 0;
+}
+
+
 /* USE the ISO_FORTRAN_ENV intrinsic module.  */
 
 static void
@@ -5904,23 +6551,16 @@ use_iso_fortran_env_module (void)
 
   intmod_sym symbol[] = {
 #define NAMED_INTCST(a,b,c,d) { a, b, 0, d },
-#include "iso-fortran-env.def"
-#undef NAMED_INTCST
 #define NAMED_KINDARRAY(a,b,c,d) { a, b, 0, d },
-#include "iso-fortran-env.def"
-#undef NAMED_KINDARRAY
 #define NAMED_DERIVED_TYPE(a,b,c,d) { a, b, 0, d },
-#include "iso-fortran-env.def"
-#undef NAMED_DERIVED_TYPE
 #define NAMED_FUNCTION(a,b,c,d) { a, b, c, d },
+#define NAMED_SUBROUTINE(a,b,c,d) { a, b, c, d },
 #include "iso-fortran-env.def"
-#undef NAMED_FUNCTION
     { ISOFORTRANENV_INVALID, NULL, -1234, 0 } };
 
   i = 0;
 #define NAMED_INTCST(a,b,c,d) symbol[i++].value = c;
 #include "iso-fortran-env.def"
-#undef NAMED_INTCST
 
   /* Generate the symbol for the module itself.  */
   mod_symtree = gfc_find_symtree (gfc_current_ns->sym_root, mod);
@@ -5937,7 +6577,7 @@ use_iso_fortran_env_module (void)
     }
   else
     if (!mod_symtree->n.sym->attr.intrinsic)
-      gfc_error ("Use of intrinsic module '%s' at %C conflicts with "
+      gfc_error ("Use of intrinsic module %qs at %C conflicts with "
 		 "non-intrinsic module name used previously", mod);
 
   /* Generate the symbols for the module integer named constants.  */
@@ -5952,19 +6592,18 @@ use_iso_fortran_env_module (void)
 	      found = true;
 	      u->found = 1;
 
-	      if (gfc_notify_std (symbol[i].standard, "The symbol '%s', "
-				  "referenced at %L, is not in the selected "
-				  "standard", symbol[i].name,
-				  &u->where) == FAILURE)
+	      if (!gfc_notify_std (symbol[i].standard, "The symbol %qs, "
+				   "referenced at %L, is not in the selected "
+				   "standard", symbol[i].name, &u->where))
 	        continue;
 
-	      if ((gfc_option.flag_default_integer || gfc_option.flag_default_real)
+	      if ((flag_default_integer || flag_default_real)
 		  && symbol[i].id == ISOFORTRANENV_NUMERIC_STORAGE_SIZE)
 		gfc_warning_now ("Use of the NUMERIC_STORAGE_SIZE named "
 				 "constant from intrinsic module "
 				 "ISO_FORTRAN_ENV at %L is incompatible with "
-				 "option %s", &u->where,
-				 gfc_option.flag_default_integer
+				 "option %qs", &u->where,
+				 flag_default_integer
 				   ? "-fdefault-integer-8"
 				   : "-fdefault-real-8");
 	      switch (symbol[i].id)
@@ -5972,7 +6611,6 @@ use_iso_fortran_env_module (void)
 #define NAMED_INTCST(a,b,c,d) \
 		case a:
 #include "iso-fortran-env.def"
-#undef NAMED_INTCST
 		  create_int_parameter (u->local_name[0] ? u->local_name
 							 : u->use_name,
 					symbol[i].value, mod,
@@ -5995,7 +6633,6 @@ use_iso_fortran_env_module (void)
 					      symbol[i].id); \
 		  break;
 #include "iso-fortran-env.def"
-#undef NAMED_KINDARRAY
 
 #define NAMED_DERIVED_TYPE(a,b,TYPE,STD) \
 		case a:
@@ -6005,16 +6642,15 @@ use_iso_fortran_env_module (void)
 				       mod, INTMOD_ISO_FORTRAN_ENV,
 				       symbol[i].id);
 		  break;
-#undef NAMED_DERIVED_TYPE
 
 #define NAMED_FUNCTION(a,b,c,d) \
 		case a:
 #include "iso-fortran-env.def"
-#undef NAMED_FUNCTION
 		  create_intrinsic_function (u->local_name[0] ? u->local_name
 							      : u->use_name,
-					     (gfc_isym_id) symbol[i].value, mod,
-					     INTMOD_ISO_FORTRAN_ENV);
+					     symbol[i].id, mod,
+					     INTMOD_ISO_FORTRAN_ENV, false,
+					     NULL);
 		  break;
 
 		default:
@@ -6028,12 +6664,12 @@ use_iso_fortran_env_module (void)
 	  if ((gfc_option.allow_std & symbol[i].standard) == 0)
 	    continue;
 
-	  if ((gfc_option.flag_default_integer || gfc_option.flag_default_real)
+	  if ((flag_default_integer || flag_default_real)
 	      && symbol[i].id == ISOFORTRANENV_NUMERIC_STORAGE_SIZE)
 	    gfc_warning_now ("Use of the NUMERIC_STORAGE_SIZE named constant "
 			     "from intrinsic module ISO_FORTRAN_ENV at %C is "
 			     "incompatible with option %s",
-			     gfc_option.flag_default_integer
+			     flag_default_integer
 				? "-fdefault-integer-8" : "-fdefault-real-8");
 
 	  switch (symbol[i].id)
@@ -6041,7 +6677,6 @@ use_iso_fortran_env_module (void)
 #define NAMED_INTCST(a,b,c,d) \
 	    case a:
 #include "iso-fortran-env.def"
-#undef NAMED_INTCST
 	      create_int_parameter (symbol[i].name, symbol[i].value, mod,
 				    INTMOD_ISO_FORTRAN_ENV, symbol[i].id);
 	      break;
@@ -6058,7 +6693,6 @@ use_iso_fortran_env_module (void)
                                         INTMOD_ISO_FORTRAN_ENV, symbol[i].id);\
             break;
 #include "iso-fortran-env.def"
-#undef NAMED_KINDARRAY
 
 #define NAMED_DERIVED_TYPE(a,b,TYPE,STD) \
 	  case a:
@@ -6066,15 +6700,13 @@ use_iso_fortran_env_module (void)
 	    create_derived_type (symbol[i].name, mod, INTMOD_ISO_FORTRAN_ENV,
 				 symbol[i].id);
 	    break;
-#undef NAMED_DERIVED_TYPE
 
 #define NAMED_FUNCTION(a,b,c,d) \
 		case a:
 #include "iso-fortran-env.def"
-#undef NAMED_FUNCTION
-		  create_intrinsic_function (symbol[i].name,
-					     (gfc_isym_id) symbol[i].value, mod,
-					     INTMOD_ISO_FORTRAN_ENV);
+		  create_intrinsic_function (symbol[i].name, symbol[i].id, mod,
+					     INTMOD_ISO_FORTRAN_ENV, false,
+					     NULL);
 		  break;
 
 	  default:
@@ -6088,7 +6720,7 @@ use_iso_fortran_env_module (void)
       if (u->found)
 	continue;
 
-      gfc_error ("Symbol '%s' referenced at %L not found in intrinsic "
+      gfc_error ("Symbol %qs referenced at %L not found in intrinsic "
 		     "module ISO_FORTRAN_ENV", u->use_name, &u->where);
     }
 }
@@ -6110,6 +6742,11 @@ gfc_use_module (gfc_use_list *module)
   module_name = module->module_name;
   gfc_rename_list = module->rename;
   only_flag = module->only_flag;
+  current_intmod = INTMOD_NONE;
+
+  if (!only_flag)
+    gfc_warning_now (OPT_Wuse_without_only,
+		     "USE statement at %C has no ONLY qualifier");
 
   filename = XALLOCAVEC (char, strlen (module_name) + strlen (MODULE_EXTENSION)
 			       + 1);
@@ -6120,7 +6757,7 @@ gfc_use_module (gfc_use_list *module)
      specified that the module is intrinsic.  */
   module_fp = NULL;
   if (!module->intrinsic)
-    module_fp = gfc_open_included_file (filename, true, true);
+    module_fp = gzopen_included_file (filename, true, true);
 
   /* Then, see if it's an intrinsic one, unless the USE statement
      specified that the module is non-intrinsic.  */
@@ -6128,7 +6765,7 @@ gfc_use_module (gfc_use_list *module)
     {
       if (strcmp (module_name, "iso_fortran_env") == 0
 	  && gfc_notify_std (GFC_STD_F2003, "ISO_FORTRAN_ENV "
-			     "intrinsic module at %C") != FAILURE)
+			     "intrinsic module at %C"))
        {
 	 use_iso_fortran_env_module ();
 	 free_rename (module->rename);
@@ -6139,8 +6776,7 @@ gfc_use_module (gfc_use_list *module)
        }
 
       if (strcmp (module_name, "iso_c_binding") == 0
-	  && gfc_notify_std (GFC_STD_F2003,
-			     "ISO_C_BINDING module at %C") != FAILURE)
+	  && gfc_notify_std (GFC_STD_F2003, "ISO_C_BINDING module at %C"))
 	{
 	  import_iso_c_binding_module();
 	  free_rename (module->rename);
@@ -6150,15 +6786,35 @@ gfc_use_module (gfc_use_list *module)
 	  return;
 	}
 
-      module_fp = gfc_open_intrinsic_module (filename);
+      module_fp = gzopen_intrinsic_module (filename);
 
       if (module_fp == NULL && module->intrinsic)
-	gfc_fatal_error ("Can't find an intrinsic module named '%s' at %C",
+	gfc_fatal_error ("Can't find an intrinsic module named %qs at %C",
 			 module_name);
+
+      /* Check for the IEEE modules, so we can mark their symbols
+	 accordingly when we read them.  */
+      if (strcmp (module_name, "ieee_features") == 0
+	  && gfc_notify_std (GFC_STD_F2003, "IEEE_FEATURES module at %C"))
+	{
+	  current_intmod = INTMOD_IEEE_FEATURES;
+	}
+      else if (strcmp (module_name, "ieee_exceptions") == 0
+	       && gfc_notify_std (GFC_STD_F2003,
+				  "IEEE_EXCEPTIONS module at %C"))
+	{
+	  current_intmod = INTMOD_IEEE_EXCEPTIONS;
+	}
+      else if (strcmp (module_name, "ieee_arithmetic") == 0
+	       && gfc_notify_std (GFC_STD_F2003,
+				  "IEEE_ARITHMETIC module at %C"))
+	{
+	  current_intmod = INTMOD_IEEE_ARITHMETIC;
+	}
     }
 
   if (module_fp == NULL)
-    gfc_fatal_error ("Can't open module file '%s' for reading at %C: %s",
+    gfc_fatal_error ("Can't open module file %qs for reading at %C: %s",
 		     filename, xstrerror (errno));
 
   /* Check that we haven't already USEd an intrinsic module with the
@@ -6166,7 +6822,7 @@ gfc_use_module (gfc_use_list *module)
 
   mod_symtree = gfc_find_symtree (gfc_current_ns->sym_root, module_name);
   if (mod_symtree && mod_symtree->n.sym->attr.intrinsic)
-    gfc_error ("Use of non-intrinsic module '%s' at %C conflicts with "
+    gfc_error ("Use of non-intrinsic module %qs at %C conflicts with "
 	       "intrinsic module name used previously", module_name);
 
   iomode = IO_INPUT;
@@ -6174,10 +6830,13 @@ gfc_use_module (gfc_use_list *module)
   module_column = 1;
   start = 0;
 
-  /* Skip the first two lines of the module, after checking that this is
+  read_module_to_tmpbuf ();
+  gzclose (module_fp);
+
+  /* Skip the first line of the module, after checking that this is
      a gfortran module file.  */
   line = 0;
-  while (line < 2)
+  while (line < 1)
     {
       c = module_char ();
       if (c == EOF)
@@ -6186,7 +6845,7 @@ gfc_use_module (gfc_use_list *module)
 	parse_name (c);
       if ((start == 1 && strcmp (atom_name, "GFORTRAN") != 0)
 	  || (start == 2 && strcmp (atom_name, " module") != 0))
-	gfc_fatal_error ("File '%s' opened at %C is not a GNU Fortran"
+	gfc_fatal_error ("File %qs opened at %C is not a GNU Fortran"
 			 " module file", filename);
       if (start == 3)
 	{
@@ -6194,7 +6853,7 @@ gfc_use_module (gfc_use_list *module)
 	      || module_char () != ' '
 	      || parse_atom () != ATOM_STRING
 	      || strcmp (atom_string, MOD_VERSION))
-	    gfc_fatal_error ("Cannot read module file '%s' opened at %C,"
+	    gfc_fatal_error ("Cannot read module file %qs opened at %C,"
 			     " because it was created by a different"
 			     " version of GNU Fortran", filename);
 
@@ -6221,7 +6880,8 @@ gfc_use_module (gfc_use_list *module)
   free_pi_tree (pi_root);
   pi_root = NULL;
 
-  fclose (module_fp);
+  XDELETEVEC (module_content);
+  module_content = NULL;
 
   use_stmt = gfc_get_use_list ();
   *use_stmt = *module;
@@ -6232,7 +6892,7 @@ gfc_use_module (gfc_use_list *module)
 }
 
 
-/* Remove duplicated intrinsic operators from the rename list. */
+/* Remove duplicated intrinsic operators from the rename list.  */
 
 static void
 rename_list_remove_duplicate (gfc_use_rename *list)

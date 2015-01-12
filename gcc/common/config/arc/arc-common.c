@@ -1,24 +1,26 @@
 /* Common hooks for Synopsys DesignWare ARC
    Copyright (C) 1994, 1995, 1997, 1998, 2007-2012
    Free Software Foundation, Inc.
-   Contributor: Joern Rennecke <joern.rennecke@embecosm.com>
-		on behalf of Synopsys Inc.
+   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Contributors: Joern Rennecke <joern.rennecke@embecosm.com>
+                 on behalf of Synopsys Inc.
+		 Claudiu Zissulescu <claziss@synopsys.com>
 
-This file is part of GCC.
+   This file is part of GCC.
 
-GCC is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 3, or (at your option)
-any later version.
+   GCC is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
-GCC is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+   GCC is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING3.  If not see
-<http://www.gnu.org/licenses/>.  */
+   You should have received a copy of the GNU General Public License
+   along with GCC; see the file COPYING3.  If not see
+   <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
 #include "system.h"
@@ -260,7 +262,7 @@ arc_option_default_params (void)
 #elif TARGET_CPU_DEFAULT == TARGET_CPU_EM
 /* Default for EM: no barrel shifter*/
 # define TARGET_DEFAULT_TARGET_FLAGS					\
-  ( MASK_BARREL_SHIFTER | MASK_VOLATILE_CACHE_SET | DEFAULT_NO_SDATA | \
+  ( MASK_BARREL_SHIFTER | MASK_VOLATILE_CACHE_SET | DEFAULT_NO_SDATA |	\
     MASK_MPY_SET | MASK_MPY16_SET )
 #else
 /* We default to ARC700, which has the barrel shifter enabled.  */

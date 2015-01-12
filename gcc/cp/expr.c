@@ -1,6 +1,6 @@
 /* Convert language-specific tree expression to rtl instructions,
    for GNU compiler.
-   Copyright (C) 1988-2013 Free Software Foundation, Inc.
+   Copyright (C) 1988-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -43,6 +43,10 @@ cplus_expand_constant (tree cst)
 	/* Find the member.  */
 	member = PTRMEM_CST_MEMBER (cst);
 
+	/* We can't lower this until the class is complete.  */
+	if (!COMPLETE_TYPE_P (DECL_CONTEXT (member)))
+	  return cst;
+
 	if (TREE_CODE (member) == FIELD_DECL)
 	  {
 	    /* Find the offset for the field.  */
@@ -69,6 +73,14 @@ cplus_expand_constant (tree cst)
 	  }
       }
       break;
+
+    case CONSTRUCTOR:
+      {
+	constructor_elt *elt;
+	unsigned HOST_WIDE_INT idx;
+	FOR_EACH_VEC_SAFE_ELT (CONSTRUCTOR_ELTS (cst), idx, elt)
+	  elt->value = cplus_expand_constant (elt->value);
+      }
 
     default:
       /* There's nothing to do.  */

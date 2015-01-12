@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 2000-2012, Free Software Foundation, Inc.        --
+--           Copyright (C) 2000-2014, Free Software Foundation, Inc.        --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -253,6 +253,7 @@ package body Impunit is
     ("g-cgideb", F),  -- GNAT.CGI.Debug
     ("g-comlin", F),  -- GNAT.Command_Line
     ("g-comver", F),  -- GNAT.Compiler_Version
+    ("g-cppexc", F),  -- GNAT.CPP_Exceptions
     ("g-crc32 ", F),  -- GNAT.CRC32
     ("g-ctrl_c", F),  -- GNAT.Ctrl_C
     ("g-curexc", F),  -- GNAT.Current_Exception
@@ -272,6 +273,7 @@ package body Impunit is
     ("g-expect", F),  -- GNAT.Expect
     ("g-exptty", F),  -- GNAT.Expect.TTY
     ("g-flocon", F),  -- GNAT.Float_Control
+    ("g-forstr", F),  -- GNAT.Formatted_String
     ("g-heasor", F),  -- GNAT.Heap_Sort
     ("g-hesora", F),  -- GNAT.Heap_Sort_A
     ("g-hesorg", F),  -- GNAT.Heap_Sort_G
@@ -290,6 +292,7 @@ package body Impunit is
     ("g-regexp", F),  -- GNAT.Regexp
     ("g-regist", F),  -- GNAT.Registry
     ("g-regpat", F),  -- GNAT.Regpat
+    ("g-rewdat", F),  -- GNAT.Rewrite_Data
     ("g-semaph", F),  -- GNAT.Semaphores
     ("g-sercom", F),  -- GNAT.Serial_Communications
     ("g-sestin", F),  -- GNAT.Secondary_Stack_Info
@@ -342,7 +345,6 @@ package body Impunit is
     ("i-cexten", F),  -- Interfaces.C.Extensions
     ("i-cil   ", F),  -- Interfaces.CIL
     ("i-cilobj", F),  -- Interfaces.CIL.Object
-    ("i-cpp   ", F),  -- Interfaces.CPP
     ("i-cstrea", F),  -- Interfaces.C.Streams
     ("i-java  ", F),  -- Interfaces.Java
     ("i-javjni", F),  -- Interfaces.Java.JNI
@@ -365,6 +367,7 @@ package body Impunit is
    --------------------------------------
 
     ("s-addima", F),  -- System.Address_Image
+    ("s-atocou", F),  -- System.Atomic_Counters
     ("s-assert", F),  -- System.Assertions
     ("s-diflio", F),  -- System.Dim.Float_IO
     ("s-diinio", F),  -- System.Dim.Integer_IO
@@ -379,8 +382,16 @@ package body Impunit is
     ("s-rident", F),  -- System.Rident
     ("s-ststop", F),  -- System.Strings.Stream_Ops
     ("s-tasinf", F),  -- System.Task_Info
-    ("s-wchcnv", F),  -- System.Wch_Cnv
-    ("s-wchcon", F)); -- System.Wch_Con
+    ("s-unstyp", F),  -- System.Unsigned_Types
+    ("s-wchcnv", F),  -- System.WCh_Cnv
+    ("s-wchcon", F),  -- System.WCh_Con
+
+   --  The following are strictly speaking Ada 2012 units, but we are allowed
+   --  to add children to system, so we consider them to be implementation
+   --  defined additions to System in earlier versions of Ada.
+
+    ("s-multip", T),  -- System.Multiprocessors
+    ("s-mudido", T)); -- System.Multiprocessors.Dispatching_Domains
 
    --------------------
    -- Ada 2005 Units --
@@ -544,8 +555,6 @@ package body Impunit is
    --  The following units should be used only in Ada 2012 mode
 
    Non_Imp_File_Names_12 : constant File_List := (
-    ("s-multip", T),  -- System.Multiprocessors
-    ("s-mudido", T),  -- System.Multiprocessors.Dispatching_Domains
     ("s-stposu", T),  -- System.Storage_Pools.Subpools
     ("a-cobove", T),  -- Ada.Containers.Bounded_Vectors
     ("a-cbdlli", T),  -- Ada.Containers.Bounded_Doubly_Linked_Lists
@@ -572,6 +581,8 @@ package body Impunit is
    -- GNAT Defined Additions to Ada 2012 --
    ----------------------------------------
 
+    ("a-cfinve", F),  -- Ada.Containers.Formal_Indefinite_Vectors
+    ("a-coboho", F),  -- Ada.Containers.Bounded_Holders
     ("a-cofove", F),  -- Ada.Containers.Formal_Vectors
     ("a-cfdlli", F),  -- Ada.Containers.Formal_Doubly_Linked_Lists
     ("a-cforse", F),  -- Ada.Containers.Formal_Ordered_Sets

@@ -1,7 +1,7 @@
 /* Miscellaneous utilities for GIMPLE streaming.  Things that are used
    in both input and output are here.
 
-   Copyright (C) 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015 Free Software Foundation, Inc.
    Contributed by Doug Kwan <dougkwan@google.com>
 
 This file is part of GCC.
@@ -27,13 +27,29 @@ along with GCC; see the file COPYING3.  If not see
 #include "toplev.h"
 #include "flags.h"
 #include "tree.h"
-#include "gimple.h"
-#include "tree-flow.h"
-#include "diagnostic-core.h"
-#include "bitmap.h"
+#include "predict.h"
 #include "vec.h"
+#include "hashtab.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "hard-reg-set.h"
+#include "input.h"
+#include "function.h"
+#include "basic-block.h"
+#include "tree-ssa-alias.h"
+#include "internal-fn.h"
+#include "gimple-expr.h"
+#include "is-a.h"
+#include "gimple.h"
+#include "bitmap.h"
+#include "diagnostic-core.h"
+#include "hash-map.h"
+#include "plugin-api.h"
+#include "ipa-ref.h"
+#include "cgraph.h"
 #include "tree-streamer.h"
 #include "lto-streamer.h"
+#include "lto-section-names.h"
 #include "streamer-hooks.h"
 
 /* Statistics gathered during LTO, WPA and LTRANS.  */
@@ -44,6 +60,7 @@ struct lto_stats_d lto_stats;
 static bitmap_obstack lto_obstack;
 static bool lto_obstack_initialized;
 
+const char *section_name_prefix = LTO_SECTION_NAME_PREFIX;
 
 /* Return a string representing LTO tag TAG.  */
 
@@ -54,7 +71,7 @@ lto_tag_name (enum LTO_tags tag)
     {
       /* For tags representing tree nodes, return the name of the
 	 associated tree code.  */
-      return tree_code_name[lto_tag_to_tree_code (tag)];
+      return get_tree_code_name (lto_tag_to_tree_code (tag));
     }
 
   if (lto_tag_is_gimple_code_p (tag))
@@ -173,7 +190,7 @@ lto_get_section_name (int section_type, const char *name, struct lto_file_decl_d
     sprintf (post, "." HOST_WIDE_INT_PRINT_HEX_PURE, f->id);
   else
     sprintf (post, "." HOST_WIDE_INT_PRINT_HEX_PURE, get_random_seed (false)); 
-  return concat (LTO_SECTION_NAME_PREFIX, sep, add, post, NULL);
+  return concat (section_name_prefix, sep, add, post, NULL);
 }
 
 
@@ -199,7 +216,7 @@ print_lto_report (const char *s)
     if (lto_stats.num_trees[i])
       fprintf (stderr, "[%s] # of '%s' objects read: "
 	       HOST_WIDE_INT_PRINT_UNSIGNED "\n", s,
-	       tree_code_name[i], lto_stats.num_trees[i]);
+	       get_tree_code_name ((enum tree_code) i), lto_stats.num_trees[i]);
 
   if (flag_lto)
     {
@@ -227,6 +244,13 @@ print_lto_report (const char *s)
 	       HOST_WIDE_INT_PRINT_UNSIGNED "\n", s,
 	       lto_stats.num_output_symtab_nodes);
 
+      fprintf (stderr, "[%s] # of output tree pickle references: "
+	       HOST_WIDE_INT_PRINT_UNSIGNED "\n", s,
+	       lto_stats.num_pickle_refs_output);
+      fprintf (stderr, "[%s] # of output tree bodies: "
+	       HOST_WIDE_INT_PRINT_UNSIGNED "\n", s,
+	       lto_stats.num_tree_bodies_output);
+
       fprintf (stderr, "[%s] # callgraph partitions: "
 	       HOST_WIDE_INT_PRINT_UNSIGNED "\n", s,
 	       lto_stats.num_cgraph_partitions);
@@ -253,28 +277,33 @@ print_lto_report (const char *s)
 
 
 #ifdef LTO_STREAMER_DEBUG
-static htab_t tree_htab;
-
 struct tree_hash_entry
 {
   tree key;
   intptr_t value;
 };
 
-static hashval_t
-hash_tree (const void *p)
+struct tree_entry_hasher : typed_noop_remove <tree_hash_entry>
 {
-  const struct tree_hash_entry *e = (const struct tree_hash_entry *) p;
+  typedef tree_hash_entry value_type;
+  typedef tree_hash_entry compare_type;
+  static inline hashval_t hash (const value_type *);
+  static inline bool equal (const value_type *, const compare_type *);
+};
+
+inline hashval_t
+tree_entry_hasher::hash (const value_type *e)
+{
   return htab_hash_pointer (e->key);
 }
 
-static int
-eq_tree (const void *p1, const void *p2)
+inline bool
+tree_entry_hasher::equal (const value_type *e1, const compare_type *e2)
 {
-  const struct tree_hash_entry *e1 = (const struct tree_hash_entry *) p1;
-  const struct tree_hash_entry *e2 = (const struct tree_hash_entry *) p2;
   return (e1->key == e2->key);
 }
+
+static hash_table<tree_hash_entry> *tree_htab;
 #endif
 
 /* Initialization common to the LTO reader and writer.  */
@@ -289,7 +318,7 @@ lto_streamer_init (void)
   streamer_check_handled_ts_structures ();
 
 #ifdef LTO_STREAMER_DEBUG
-  tree_htab = htab_create (31, hash_tree, eq_tree, NULL);
+  tree_htab = new hash_table<tree_hash_entry> (31);
 #endif
 }
 
@@ -299,7 +328,7 @@ lto_streamer_init (void)
 bool
 gate_lto_out (void)
 {
-  return ((flag_generate_lto || in_lto_p)
+  return ((flag_generate_lto || flag_generate_offload || in_lto_p)
 	  /* Don't bother doing anything if the program has errors.  */
 	  && !seen_error ());
 }
@@ -324,8 +353,7 @@ lto_orig_address_map (tree t, intptr_t orig_t)
 
   ent.key = t;
   ent.value = orig_t;
-  slot
-    = (struct tree_hash_entry **) htab_find_slot (tree_htab, &ent, INSERT);
+  slot = tree_htab->find_slot (&ent, INSERT);
   gcc_assert (!*slot);
   *slot = XNEW (struct tree_hash_entry);
   **slot = ent;
@@ -342,8 +370,7 @@ lto_orig_address_get (tree t)
   struct tree_hash_entry **slot;
 
   ent.key = t;
-  slot
-    = (struct tree_hash_entry **) htab_find_slot (tree_htab, &ent, NO_INSERT);
+  slot = tree_htab->find_slot (&ent, NO_INSERT);
   return (slot ? (*slot)->value : 0);
 }
 
@@ -357,11 +384,10 @@ lto_orig_address_remove (tree t)
   struct tree_hash_entry **slot;
 
   ent.key = t;
-  slot
-    = (struct tree_hash_entry **) htab_find_slot (tree_htab, &ent, NO_INSERT);
+  slot = tree_htab->find_slot (&ent, NO_INSERT);
   gcc_assert (slot);
   free (*slot);
-  htab_clear_slot (tree_htab, (PTR *)slot);
+  tree_htab->clear_slot (slot);
 }
 #endif
 

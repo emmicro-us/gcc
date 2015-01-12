@@ -1,6 +1,6 @@
 ; libgcc1 routines for Synopsys DesignWare ARC cpu.
 
-/* Copyright (C) 1995, 1997, 2007-2013 Free Software Foundation, Inc.
+/* Copyright (C) 1995-2015 Free Software Foundation, Inc.
    Contributor: Joern Rennecke <joern.rennecke@embecosm.com>
 		on behalf of Synopsys Inc.
 
@@ -52,8 +52,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define HIDDEN_FUNC(X)	FUNC(X)` .hidden X
 #define ENDFUNC0(X)     .Lfe_##X: .size X,.Lfe_##X-X
 #define ENDFUNC(X)      ENDFUNC0(X)
-
-
 
 #ifdef  L_mulsi3
 	.section .text

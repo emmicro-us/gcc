@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2013 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2015 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -91,7 +91,9 @@ set_integer (void *dest, GFC_INTEGER_LARGEST value, int length)
 GFC_UINTEGER_LARGEST
 si_max (int length)
 {
+#if defined HAVE_GFC_REAL_16 || defined HAVE_GFC_REAL_10
   GFC_UINTEGER_LARGEST value;
+#endif
 
   switch (length)
       {
@@ -127,6 +129,24 @@ int
 convert_real (st_parameter_dt *dtp, void *dest, const char *buffer, int length)
 {
   char *endptr = NULL;
+  int round_mode, old_round_mode;
+
+  switch (dtp->u.p.current_unit->round_status)
+    {
+      case ROUND_COMPATIBLE:
+	/* FIXME: As NEAREST but round away from zero for a tie.  */
+      case ROUND_UNSPECIFIED:
+	/* Should not occur.  */
+      case ROUND_PROCDEFINED:
+	round_mode = ROUND_NEAREST;
+	break;
+      default:
+	round_mode = dtp->u.p.current_unit->round_status;
+	break;
+    }
+
+  old_round_mode = get_fpu_rounding_mode();
+  set_fpu_rounding_mode (round_mode);
 
   switch (length)
     {
@@ -164,6 +184,8 @@ convert_real (st_parameter_dt *dtp, void *dest, const char *buffer, int length)
     default:
       internal_error (&dtp->common, "Unsupported real kind during IO");
     }
+
+  set_fpu_rounding_mode (old_round_mode);
 
   if (buffer == endptr)
     {
@@ -859,6 +881,9 @@ read_radix (st_parameter_dt *dtp, const fnode *f, char *dest, int length,
 void
 read_f (st_parameter_dt *dtp, const fnode *f, char *dest, int length)
 {
+#define READF_TMP 50
+  char tmp[READF_TMP];
+  size_t buf_size = 0;
   int w, seen_dp, exponent;
   int exponent_sign;
   const char *p;
@@ -873,6 +898,7 @@ read_f (st_parameter_dt *dtp, const fnode *f, char *dest, int length)
   exponent_sign = 1;
   exponent = 0;
   w = f->u.w;
+  buffer = tmp;
 
   /* Read in the next block.  */
   p = read_block_form (dtp, &w);
@@ -889,7 +915,10 @@ read_f (st_parameter_dt *dtp, const fnode *f, char *dest, int length)
      exponent because of an implicit decimal point or the like.  Thus allocating
      strlen ("+0.0e-1000") == 10 characters plus one for NUL more than the
      original buffer had should be enough.  */
-  buffer = gfc_alloca (w + 11);
+  buf_size = w + 11;
+  if (buf_size > READF_TMP)
+    buffer = xmalloc (buf_size);
+
   out = buffer;
 
   /* Optional sign */
@@ -962,6 +991,8 @@ read_f (st_parameter_dt *dtp, const fnode *f, char *dest, int length)
 	goto bad_float;
 
       convert_infnan (dtp, dest, buffer, length);
+      if (buf_size > READF_TMP)
+	free (buffer);
       return;
     }
 
@@ -1134,7 +1165,9 @@ done:
 	  exponent = - exponent;
 	}
 
-      assert (exponent < 10000);
+      if (exponent >= 10000)
+	goto bad_float;
+
       for (dig = 3; dig >= 0; --dig)
 	{
 	  out[dig] = (char) ('0' + exponent % 10);
@@ -1146,7 +1179,8 @@ done:
 
   /* Do the actual conversion.  */
   convert_real (dtp, dest, buffer, length);
-
+  if (buf_size > READF_TMP)
+    free (buffer);
   return;
 
   /* The value read is zero.  */
@@ -1179,6 +1213,8 @@ zero:
   return;
 
 bad_float:
+  if (buf_size > READF_TMP)
+    free (buffer);
   generate_error (&dtp->common, LIBERROR_READ_VALUE,
 		  "Bad value during floating point read");
   next_record (dtp, 1);

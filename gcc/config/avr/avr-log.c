@@ -1,5 +1,5 @@
 /* Subroutines for log output for Atmel AVR back end.
-   Copyright (C) 2011-2013 Free Software Foundation, Inc.
+   Copyright (C) 2011-2015 Free Software Foundation, Inc.
    Contributed by Georg-Johann Lay (avr@gjlay.de)
 
    This file is part of GCC.
@@ -24,8 +24,14 @@
 #include "tm.h"
 #include "rtl.h"
 #include "tree.h"
+#include "print-tree.h"
 #include "output.h"
 #include "input.h"
+#include "hashtab.h"
+#include "hash-set.h"
+#include "vec.h"
+#include "machmode.h"
+#include "hard-reg-set.h"
 #include "function.h"
 #include "tm_p.h"
 #include "tree-pass.h"	/* for current_pass */
@@ -47,10 +53,8 @@
   t: tree
   T: tree (brief)
   C: enum rtx_code
-  m: enum machine_mode
+  m: machine_mode
   R: enum reg_class
-  D: double_int (signed decimal)
-  X: double_int (unsigned hex)
   L: insn list
   H: location_t
 
@@ -138,45 +142,6 @@ avr_log_set_caller_f (const char *caller)
 }
 
 
-/* Copy-paste from double-int.c:double_int_split_digit (it's static there).
-   Splits last digit of *CST (taken as unsigned) in BASE and returns it.  */
-
-static unsigned
-avr_double_int_pop_digit (double_int *cst, unsigned base)
-{
-  double_int drem;
-
-  *cst = cst->udivmod (double_int::from_uhwi (base), (int) FLOOR_DIV_EXPR,
-                       &drem);
-
-  return (unsigned) drem.to_uhwi();
-}
-
-
-/* Dump VAL as hex value to FILE.  */
-
-static void
-avr_dump_double_int_hex (FILE *file, double_int val)
-{
-  unsigned digit[4];
-
-  digit[0] = avr_double_int_pop_digit (&val, 1 << 16);
-  digit[1] = avr_double_int_pop_digit (&val, 1 << 16);
-  digit[2] = avr_double_int_pop_digit (&val, 1 << 16);
-  digit[3] = avr_double_int_pop_digit (&val, 1 << 16);
-
-  fprintf (file, "0x");
-
-  if (digit[3] | digit[2])
-    fprintf (file, "%04x%04x", digit[3], digit[2]);
-
-  if (digit[3] | digit[2] | digit[1] | digit[0])
-    fprintf (file, "%04x%04x", digit[1], digit[0]);
-  else
-    fprintf (file, "0");
-}
-
-
 /* Worker function implementing the %-codes and forwarding to
    respective print/dump function.  */
 
@@ -231,14 +196,6 @@ avr_log_vadump (FILE *file, const char *fmt, va_list ap)
               fprintf (file, "%d", va_arg (ap, int));
               break;
 
-            case 'D':
-              dump_double_int (file, va_arg (ap, double_int), false);
-              break;
-
-            case 'X':
-              avr_dump_double_int_hex (file, va_arg (ap, double_int));
-              break;
-
             case 'x':
               fprintf (file, "%x", va_arg (ap, int));
               break;
@@ -257,7 +214,7 @@ avr_log_vadump (FILE *file, const char *fmt, va_list ap)
 
             case 'L':
               {
-                rtx insn = va_arg (ap, rtx);
+                rtx_insn *insn = safe_as_a <rtx_insn *> (va_arg (ap, rtx));
 
                 while (insn)
                   {
@@ -281,7 +238,7 @@ avr_log_vadump (FILE *file, const char *fmt, va_list ap)
               break;
 
             case 'm':
-              fputs (GET_MODE_NAME ((enum machine_mode) va_arg (ap, int)),
+              fputs (GET_MODE_NAME ((machine_mode) va_arg (ap, int)),
                      file);
               break;
 
@@ -359,6 +316,9 @@ avr_log_set_avr_log (void)
 {
   bool all = TARGET_ALL_DEBUG != 0;
 
+  if (all)
+    avr_log_details = "all";
+	
   if (all || avr_log_details)
     {
       /* Adding , at beginning and end of string makes searching easier.  */

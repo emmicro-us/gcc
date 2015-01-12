@@ -20,8 +20,8 @@ import (
 	"text/tabwriter"
 )
 
-// BUG(rsc): A bug in the OS X Snow Leopard 64-bit kernel prevents
-// CPU profiling from giving accurate results on that system.
+// BUG(rsc): Profiles are incomplete and inaccurate on NetBSD and OS X.
+// See http://golang.org/issue/6047 for details.
 
 // A Profile is a collection of stack traces showing the call sequences
 // that led to instances of a particular event, such as allocation.
@@ -331,6 +331,11 @@ func printStackRecord(w io.Writer, stk []uintptr, allFrames bool) {
 			if i > 0 && pc > f.Entry() && !wasPanic {
 				if runtime.GOARCH == "386" || runtime.GOARCH == "amd64" {
 					tracepc--
+				} else if runtime.GOARCH == "s390" || runtime.GOARCH == "s390x" {
+					// only works if function was called
+					// with the brasl instruction (or a
+					// different 6-byte instruction).
+					tracepc -= 6
 				} else {
 					tracepc -= 4 // arm, etc
 				}
@@ -666,7 +671,7 @@ func writeBlock(w io.Writer, debug int) error {
 		}
 		fmt.Fprint(w, "\n")
 		if debug > 0 {
-			printStackRecord(w, r.Stack(), false)
+			printStackRecord(w, r.Stack(), true)
 		}
 	}
 

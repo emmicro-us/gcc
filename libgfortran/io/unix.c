@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2013 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2015 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -30,7 +30,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include <stdlib.h>
 #include <limits.h>
 
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -111,9 +114,6 @@ id_from_fd (const int fd)
     typeof (b) _b = (b);	\
     _a < _b ? _a : _b; })
 
-#ifndef PATH_MAX
-#define PATH_MAX 1024
-#endif
 
 /* These flags aren't defined on all targets (mingw32), so provide them
    here.  */
@@ -212,6 +212,8 @@ typedef struct
   /* Cached stat(2) values.  */
   dev_t st_dev;
   ino_t st_ino;
+
+  bool unbuffered;  /* Buffer should be flushed after each I/O statement.  */
 }
 unix_stream;
 
@@ -407,7 +409,9 @@ raw_close (unix_stream * s)
 {
   int retval;
   
-  if (s->fd != STDOUT_FILENO
+  if (s->fd == -1)
+    retval = -1;
+  else if (s->fd != STDOUT_FILENO
       && s->fd != STDERR_FILENO
       && s->fd != STDIN_FILENO)
     retval = close (s->fd);
@@ -415,6 +419,12 @@ raw_close (unix_stream * s)
     retval = 0;
   free (s);
   return retval;
+}
+
+static int
+raw_markeor (unix_stream * s __attribute__ ((unused)))
+{
+  return 0;
 }
 
 static const struct stream_vtable raw_vtable = {
@@ -425,7 +435,8 @@ static const struct stream_vtable raw_vtable = {
   .size = (void *) raw_size,
   .trunc = (void *) raw_truncate,
   .close = (void *) raw_close,
-  .flush = (void *) raw_flush 
+  .flush = (void *) raw_flush,
+  .markeor = (void *) raw_markeor
 };
 
 static int
@@ -442,7 +453,7 @@ raw_init (unix_stream * s)
 Buffered I/O functions. These functions have the same semantics as the
 raw I/O functions above, except that they are buffered in order to
 improve performance. The buffer must be flushed when switching from
-reading to writing and vice versa. Only supported for regular files.
+reading to writing and vice versa.
 *********************************************************************/
 
 static int
@@ -580,6 +591,23 @@ buf_write (unix_stream * s, const void * buf, ssize_t nbyte)
   return nbyte;
 }
 
+
+/* "Unbuffered" really means I/O statement buffering. For formatted
+   I/O, the fbuf manages this, and then uses raw I/O. For unformatted
+   I/O, buffered I/O is used, and the buffer is flushed at the end of
+   each I/O statement, where this function is called.  Alternatively,
+   the buffer is flushed at the end of the record if the buffer is
+   more than half full; this prevents needless seeking back and forth
+   when writing sequential unformatted.  */
+
+static int
+buf_markeor (unix_stream * s)
+{
+  if (s->unbuffered || s->ndirty >= BUFFER_SIZE / 2)
+    return buf_flush (s);
+  return 0;
+}
+
 static gfc_offset
 buf_seek (unix_stream * s, gfc_offset offset, int whence)
 {
@@ -647,7 +675,8 @@ static const struct stream_vtable buf_vtable = {
   .size = (void *) buf_size,
   .trunc = (void *) buf_truncate,
   .close = (void *) buf_close,
-  .flush = (void *) buf_flush 
+  .flush = (void *) buf_flush,
+  .markeor = (void *) buf_markeor
 };
 
 static int
@@ -779,10 +808,10 @@ mem_read4 (stream * s, void * buf, ssize_t nbytes)
   void *p;
   int nb = nbytes;
 
-  p = mem_alloc_r (s, &nb);
+  p = mem_alloc_r4 (s, &nb);
   if (p)
     {
-      memcpy (buf, p, nb);
+      memcpy (buf, p, nb * 4);
       return (ssize_t) nb;
     }
   else
@@ -906,7 +935,8 @@ static const struct stream_vtable mem_vtable = {
   .size = (void *) buf_size,
   .trunc = (void *) mem_truncate,
   .close = (void *) mem_close,
-  .flush = (void *) mem_flush 
+  .flush = (void *) mem_flush,
+  .markeor = (void *) raw_markeor
 };
 
 static const struct stream_vtable mem4_vtable = {
@@ -919,7 +949,8 @@ static const struct stream_vtable mem4_vtable = {
   .size = (void *) buf_size,
   .trunc = (void *) mem_truncate,
   .close = (void *) mem_close,
-  .flush = (void *) mem_flush 
+  .flush = (void *) mem_flush,
+  .markeor = (void *) raw_markeor
 };
 
 /*********************************************************************
@@ -972,7 +1003,7 @@ open_internal4 (char *base, int length, gfc_offset offset)
  * around it. */
 
 static stream *
-fd_to_stream (int fd)
+fd_to_stream (int fd, bool unformatted)
 {
   struct stat statbuf;
   unix_stream *s;
@@ -983,7 +1014,15 @@ fd_to_stream (int fd)
 
   /* Get the current length of the file. */
 
-  fstat (fd, &statbuf);
+  if (fstat (fd, &statbuf) == -1)
+    {
+      s->st_dev = s->st_ino = -1;
+      s->file_length = 0;
+      if (errno == EBADF)
+	s->fd = -1;
+      raw_init (s);
+      return (stream *) s;
+    }
 
   s->st_dev = statbuf.st_dev;
   s->st_ino = statbuf.st_ino;
@@ -998,7 +1037,15 @@ fd_to_stream (int fd)
 	    || s->fd == STDERR_FILENO)))
     buf_init (s);
   else
-    raw_init (s);
+    {
+      if (unformatted)
+	{
+	  s->unbuffered = true;
+	  buf_init (s);
+	}
+      else
+	raw_init (s);
+    }
 
   return (stream *) s;
 }
@@ -1022,23 +1069,17 @@ unit_to_fd (int unit)
 }
 
 
-/* unpack_filename()-- Given a fortran string and a pointer to a
- * buffer that is PATH_MAX characters, convert the fortran string to a
- * C string in the buffer.  Returns nonzero if this is not possible.  */
+/* Set the close-on-exec flag for an existing fd, if the system
+   supports such.  */
 
-int
-unpack_filename (char *cstring, const char *fstring, int len)
+static void __attribute__ ((unused))
+set_close_on_exec (int fd __attribute__ ((unused)))
 {
-  if (fstring == NULL)
-    return EFAULT;
-  len = fstrlen (fstring, len);
-  if (len >= PATH_MAX)
-    return ENAMETOOLONG;
-
-  memmove (cstring, fstring, len);
-  cstring[len] = '\0';
-
-  return 0;
+  /* Mingw does not define F_SETFD.  */
+#if defined(HAVE_FCNTL) && defined(F_SETFD) && defined(FD_CLOEXEC)
+  if (fd >= 0)
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
 }
 
 
@@ -1081,7 +1122,12 @@ tempfile_open (const char *tempdir, char **fname)
   mode_mask = umask (S_IXUSR | S_IRWXG | S_IRWXO);
 #endif
 
+#if defined(HAVE_MKOSTEMP) && defined(O_CLOEXEC)
+  fd = mkostemp (template, O_CLOEXEC);
+#else
   fd = mkstemp (template);
+  set_close_on_exec (fd);
+#endif
 
 #ifdef HAVE_UMASK
   (void) umask (mode_mask);
@@ -1091,6 +1137,13 @@ tempfile_open (const char *tempdir, char **fname)
   fd = -1;
   int count = 0;
   size_t slashlen = strlen (slash);
+  int flags = O_RDWR | O_CREAT | O_EXCL;
+#if defined(HAVE_CRLF) && defined(O_BINARY)
+  flags |= O_BINARY;
+#endif
+#ifdef O_CLOEXEC
+  flags |= O_CLOEXEC;
+#endif
   do
     {
       snprintf (template, tempdirlen + 23, "%s%sgfortrantmpaaaXXXXXX", 
@@ -1114,14 +1167,12 @@ tempfile_open (const char *tempdir, char **fname)
 	continue;
       }
 
-#if defined(HAVE_CRLF) && defined(O_BINARY)
-      fd = open (template, O_RDWR | O_CREAT | O_EXCL | O_BINARY,
-		 S_IRUSR | S_IWUSR);
-#else
-      fd = open (template, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
-#endif
+      fd = open (template, flags, S_IRUSR | S_IWUSR);
     }
   while (fd == -1 && errno == EEXIST);
+#ifndef O_CLOEXEC
+  set_close_on_exec (fd);
+#endif
 #endif /* HAVE_MKSTEMP */
 
   *fname = template;
@@ -1182,27 +1233,18 @@ tempfile (st_parameter_open *opp)
 }
 
 
-/* regular_file()-- Open a regular file.
+/* regular_file2()-- Open a regular file.
  * Change flags->action if it is ACTION_UNSPECIFIED on entry,
  * unless an error occurs.
  * Returns the descriptor, which is less than zero on error. */
 
 static int
-regular_file (st_parameter_open *opp, unit_flags *flags)
+regular_file2 (const char *path, st_parameter_open *opp, unit_flags *flags)
 {
-  char path[min(PATH_MAX, opp->file_len + 1)];
   int mode;
   int rwflag;
-  int crflag;
+  int crflag, crflag2;
   int fd;
-  int err;
-
-  err = unpack_filename (path, opp->file, opp->file_len);
-  if (err)
-    {
-      errno = err;		/* Fake an OS error */
-      return -1;
-    }
 
 #ifdef __CYGWIN__
   if (opp->file_len == 7)
@@ -1245,8 +1287,6 @@ regular_file (st_parameter_open *opp, unit_flags *flags)
     }
 #endif
 
-  rwflag = 0;
-
   switch (flags->action)
     {
     case ACTION_READ:
@@ -1277,8 +1317,10 @@ regular_file (st_parameter_open *opp, unit_flags *flags)
       break;
 
     case STATUS_UNKNOWN:
-    case STATUS_SCRATCH:
-      crflag = O_CREAT;
+      if (rwflag == O_RDONLY)
+	crflag = 0;
+      else
+	crflag = O_CREAT;
       break;
 
     case STATUS_REPLACE:
@@ -1286,6 +1328,8 @@ regular_file (st_parameter_open *opp, unit_flags *flags)
       break;
 
     default:
+      /* Note: STATUS_SCRATCH is handled by tempfile () and should
+	 never be seen here.  */
       internal_error (&opp->common, "regular_file(): Bad status");
     }
 
@@ -1293,6 +1337,10 @@ regular_file (st_parameter_open *opp, unit_flags *flags)
 
 #if defined(HAVE_CRLF) && defined(O_BINARY)
   crflag |= O_BINARY;
+#endif
+
+#ifdef O_CLOEXEC
+  crflag |= O_CLOEXEC;
 #endif
 
   mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
@@ -1310,14 +1358,18 @@ regular_file (st_parameter_open *opp, unit_flags *flags)
 
   /* retry for read-only access */
   rwflag = O_RDONLY;
-  fd = open (path, rwflag | crflag, mode);
+  if (flags->status == STATUS_UNKNOWN)
+    crflag2 = crflag & ~(O_CREAT);
+  else
+    crflag2 = crflag;
+  fd = open (path, rwflag | crflag2, mode);
   if (fd >=0)
     {
       flags->action = ACTION_READ;
       return fd;		/* success */
     }
   
-  if (errno != EACCES)
+  if (errno != EACCES && errno != ENOENT)
     return fd;			/* failure */
 
   /* retry for write-only access */
@@ -1331,6 +1383,18 @@ regular_file (st_parameter_open *opp, unit_flags *flags)
   return fd;			/* failure */
 }
 
+
+/* Wrapper around regular_file2, to make sure we free the path after
+   we're done.  */
+
+static int
+regular_file (st_parameter_open *opp, unit_flags *flags)
+{
+  char *path = fc_strdup (opp->file, opp->file_len);
+  int fd = regular_file2 (path, opp, flags);
+  free (path);
+  return fd;
+}
 
 /* open_external()-- Open an external file, unix specific version.
  * Change flags->action if it is ACTION_UNSPECIFIED on entry.
@@ -1358,13 +1422,16 @@ open_external (st_parameter_open *opp, unit_flags *flags)
       /* regular_file resets flags->action if it is ACTION_UNSPECIFIED and
        * if it succeeds */
       fd = regular_file (opp, flags);
+#ifndef O_CLOEXEC
+      set_close_on_exec (fd);
+#endif
     }
 
   if (fd < 0)
     return NULL;
   fd = fix_fd (fd);
 
-  return fd_to_stream (fd);
+  return fd_to_stream (fd, flags->form == FORM_UNFORMATTED);
 }
 
 
@@ -1374,7 +1441,7 @@ open_external (st_parameter_open *opp, unit_flags *flags)
 stream *
 input_stream (void)
 {
-  return fd_to_stream (STDIN_FILENO);
+  return fd_to_stream (STDIN_FILENO, false);
 }
 
 
@@ -1390,7 +1457,7 @@ output_stream (void)
   setmode (STDOUT_FILENO, O_BINARY);
 #endif
 
-  s = fd_to_stream (STDOUT_FILENO);
+  s = fd_to_stream (STDOUT_FILENO, false);
   return s;
 }
 
@@ -1407,7 +1474,7 @@ error_stream (void)
   setmode (STDERR_FILENO, O_BINARY);
 #endif
 
-  s = fd_to_stream (STDERR_FILENO);
+  s = fd_to_stream (STDERR_FILENO, false);
   return s;
 }
 
@@ -1419,8 +1486,8 @@ error_stream (void)
 int
 compare_file_filename (gfc_unit *u, const char *name, int len)
 {
-  char path[min(PATH_MAX, len + 1)];
   struct stat st;
+  int ret;
 #ifdef HAVE_WORKING_STAT
   unix_stream *s;
 #else
@@ -1429,18 +1496,21 @@ compare_file_filename (gfc_unit *u, const char *name, int len)
 # endif
 #endif
 
-  if (unpack_filename (path, name, len))
-    return 0;			/* Can't be the same */
+  char *path = fc_strdup (name, len);
 
   /* If the filename doesn't exist, then there is no match with the
    * existing file. */
 
   if (stat (path, &st) < 0)
-    return 0;
+    {
+      ret = 0;
+      goto done;
+    }
 
 #ifdef HAVE_WORKING_STAT
   s = (unix_stream *) (u->s);
-  return (st.st_dev == s->st_dev) && (st.st_ino == s->st_ino);
+  ret = (st.st_dev == s->st_dev) && (st.st_ino == s->st_ino);
+  goto done;
 #else
 
 # ifdef __MINGW32__
@@ -1450,13 +1520,16 @@ compare_file_filename (gfc_unit *u, const char *name, int len)
   id1 = id_from_path (path);
   id2 = id_from_fd (((unix_stream *) (u->s))->fd);
   if (id1 || id2)
-    return (id1 == id2);
+    {
+      ret = (id1 == id2);
+      goto done;
+    }
 # endif
-
-  if (len != u->file_len)
-    return 0;
-  return (memcmp(path, u->file, len) == 0);
+  ret = (strcmp(path, u->filename) == 0);
 #endif
+ done:
+  free (path);
+  return ret;
 }
 
 
@@ -1464,8 +1537,8 @@ compare_file_filename (gfc_unit *u, const char *name, int len)
 # define FIND_FILE0_DECL struct stat *st
 # define FIND_FILE0_ARGS st
 #else
-# define FIND_FILE0_DECL uint64_t id, const char *file, gfc_charlen_type file_len
-# define FIND_FILE0_ARGS id, file, file_len
+# define FIND_FILE0_DECL uint64_t id, const char *path
+# define FIND_FILE0_ARGS id, path
 #endif
 
 /* find_file0()-- Recursive work function for find_file() */
@@ -1497,7 +1570,7 @@ find_file0 (gfc_unit *u, FIND_FILE0_DECL)
     }
   else
 # endif
-    if (compare_string (u->file_len, u->file, file_len, file) == 0)
+    if (strcmp (u->filename, path) == 0)
       return u;
 #endif
 
@@ -1519,18 +1592,19 @@ find_file0 (gfc_unit *u, FIND_FILE0_DECL)
 gfc_unit *
 find_file (const char *file, gfc_charlen_type file_len)
 {
-  char path[min(PATH_MAX, file_len + 1)];
   struct stat st[1];
   gfc_unit *u;
 #if defined(__MINGW32__) && !HAVE_WORKING_STAT
   uint64_t id = 0ULL;
 #endif
 
-  if (unpack_filename (path, file, file_len))
-    return NULL;
+  char *path = fc_strdup (file, file_len);
 
   if (stat (path, &st[0]) < 0)
-    return NULL;
+    {
+      u = NULL;
+      goto done;
+    }
 
 #if defined(__MINGW32__) && !HAVE_WORKING_STAT
   id = id_from_path (path);
@@ -1546,7 +1620,7 @@ retry:
 	{
 	  /* assert (u->closed == 0); */
 	  __gthread_mutex_unlock (&unit_lock);
-	  return u;
+	  goto done;
 	}
 
       inc_waiting_locked (u);
@@ -1566,6 +1640,8 @@ retry:
 
       dec_waiting_unlocked (u);
     }
+ done:
+  free (path);
   return u;
 }
 
@@ -1638,16 +1714,7 @@ flush_all_units (void)
 int
 delete_file (gfc_unit * u)
 {
-  char path[min(PATH_MAX, u->file_len + 1)];
-  int err = unpack_filename (path, u->file, u->file_len);
-
-  if (err)
-    {				/* Shouldn't be possible */
-      errno = err;
-      return 1;
-    }
-
-  return unlink (path);
+  return unlink (u->filename);
 }
 
 
@@ -1657,12 +1724,10 @@ delete_file (gfc_unit * u)
 int
 file_exists (const char *file, gfc_charlen_type file_len)
 {
-  char path[min(PATH_MAX, file_len + 1)];
-
-  if (unpack_filename (path, file, file_len))
-    return 0;
-
-  return !(access (path, F_OK));
+  char *path = fc_strdup (file, file_len);
+  int res = !(access (path, F_OK));
+  free (path);
+  return res;
 }
 
 
@@ -1671,15 +1736,12 @@ file_exists (const char *file, gfc_charlen_type file_len)
 GFC_IO_INT
 file_size (const char *file, gfc_charlen_type file_len)
 {
-  char path[min(PATH_MAX, file_len + 1)];
+  char *path = fc_strdup (file, file_len);
   struct stat statbuf;
-
-  if (unpack_filename (path, file, file_len))
+  int err = stat (path, &statbuf);
+  free (path);
+  if (err == -1)
     return -1;
-
-  if (stat (path, &statbuf) < 0)
-    return -1;
-
   return (GFC_IO_INT) statbuf.st_size;
 }
 
@@ -1692,11 +1754,15 @@ static const char yes[] = "YES", no[] = "NO", unknown[] = "UNKNOWN";
 const char *
 inquire_sequential (const char *string, int len)
 {
-  char path[min(PATH_MAX, len + 1)];
   struct stat statbuf;
 
-  if (string == NULL ||
-      unpack_filename (path, string, len) || stat (path, &statbuf) < 0)
+  if (string == NULL)
+    return unknown;
+
+  char *path = fc_strdup (string, len);
+  int err = stat (path, &statbuf);
+  free (path);
+  if (err == -1)
     return unknown;
 
   if (S_ISREG (statbuf.st_mode) ||
@@ -1716,11 +1782,15 @@ inquire_sequential (const char *string, int len)
 const char *
 inquire_direct (const char *string, int len)
 {
-  char path[min(PATH_MAX, len + 1)];
   struct stat statbuf;
 
-  if (string == NULL ||
-      unpack_filename (path, string, len) || stat (path, &statbuf) < 0)
+  if (string == NULL)
+    return unknown;
+
+  char *path = fc_strdup (string, len);
+  int err = stat (path, &statbuf);
+  free (path);
+  if (err == -1)
     return unknown;
 
   if (S_ISREG (statbuf.st_mode) || S_ISBLK (statbuf.st_mode))
@@ -1740,11 +1810,15 @@ inquire_direct (const char *string, int len)
 const char *
 inquire_formatted (const char *string, int len)
 {
-  char path[min(PATH_MAX, len + 1)];
   struct stat statbuf;
 
-  if (string == NULL ||
-      unpack_filename (path, string, len) || stat (path, &statbuf) < 0)
+  if (string == NULL)
+    return unknown;
+
+  char *path = fc_strdup (string, len);
+  int err = stat (path, &statbuf);
+  free (path);
+  if (err == -1)
     return unknown;
 
   if (S_ISREG (statbuf.st_mode) ||
@@ -1775,10 +1849,12 @@ inquire_unformatted (const char *string, int len)
 static const char *
 inquire_access (const char *string, int len, int mode)
 {
-  char path[min(PATH_MAX, len + 1)];
-
-  if (string == NULL || unpack_filename (path, string, len) ||
-      access (path, mode) < 0)
+  if (string == NULL)
+    return no;
+  char *path = fc_strdup (string, len);
+  int res = access (path, mode);
+  free (path);
+  if (res == -1)
     return no;
 
   return yes;

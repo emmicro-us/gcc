@@ -1,6 +1,5 @@
 /* Definitions of target machine for GNU compiler, Synopsys DesignWare ARC cpu.
-   Copyright (C) 1994, 1995, 1997, 1998, 2007-2013
-   Free Software Foundation, Inc.
+   Copyright (C) 1994-2015 Free Software Foundation, Inc.
 
    Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
    behalf of Synopsys Inc.
@@ -228,7 +227,8 @@ ASM_DEFOPT "%{matomic:-mlock} \
     %(linker) %l " LINK_PIE_SPEC "%X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} %{r}\
     %{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S}}}\
     %{static:} %{L*} %(mfwrap) %(link_libgcc) %o\
-    %{fopenmp:%:include(libgomp.spec)%(link_gomp)} %(mflib)\
+    %{fopenmp|ftree-parallelize-loops=*:%:include(libgomp.spec)%(link_gomp)}\
+    %(mflib)\
     %{fprofile-arcs|fprofile-generate|coverage:-lgcov}\
     %{!nostdlib:%{!nodefaultlibs:%(link_ssp) %(link_gcc_c_sequence)}}\
     %{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} }}}}}}"
@@ -239,7 +239,7 @@ ASM_DEFOPT "%{matomic:-mlock} \
 #endif
 
 #if DEFAULT_LIBC != LIBC_UCLIBC
-#define STARTFILE_SPEC "%{!shared:crt0.o%s} crti%O%s %{pg|p:%{!mcpu=ARCv2EM:crtg.o%s}} crtbegin.o%s"
+#define STARTFILE_SPEC "%{!shared:crt0.o%s} crti%O%s %{pg|p:crtg.o%s} crtbegin.o%s"
 #else
 #define STARTFILE_SPEC   "%{!shared:%{!mkernel:crt1.o%s}} crti.o%s \
   %{!shared:%{pg|p|profile:crtg.o%s} crtbegin.o%s} %{shared:crtbeginS.o%s}"
@@ -247,7 +247,7 @@ ASM_DEFOPT "%{matomic:-mlock} \
 #endif
 
 #if DEFAULT_LIBC != LIBC_UCLIBC
-#define ENDFILE_SPEC "%{pg|p:%{!mcpu=ARCv2EM:crtgend.o%s}} crtend.o%s crtn%O%s"
+#define ENDFILE_SPEC "%{pg|p:crtgend.o%s} crtend.o%s crtn%O%s"
 #else
 #define ENDFILE_SPEC "%{!shared:%{pg|p|profile:crtgend.o%s} crtend.o%s} \
   %{shared:crtendS.o%s} crtn.o%s"
@@ -264,7 +264,7 @@ ASM_DEFOPT "%{matomic:-mlock} \
 #else
 #undef LIB_SPEC
 /* -lc_p not present for arc-elf32-* : ashwin */
-#define LIB_SPEC "%{!shared:%{g*:-lg} %{pg|p:%{!mcpu=ARCv2EM:-lgmon}} -lc}"
+#define LIB_SPEC "%{!shared:%{g*:-lg} %{pg|p:-lgmon} -lc}"
 #endif
 
 #ifndef DRIVER_ENDIAN_SELF_SPECS
@@ -368,9 +368,6 @@ ASM_DEFOPT "%{matomic:-mlock} \
 /* Define this if most significant word of a multiword number is the lowest
    numbered.  */
 #define WORDS_BIG_ENDIAN (TARGET_BIG_ENDIAN)
-
-/* Number of bits in an addressable storage unit.  */
-#define BITS_PER_UNIT 8
 
 /* Width in bits of a "word", which is the contents of a machine register.
    Note that this is not necessarily the width of data type `int';
@@ -614,14 +611,15 @@ if (GET_MODE_CLASS (MODE) == MODE_INT		\
    to hold something of mode MODE.
    This is ordinarily the length in words of a value of mode MODE
    but can be less for certain modes in special long registers.  */
-#define HARD_REGNO_NREGS(REGNO, MODE) \
-((GET_MODE_SIZE (MODE) == 16 && REGNO >= 64 && REGNO < 88) ? 1 \
- : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+#define HARD_REGNO_NREGS(REGNO, MODE)					\
+  ((GET_MODE_SIZE (MODE) == 16						\
+    && REGNO >= ARC_FIRST_SIMD_VR_REG && REGNO <= ARC_LAST_SIMD_VR_REG) ? 1 \
+   : (GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.  */
 extern unsigned int arc_hard_regno_mode_ok[];
 extern unsigned int arc_mode_class[];
-#define HARD_REGNO_MODE_OK(REGNO, MODE) \
+#define HARD_REGNO_MODE_OK(REGNO, MODE)				\
 ((arc_hard_regno_mode_ok[REGNO] & arc_mode_class[MODE]) != 0)
 
 /* A C expression that is nonzero if it is desirable to choose
@@ -734,7 +732,7 @@ enum reg_class
    This is an initializer for a vector of HARD_REG_SET
    of length N_REG_CLASSES.  */
 
-#define REG_CLASS_CONTENTS \
+#define REG_CLASS_CONTENTS						\
 {													\
   {0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000},	     /* No Registers */			\
   {0x00000001, 0x00000000, 0x00000000, 0x00000000, 0x00000000},      /* 'x', r0 register , r0 */	\
@@ -1074,7 +1072,7 @@ extern int arc_initial_elimination_offset(int from, int to);
 #define CONSTANT_ADDRESS_P(X) \
 (flag_pic?arc_legitimate_pic_addr_p (X): \
  (GET_CODE (X) == LABEL_REF || GET_CODE (X) == SYMBOL_REF	\
-  || GET_CODE (X) == CONST_INT \
+  || GET_CODE (X) == CONST_INT					\
   || ((GET_CODE (X) == CONST) && !optimize_size)))
 
 /* Is the argument a const_int rtx, containing an exact power of 2 */
@@ -1150,7 +1148,7 @@ extern int arc_initial_elimination_offset(int from, int to);
 
 /* Given a comparison code (EQ, NE, etc.) and the first operand of a COMPARE,
    return the mode to be used for the comparison.  */
-/*extern enum machine_mode arc_select_cc_mode ();*/
+/*extern machine_mode arc_select_cc_mode ();*/
 #define SELECT_CC_MODE(OP, X, Y) \
 arc_select_cc_mode (OP, X, Y)
 
@@ -1175,6 +1173,22 @@ arc_select_cc_mode (OP, X, Y)
 /* ??? What's the right value here?  Branches are certainly more
    expensive than reg->reg moves.  */
 #define BRANCH_COST(speed_p, predictable_p) 2
+
+/* Scc sets the destination to 1 and then conditionally zeroes it.
+   Best case, ORed SCCs can be made into clear - condset - condset.
+   But it could also end up as five insns.  So say it costs four on
+   average.
+   These extra instructions - and the second comparison - will also be
+   an extra cost if the first comparison would have been decisive.
+   So get an average saving, with a probability of the first branch
+   beging decisive of p0, we want:
+   p0 * (branch_cost - 4) > (1 - p0) * 5
+   ??? We don't get to see that probability to evaluate, so we can
+   only wildly guess that it might be 50%.
+   ??? The compiler also lacks the notion of branch predictability.  */
+#define LOGICAL_OP_NON_SHORT_CIRCUIT \
+  (BRANCH_COST (optimize_function_for_speed_p (cfun), \
+		false) > 9)
 
 /* Nonzero if access to memory by bytes is slow and undesirable.
    For RISC chips, it means that access to memory by bytes is no
@@ -1241,6 +1255,9 @@ arc_select_cc_mode (OP, X, Y)
    (including SYMBOL_REF) can be immediate operands when generating
    position independent code.  */
 #define LEGITIMATE_PIC_OPERAND_P(X)  (arc_legitimate_pic_operand_p(X))
+
+/* PIC and small data don't mix on ARC because they use the same register.  */
+#define SDATA_BASE_REGNUM 26
 
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) \
   (flag_pic \
@@ -1536,15 +1553,15 @@ extern int arc_return_address_regs[4];
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
 /* How to renumber registers for dbx and gdb.  */
-#define DBX_REGISTER_NUMBER(REGNO) \
+#define DBX_REGISTER_NUMBER(REGNO)				\
   ((TARGET_MULMAC_32BY16_SET && (REGNO) >= 56 && (REGNO) <= 57) \
-   ? ((REGNO) ^ !TARGET_BIG_ENDIAN) \
-   : (TARGET_MUL64_SET && (REGNO) >= 57 && (REGNO) <= 59) \
-   ? ((REGNO) == 57 \
-      ? 58 /* MMED */ \
-      : ((REGNO) & 1) ^ TARGET_BIG_ENDIAN \
-      ? 59 /* MHI */ \
-      : 57 + !!TARGET_MULMAC_32BY16_SET) /* MLO */ \
+   ? ((REGNO) ^ !TARGET_BIG_ENDIAN)				\
+   : (TARGET_MUL64_SET && (REGNO) >= 57 && (REGNO) <= 59)	\
+   ? ((REGNO) == 57						\
+      ? 58 /* MMED */						\
+      : ((REGNO) & 1) ^ TARGET_BIG_ENDIAN			\
+      ? 59 /* MHI */						\
+      : 57 + !!TARGET_MULMAC_32BY16_SET) /* MLO */		\
    : (REGNO))
 
 #define DWARF_FRAME_REGNUM(REG) (REG)
@@ -1732,16 +1749,16 @@ extern enum arc_function_type arc_compute_function_type (struct function *);
   ((LENGTH) \
    = (GET_CODE (PATTERN (X)) == SEQUENCE \
       ? ((LENGTH) \
-	 + arc_adjust_insn_length (XVECEXP (PATTERN (X), 0, 0), \
-				   get_attr_length (XVECEXP (PATTERN (X), \
-						    0, 0)), \
-				   true) \
-	 - get_attr_length (XVECEXP (PATTERN (X), 0, 0)) \
-	 + arc_adjust_insn_length (XVECEXP (PATTERN (X), 0, 1), \
-				   get_attr_length (XVECEXP (PATTERN (X), \
-						    0, 1)), \
-				   true) \
-	 - get_attr_length (XVECEXP (PATTERN (X), 0, 1))) \
+	 + arc_adjust_insn_length ( \
+             as_a <rtx_sequence *> (PATTERN (X))->insn (0), \
+	     get_attr_length (as_a <rtx_sequence *> (PATTERN (X))->insn (0)), \
+	     true)							\
+	 - get_attr_length (as_a <rtx_sequence *> (PATTERN (X))->insn (0)) \
+	 + arc_adjust_insn_length ( \
+	     as_a <rtx_sequence *> (PATTERN (X))->insn (1), \
+	     get_attr_length (as_a <rtx_sequence *> (PATTERN (X))->insn (1)), \
+	     true)							\
+	 - get_attr_length (as_a <rtx_sequence *> (PATTERN (X))->insn (1))) \
       : arc_adjust_insn_length ((X), (LENGTH), false)))
 
 #define IS_ASM_LOGICAL_LINE_SEPARATOR(C,STR) ((C) == '`')

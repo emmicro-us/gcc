@@ -1,5 +1,5 @@
 ;; Constraint definitions for Synopsys DesignWare ARC.
-;; Copyright (C) 2007-2013 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2015 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -157,6 +157,12 @@
   (and (match_code "const_int")
        (match_test "ival == 0")))
 
+(define_constraint "Cn0"
+  "@internal
+   Negative or zero"
+  (and (match_code "const_int")
+       (match_test "ival <= 0")))
+
 (define_constraint "Cca"
   "@internal
    Conditional or three-address add / sub constant"
@@ -282,7 +288,7 @@
 
 (define_memory_constraint "Usc"
   "@internal
-   A valid memory operand for storing long immediate constants"
+   A valid memory operand for storing constants"
   (and (match_code "mem")
        (match_test "!CONSTANT_P (XEXP (op,0))")
 ;; ??? the assembler rejects stores of immediates to small data.
@@ -336,8 +342,9 @@
 
 (define_constraint "Clb"
   "A local label"
+  "label"
   (and (match_code "label_ref")
-       (match_test "arc_text_label (XEXP (op, 0))")))
+       (match_test "arc_text_label (as_a <rtx_insn *> (XEXP (op, 0)))")))
 
 (define_constraint "Cal"
   "constant for arithmetic/logical operations"
@@ -459,5 +466,3 @@
 
 (define_register_constraint "h" "AC16_H_REGS"
   "5-bit h register set except @code{r30} and @code{r29}: @code{r0}-@code{r31}, nonfixed core register")
-
-
