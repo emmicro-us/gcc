@@ -1,6 +1,5 @@
 ;; Machine description of the Synopsys DesignWare ARC cpu for GNU C compiler
-;; Copyright (C) 1994, 1997, 1999, 2006-2013
-;; Free Software Foundation, Inc.
+;; Copyright (C) 1994-2015 Free Software Foundation, Inc.
 
 ;; Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
 ;; behalf of Synopsys Inc.
@@ -261,7 +260,6 @@
   (const_string "standard"))
 
 ; We should consider all the instructions enabled until otherwise
-; old definition: (define_attr "enabled" "no,yes" (const_string "yes"))
 (define_attr "enabled" "no,yes"
   (cond [(and (eq_attr "cpu_facility" "arcv1")
 	      (match_test "TARGET_V2"))
@@ -511,6 +509,12 @@
 	 (eq_attr "cond_delay_insn" "no") (const_string "no")]
 	(const_string "yes")))
 
+(define_attr "annul_ret_delay_insn" "no,yes"
+  (cond [(eq_attr "cond_ret_delay_insn" "yes") (const_string "yes")
+	 (match_test "TARGET_AT_DBR_CONDEXEC") (const_string "no")
+	 (eq_attr "type" "!call,branch,uncond_branch,jump,brcc,return,sfunc")
+	   (const_string "yes")]
+   (const_string "no")))
 
 ;; Delay slot definition for ARCompact ISA
 ;; ??? FIXME:
@@ -538,7 +542,7 @@
 
 (define_delay (eq_attr "type" "return")
   [(eq_attr "in_ret_delay_slot" "yes")
-   (eq_attr "type" "!call,branch,uncond_branch,jump,brcc,return,sfunc")
+   (eq_attr "annul_ret_delay_insn" "yes")
    (eq_attr "cond_ret_delay_insn" "yes")])
 
 ;; For ARC600, unexposing the delay sloy incurs a penalty also in the
@@ -753,7 +757,7 @@
 
 (define_insn_and_split "*movsi_set_cc_insn"
   [(set (match_operand:CC_ZN 2 "cc_set_register" "")
-	(match_operator 3 "zn_compare_operator"
+	(match_operator:CC_ZN 3 "zn_compare_operator"
 	  [(match_operand:SI 1 "nonmemory_operand" "cI,cL,Cal") (const_int 0)]))
    (set (match_operand:SI 0 "register_operand" "=w,w,w")
 	(match_dup 1))]
@@ -770,7 +774,7 @@
 
 (define_insn "unary_comparison"
   [(set (match_operand:CC_ZN 0 "cc_set_register" "")
-	(match_operator 3 "zn_compare_operator"
+	(match_operator:CC_ZN 3 "zn_compare_operator"
 	  [(match_operator:SI 2 "unary_operator"
 	     [(match_operand:SI 1 "register_operand" "c")])
 	   (const_int 0)]))]
@@ -834,7 +838,7 @@
 
 (define_insn "*commutative_binary_comparison"
   [(set (match_operand:CC_ZN 0 "cc_set_register" "")
-	(match_operator 5 "zn_compare_operator"
+	(match_operator:CC_ZN 5 "zn_compare_operator"
 	  [(match_operator:SI 4 "commutative_operator"
 	     [(match_operand:SI 1 "register_operand" "%c,c,c")
 	      (match_operand:SI 2 "nonmemory_operand" "cL,I,?Cal")])
@@ -936,7 +940,7 @@
 
 (define_insn "*noncommutative_binary_comparison"
   [(set (match_operand:CC_ZN 0 "cc_set_register" "")
-	(match_operator 5 "zn_compare_operator"
+	(match_operator:CC_ZN 5 "zn_compare_operator"
 	  [(match_operator:SI 4 "noncommutative_operator"
 	     [(match_operand:SI 1 "register_operand" "c,c,c")
 	      (match_operand:SI 2 "nonmemory_operand" "cL,I,?Cal")])
@@ -1015,8 +1019,7 @@
 	 last.  Otherwise, load it first.  Note that we cannot have
 	 auto-increment in that case since the address register is known to be
 	 dead.  */
-      if (refers_to_regno_p (REGNO (operands[0]), REGNO (operands[0]) + 1,
-			     operands [1], 0))
+      if (refers_to_regno_p (REGNO (operands[0]), operands [1], 0))
 	return \"ld%V1 %R0,%R1\;ld%V1 %0,%1\";
       else switch (GET_CODE (XEXP(operands[1], 0)))
 	{
@@ -1139,8 +1142,8 @@
     ; the combine pass will end up replacing uses of it with 0
   ]
   "operands[3] = CONST0_RTX (DFmode);
-   operands[4] = simplify_gen_subreg(SImode,operands[0],DFmode,0);
-   operands[5] = simplify_gen_subreg(SImode,operands[0],DFmode,4);"
+   operands[4] = simplify_gen_subreg (SImode, operands[0], DFmode, 0);
+   operands[5] = simplify_gen_subreg (SImode, operands[0], DFmode, 4);"
   [(set_attr "type" "move")])
 
 ;; Load/Store with update instructions.
@@ -1869,7 +1872,7 @@
 
 (define_insn "mulsi_600"
   [(set (match_operand:SI 2 "mlo_operand" "")
-	(mult:SI (match_operand:SI 0 "register_operand"  "Rcq#q,c,c,%c")
+	(mult:SI (match_operand:SI 0 "register_operand"  "Rcq#q,c,c,c")
 		 (match_operand:SI 1 "nonmemory_operand" "Rcq#q,cL,I,Cal")))
    (clobber (match_operand:SI 3 "mhi_operand" ""))]
   "TARGET_MUL64_SET"
@@ -1922,7 +1925,7 @@
 
 (define_insn_and_split "mulsidi_600"
   [(set (match_operand:DI 0 "nonimmediate_operand"                          "=mc,mc,mc,mc")
-	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand"   "Rcq#q, c, c,%c"))
+	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand"   "Rcq#q, c, c, c"))
 		 (sign_extend:DI (match_operand:SI 2 "nonmemory_operand"  "Rcq#q,cL, L,C32"))))
    (clobber (reg:DI MUL64_OUT_REG))]
   "TARGET_MUL64_SET && !TARGET_V2"
@@ -1939,7 +1942,7 @@
 (define_insn "mul64"
   [(set (reg:DI MUL64_OUT_REG)
 	(mult:DI
-	 (sign_extend:DI (match_operand:SI 0 "register_operand"  "Rcq#q, c,c,%c"))
+	 (sign_extend:DI (match_operand:SI 0 "register_operand"  "Rcq#q, c,c, c"))
 	 (sign_extend:DI (match_operand:SI 1 "nonmemory_operand" "Rcq#q,cL,L,C32"))))]
   "TARGET_MUL64_SET"
   "mul64%? \t0, %0, %1%&"
@@ -1952,7 +1955,7 @@
 
 (define_insn_and_split "umulsidi_600"
   [(set (match_operand:DI 0 "nonimmediate_operand"                       "=mc,mc,mc")
-	(mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand"    "c, c,%c"))
+	(mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand"    "c, c, c"))
 		 (sign_extend:DI (match_operand:SI 2 "nonmemory_operand"  "cL, L,C32"))))
    (clobber (reg:DI MUL64_OUT_REG))]
   "TARGET_MUL64_SET && !TARGET_V2"
@@ -1969,7 +1972,7 @@
 (define_insn "mulu64"
   [(set (reg:DI MUL64_OUT_REG)
 	(mult:DI
-	 (zero_extend:DI (match_operand:SI 0 "register_operand"   "c,c,%c"))
+	 (zero_extend:DI (match_operand:SI 0 "register_operand"   "c,c, c"))
 	 (zero_extend:DI (match_operand:SI 1 "nonmemory_operand" "cL,L,C32"))))]
   "TARGET_MUL64_SET"
   "mulu64%? \t0, %0, %1%&"
@@ -3695,7 +3698,7 @@
 
 (define_insn "jump_i"
   [(set (pc) (label_ref (match_operand 0 "" "")))]
-  "!TARGET_LONG_CALLS_SET || !find_reg_note (insn, REG_CROSSING_JUMP, NULL_RTX)"
+  "!TARGET_LONG_CALLS_SET || !CROSSING_JUMP_P (insn)"
   "b%!%* %^%l0%&"
   [(set_attr "type" "uncond_branch")
    (set (attr "iscompact")
@@ -3711,7 +3714,7 @@
 	  (eq_attr "delay_slot_filled" "yes")
 	  (const_int 4)
 
-	  (match_test "find_reg_note (insn, REG_CROSSING_JUMP, NULL_RTX)")
+	  (match_test "CROSSING_JUMP_P (insn)")
 	  (const_int 4)
 
 	  (ior (lt (minus (match_dup 0) (pc)) (const_int -512))
@@ -4049,16 +4052,9 @@
    (set_attr "predicable" "no,no,yes,yes,no,yes,no,yes")
    (set_attr "length" "*,*,4,4,4,4,4,8")])
 
-
-;; TODO - supporting 16-bit short "branch and link" insns if required.
-;(define_insn "*call_value_via_label_mixed"
-;  [(set (match_operand 0 "register_operand" "=r")
-;	 (call (mem:SI (match_operand:SI 1 "call_address_operand" ""))
-;	       (match_operand 2 "" "")))
-;  (clobber (reg:SI 31))]
-;  "TARGET_MIXED_CODE"
-;  "bl_s %1"
-;  [(set_attr "type" "call")])
+; There is a bl_s instruction (16 bit opcode branch-and-link), but we can't
+; use it for lack of inter-procedural branch shortening.
+; Link-time relaxation would help...
 
 (define_insn "call_value_prof"
   [(set (match_operand 0 "dest_reg_operand" "=r,r")
@@ -4236,6 +4232,39 @@
      (set (match_dup 4) (const_int 0)))]
  "operands[5] = operands[rtx_equal_p (operands[0], operands[2]) ? 3 : 2];")
 
+(define_insn "clrsbsi2"
+  [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
+	(clrsb:SI (match_operand:SI 1 "general_operand" "cL,Cal")))]
+
+  "TARGET_NORM"
+  "@
+   norm \t%0, %1
+   norm \t%0, %S1"
+  [(set_attr "length" "4,8")
+   (set_attr "type" "two_cycle_core,two_cycle_core")])
+
+(define_insn "norm_f"
+  [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
+	(clrsb:SI (match_operand:SI 1 "general_operand" "cL,Cal")))
+
+   (set (reg:CC_ZN CC_REG)
+	(compare:CC_ZN (match_dup 1) (const_int 0)))]
+  "TARGET_NORM"
+  "@
+   norm.f\t%0, %1
+   norm.f\t%0, %S1"
+  [(set_attr "length" "4,8")
+   (set_attr "type" "two_cycle_core,two_cycle_core")])
+
+(define_insn_and_split "clrsbhi2"
+  [(set (match_operand:HI  0 "dest_reg_operand" "=w,w")
+	(clrsb:HI (match_operand:HI 1 "general_operand" "cL,Cal")))]
+  "TARGET_NORM"
+  "#"
+  "reload_completed"
+  [(set (match_dup 0) (zero_extend:SI (clrsb:HI (match_dup 1))))]
+  "operands[0] = simplify_gen_subreg (SImode, operands[0], HImode, 0);")
+
 ;; Instructions generated through builtins
 
 (define_insn "norm"
@@ -4249,18 +4278,18 @@
   [(set_attr "length" "4,8")
    (set_attr "type" "two_cycle_core,two_cycle_core")])
 
-(define_insn "norm_f"
-  [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
-			    UNSPEC_ARC_NORM))
-   (set (reg:CC_ZN CC_REG)
-	(compare:CC_ZN (match_dup 1) (const_int 0)))]
-  "TARGET_NORM"
-  "@
-   norm.f\t%0, %1
-   norm.f\t%0, %S1"
-  [(set_attr "length" "4,8")
-   (set_attr "type" "two_cycle_core,two_cycle_core")])
+;;czi;;(define_insn "norm_f"
+;;czi;;  [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
+;;czi;;	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
+;;czi;;			    UNSPEC_ARC_NORM))
+;;czi;;   (set (reg:CC_ZN CC_REG)
+;;czi;;	(compare:CC_ZN (match_dup 1) (const_int 0)))]
+;;czi;;  "TARGET_NORM"
+;;czi;;  "@
+;;czi;;   norm.f\t%0, %1
+;;czi;;   norm.f\t%0, %S1"
+;;czi;;  [(set_attr "length" "4,8")
+;;czi;;   (set_attr "type" "two_cycle_core,two_cycle_core")])
 
 (define_insn "normw"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
@@ -4315,7 +4344,7 @@
     temp = gen_reg_rtx (SImode);
   emit_insn (gen_addsi3 (temp, operands[1], constm1_rtx));
   emit_insn (gen_bic_f_zn (temp, temp, operands[1]));
-  emit_insn (gen_norm (temp, temp));
+  emit_insn (gen_clrsbsi2 (temp, temp));
   emit_insn
     (gen_rtx_COND_EXEC
       (VOIDmode,
@@ -4873,7 +4902,7 @@
    "(reload_completed
      || (TARGET_EARLY_CBRANCHSI
 	 && brcc_nolimm_operator (operands[0], VOIDmode)))
-    && !find_reg_note (insn, REG_CROSSING_JUMP, NULL_RTX)"
+    && !CROSSING_JUMP_P (insn)"
    "*
      switch (get_attr_length (insn))
      {
@@ -4937,7 +4966,7 @@
 	  (label_ref (match_operand 0 "" ""))
 	  (pc)))
    (clobber (reg:CC_ZN CC_REG))]
-  "!find_reg_note (insn, REG_CROSSING_JUMP, NULL_RTX)"
+  "!CROSSING_JUMP_P (insn)"
 {
   switch (get_attr_length (insn))
     {
@@ -4977,7 +5006,7 @@
 	  (label_ref (match_operand 0 "" ""))
 	  (pc)))
    (clobber (reg:CC_ZN CC_REG))]
-  "!find_reg_note (insn, REG_CROSSING_JUMP, NULL_RTX)"
+  "!CROSSING_JUMP_P (insn)"
   "#"
   ""
   [(parallel
@@ -4992,22 +5021,22 @@
 })
 
 ; operand 0 is the loop count pseudo register
-; operand 1 is the number of loop iterations or 0 if it is unknown
-; operand 2 is the maximum number of loop iterations
-; operand 3 is the number of levels of enclosed loops
-; operand 4 is the loop end pattern
+; operand 1 is the loop end pattern
 (define_expand "doloop_begin"
   [(use (match_operand 0 "register_operand" ""))
-   (use (match_operand:QI 1 "const_int_operand" ""))
-   (use (match_operand:QI 2 "const_int_operand" ""))
-   (use (match_operand:QI 3 "const_int_operand" ""))
-   (use (match_operand 4 "" ""))]
+   (use (match_operand 1 "" ""))]
   ""
 {
-  if (INTVAL (operands[3]) > 1)
-    FAIL;
-  emit_insn (gen_doloop_begin_i (operands[0], const0_rtx,
-				 GEN_INT (INSN_UID (operands[4])),
+  /* Using the INSN_UID of the loop end pattern to identify it causes
+     trouble with -fcompare-debug, so allocate a debug-independent
+     id instead.  We use negative numbers so that we can use the same
+     slot in doloop_end_i where we later store a CODE_LABEL_NUMBER, and
+     still be able to tell what kind of number this is.  */
+  static HOST_WIDE_INT loop_end_id = 0;
+
+  rtx id = GEN_INT (--loop_end_id);
+  XEXP (XVECEXP (PATTERN (operands[1]), 0, 4), 0) = id;
+  emit_insn (gen_doloop_begin_i (operands[0], const0_rtx, id,
 				 const0_rtx, const0_rtx));
   DONE;
 })
@@ -5034,7 +5063,8 @@
 ;  1             clobber LP_START     show LP_START is set
 ;  2             clobber LP_END       show LP_END is set
 ;  3             use operand0         loop count pseudo register
-;  4             use operand1         CODE_LABEL_NUMBER of loop top label
+;  4             use operand1         before arc_reorg: -id
+;                                     after :CODE_LABEL_NUMBER of loop top label
 ;  5             use operand2         INSN_UID of loop end insn
 ;  6             use operand3         loop setup not at start (1 above, 2 below)
 ;  7             use operand4         LABEL_REF of top label, if not
@@ -5054,7 +5084,7 @@
    (use (match_operand 4 "const_int_operand" "C_0,X,X"))]
   ""
 {
-  rtx scan;
+  rtx_insn *scan;
   int len, size = 0;
   int n_insns = 0;
   rtx loop_start = operands[4];
@@ -5096,8 +5126,8 @@
     {
       if (!INSN_P (scan))
 	continue;
-      if (GET_CODE (PATTERN (scan)) == SEQUENCE)
-	scan = XVECEXP (PATTERN (scan), 0, 0);
+      if (rtx_sequence *seq = dyn_cast <rtx_sequence *> (PATTERN (scan)))
+	scan = seq->insn (0);
       if (JUMP_P (scan))
 	{
 	  if (recog_memoized (scan) != CODE_FOR_doloop_end_i)
@@ -5105,7 +5135,7 @@
 	      n_insns += 2;
 	      if (simplejump_p (scan))
 		{
-		  scan = XEXP (SET_SRC (PATTERN (scan)), 0);
+		  scan = as_a <rtx_insn *> (XEXP (SET_SRC (PATTERN (scan)), 0));
 		  continue;
 		}
 	      if (JUMP_LABEL (scan)
@@ -5184,11 +5214,7 @@
 )
 
 ; operand 0 is the loop count pseudo register
-; operand 1 is the number of loop iterations or 0 if it is unknown
-; operand 2 is the maximum number of loop iterations
-; operand 3 is the number of levels of enclosed loops
-; operand 4 is the label to jump to at the top of the loop
-; operand 5 is nonzero if the loop is entered at its top.
+; operand 1 is the label to jump to at the top of the loop
 ; Use this for the ARC600 and ARC700.  For ARCtangent, this is unsafe
 ; without further checking for nearby branches etc., and without proper
 ; annotation of shift patterns that clobber lp_count
@@ -5196,24 +5222,14 @@
 ; single insn - loop setup is expensive then.
 (define_expand "doloop_end"
   [(use (match_operand 0 "register_operand" ""))
-   (use (match_operand:QI 1 "const_int_operand" ""))
-   (use (match_operand:QI 2 "const_int_operand" ""))
-   (use (match_operand:QI 3 "const_int_operand" ""))
-   (use (label_ref (match_operand 4 "" "")))
-   (use (match_operand:QI 5 "const_int_operand" ""))]
+   (use (label_ref (match_operand 1 "" "")))]
   "TARGET_ARC600 || TARGET_ARC700 || TARGET_V2"
 {
-  if (INTVAL (operands[3]) > 1)
-    FAIL;
-  /* Setting up the loop with two sr isntructions costs 6 cycles.  */
-  if (TARGET_ARC700 && !INTVAL (operands[5])
-      && INTVAL (operands[1]) && INTVAL (operands[1]) <= (flag_pic ? 6 : 3))
-    FAIL;
   /* We could do smaller bivs with biv widening, and wider bivs by having
      a high-word counter in an outer loop - but punt on this for now.  */
   if (GET_MODE (operands[0]) != SImode)
     FAIL;
-  emit_jump_insn (gen_doloop_end_i (operands[0], operands[4], const0_rtx));
+  emit_jump_insn (gen_doloop_end_i (operands[0], operands[1], const0_rtx));
   DONE;
 })
 
@@ -5226,7 +5242,7 @@
    (set (match_dup 0) (plus:SI (match_dup 0) (const_int -1)))
    (use (reg:SI LP_START))
    (use (reg:SI LP_END))
-   (use (match_operand 2 "const_int_operand" "n,???C_0,???X"))
+   (use (match_operand 2 "const_int_operand" "n,???Cn0,???X"))
    (clobber (match_scratch:SI 3 "=X,X,&????r"))]
   ""
   "*

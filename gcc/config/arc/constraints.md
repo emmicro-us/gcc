@@ -342,7 +342,6 @@
 
 (define_constraint "Clb"
   "A local label"
-  "label"
   (and (match_code "label_ref")
        (match_test "arc_text_label (as_a <rtx_insn *> (XEXP (op, 0)))")))
 

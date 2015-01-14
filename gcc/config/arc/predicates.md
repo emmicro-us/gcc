@@ -430,8 +430,8 @@
      There are some creative uses for hi / ls after shifts, but these are
      hard to understand for the compiler and could be at best the target of
      a peephole.  */
-  enum machine_mode modeCmp = (GET_MODE (XEXP (op, 0)) == VOIDmode) ?
-                                  GET_MODE (XEXP (op, 1)) : GET_MODE (XEXP (op, 0));
+  machine_mode modeCmp = (GET_MODE (XEXP (op, 0)) == VOIDmode) ?
+                          GET_MODE (XEXP (op, 1)) : GET_MODE (XEXP (op, 0));
   switch (modeCmp)
     {
     case CC_ZNmode:

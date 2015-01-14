@@ -1,6 +1,5 @@
 /* Subroutines used for code generation on the Synopsys DesignWare ARC cpu.
-   Copyright (C) 1994, 1995, 1997, 2004, 2007-2012
-   Free Software Foundation, Inc.
+   Copyright (C) 1994-2015 Free Software Foundation, Inc.
 
    Sources derived from work done by Sankhya Technologies (www.sankhya.com) on
    behalf of Synopsys Inc.
@@ -35,6 +34,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
+#include "varasm.h"
+#include "stor-layout.h"
+#include "stringpool.h"
+#include "calls.h"
 #include "rtl.h"
 #include "regs.h"
 #include "hard-reg-set.h"
@@ -42,6 +45,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "conditions.h"
 #include "insn-flags.h"
+#include "hashtab.h"
+#include "hash-set.h"
+#include "vec.h"
+#include "machmode.h"
+#include "input.h"
 #include "function.h"
 #include "toplev.h"
 #include "ggc.h"
@@ -59,8 +67,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "optabs.h"
 #include "tm-constrs.h"
 #include "reload.h" /* For operands_match_p */
+#include "dominance.h"
+#include "cfg.h"
+#include "cfgrtl.h"
+#include "cfganal.h"
+#include "lcm.h"
+#include "cfgbuild.h"
+#include "cfgcleanup.h"
+#include "predict.h"
+#include "basic-block.h"
 #include "df.h"
 #include "tree-pass.h"
+#include "context.h"
+#include "pass_manager.h"
+#include "wide-int.h"
+#include "builtins.h"
+#include "rtl-iter.h"
 #include "sched-int.h"
 #include "opts.h"
 
@@ -96,14 +118,14 @@ static const char *arc_cpu_string = "";
 
 #define LEGITIMATE_SMALL_DATA_ADDRESS_P(X)				\
   (GET_CODE (X) == PLUS							\
-   && (REG_P (XEXP(X,0)) && REGNO (XEXP (X,0)) == 26)			\
-   && ((GET_CODE (XEXP(X,1)) == SYMBOL_REF				\
-	&& SYMBOL_REF_SMALL_P (XEXP (X,1)))  ||				\
-       (GET_CODE (XEXP (X,1)) == CONST &&				\
-	GET_CODE (XEXP(XEXP(X,1),0)) == PLUS &&				\
-	GET_CODE (XEXP(XEXP(XEXP(X,1),0),0)) == SYMBOL_REF		\
-	&& SYMBOL_REF_SMALL_P (XEXP(XEXP (XEXP(X,1),0),0))		\
-	&& GET_CODE (XEXP(XEXP (XEXP(X,1),0), 1)) == CONST_INT)))
+   && (REG_P (XEXP ((X), 0)) && REGNO (XEXP ((X), 0)) == SDATA_BASE_REGNUM) \
+   && ((GET_CODE (XEXP ((X), 1)) == SYMBOL_REF				\
+	&& SYMBOL_REF_SMALL_P (XEXP ((X), 1)))				\
+       || (GET_CODE (XEXP ((X), 1)) == CONST				\
+	   && GET_CODE (XEXP (XEXP ((X), 1), 0)) == PLUS		\
+	   && GET_CODE (XEXP (XEXP (XEXP ((X), 1), 0), 0)) == SYMBOL_REF \
+	   && SYMBOL_REF_SMALL_P (XEXP(XEXP (XEXP((X), 1), 0), 0))	\
+	   && GET_CODE (XEXP (XEXP (XEXP ((X), 1), 0), 1)) == CONST_INT)))
 
 /* Array of valid operand punctuation characters.  */
 char arc_punct_chars[256];
@@ -114,7 +136,7 @@ struct GTY (()) arc_ccfsm
   int state;
   int cc;
   rtx cond;
-  rtx target_insn;
+  rtx_insn *target_insn;
   int target_label;
 };
 
@@ -355,16 +377,16 @@ static void arc_file_start (void);
 static void arc_internal_label (FILE *, const char *, unsigned long);
 static void arc_output_mi_thunk (FILE *, tree, HOST_WIDE_INT, HOST_WIDE_INT,
 				 tree);
-static int arc_address_cost (rtx, enum machine_mode, addr_space_t, bool);
+static int arc_address_cost (rtx, machine_mode, addr_space_t, bool);
 static void arc_encode_section_info (tree decl, rtx rtl, int first);
 
 static void arc_init_builtins (void);
-static rtx arc_expand_builtin (tree, rtx, rtx, enum machine_mode, int);
+static rtx arc_expand_builtin (tree, rtx, rtx, machine_mode, int);
 
-static int branch_dest (rtx);
+static int branch_dest (rtx_insn *);
 
 static void  arc_output_pic_addr_const (FILE *,  rtx, int);
-void emit_pic_move (rtx *, enum machine_mode);
+void emit_pic_move (rtx *, machine_mode);
 bool arc_legitimate_pic_operand_p (rtx);
 static bool arc_function_ok_for_sibcall (tree, tree);
 static rtx arc_function_value (const_tree, const_tree, bool);
@@ -375,20 +397,26 @@ static bool arc_in_small_data_p (const_tree);
 static void arc_init_reg_tables (void);
 static bool arc_return_in_memory (const_tree, const_tree);
 static void arc_init_simd_builtins (void);
-static bool arc_vector_mode_supported_p (enum machine_mode);
+static bool arc_vector_mode_supported_p (machine_mode);
 
-static const char *arc_invalid_within_doloop (const_rtx);
+static bool arc_can_use_doloop_p (const widest_int &, const widest_int &,
+				  unsigned int, bool);
+static const char *arc_invalid_within_doloop (const rtx_insn *);
 
 static void output_short_suffix (FILE *file);
 
 static bool arc_frame_pointer_required (void);
 
+static bool arc_use_by_pieces_infrastructure_p (unsigned HOST_WIDE_INT,
+						unsigned int,
+						enum by_pieces_operation op,
+						bool);
 static void irq_range (const char *);
 
 /* Implements target hook vector_mode_supported_p.  */
 
 static bool
-arc_vector_mode_supported_p (enum machine_mode mode)
+arc_vector_mode_supported_p (machine_mode mode)
 {
   switch (mode)
     {
@@ -406,8 +434,8 @@ arc_vector_mode_supported_p (enum machine_mode mode)
     }
 }
 
-static enum machine_mode
-arc_preferred_simd_mode (enum machine_mode mode)
+static machine_mode
+arc_preferred_simd_mode (machine_mode mode)
 {
   switch (mode)
     {
@@ -430,16 +458,18 @@ arc_autovectorize_vector_sizes (void)
 /* TARGET_PRESERVE_RELOAD_P is still awaiting patch re-evaluation / review.  */
 static bool arc_preserve_reload_p (rtx in) ATTRIBUTE_UNUSED;
 static rtx arc_delegitimize_address (rtx);
-static bool arc_can_follow_jump (const_rtx follower, const_rtx followee);
+static bool arc_can_follow_jump (const rtx_insn *,
+				 const rtx_insn *);
 
 static rtx frame_insn (rtx);
-static void arc_function_arg_advance (cumulative_args_t, enum machine_mode,
+static void arc_function_arg_advance (cumulative_args_t,
+				      machine_mode,
 				      const_tree, bool);
-static rtx arc_legitimize_address_0 (rtx, rtx, enum machine_mode mode);
+static rtx arc_legitimize_address_0 (rtx, rtx, machine_mode);
 
 static void arc_finalize_pic (void);
 
-static int arc_asm_insn_p (rtx x);
+static int arc_asm_insn_p (rtx);
 
 /* initialize the GCC target structure.  */
 #undef  TARGET_COMP_TYPE_ATTRIBUTES
@@ -540,6 +570,9 @@ static int arc_asm_insn_p (rtx x);
 #undef TARGET_VECTORIZE_AUTOVECTORIZE_VECTOR_SIZES
 #define TARGET_VECTORIZE_AUTOVECTORIZE_VECTOR_SIZES arc_autovectorize_vector_sizes
 
+#undef TARGET_CAN_USE_DOLOOP_P
+#define TARGET_CAN_USE_DOLOOP_P arc_can_use_doloop_p
+
 #undef TARGET_INVALID_WITHIN_DOLOOP
 #define TARGET_INVALID_WITHIN_DOLOOP arc_invalid_within_doloop
 
@@ -551,6 +584,10 @@ static int arc_asm_insn_p (rtx x);
 
 #undef TARGET_DELEGITIMIZE_ADDRESS
 #define TARGET_DELEGITIMIZE_ADDRESS arc_delegitimize_address
+
+#undef TARGET_USE_BY_PIECES_INFRASTRUCTURE_P
+#define TARGET_USE_BY_PIECES_INFRASTRUCTURE_P \
+  arc_use_by_pieces_infrastructure_p
 
 /* Usually, we will be able to scale anchor offsets.
    When this fails, we want LEGITIMIZE_ADDRESS to kick in.  */
@@ -590,6 +627,7 @@ static int arc_asm_insn_p (rtx x);
 
 #define TARGET_INSN_LENGTH_PARAMETERS arc_insn_length_parameters
 
+#undef TARGET_LRA_P
 #define TARGET_LRA_P arc_lra_p
 #define TARGET_REGISTER_PRIORITY arc_register_priority
 /* Stores with scaled offsets have different displacement ranges.  */
@@ -608,7 +646,7 @@ static int arc_asm_insn_p (rtx x);
    use the peephole2 pattern.  */
 
 static int
-arc_sched_adjust_priority (rtx insn, int priority)
+arc_sched_adjust_priority (rtx_insn *insn, int priority)
 {
   rtx set = single_set (insn);
   if (set
@@ -623,7 +661,7 @@ arc_sched_adjust_priority (rtx insn, int priority)
 }
 
 static reg_class_t
-arc_secondary_reload (bool in_p, rtx x, reg_class_t cl, enum machine_mode mode,
+arc_secondary_reload (bool in_p, rtx x, reg_class_t cl, machine_mode mode,
 		      secondary_reload_info *sri)
 {
   enum rtx_code code = GET_CODE (x);
@@ -712,27 +750,81 @@ arc_secondary_reload_conv (rtx reg, rtx mem, rtx scratch, bool store_p)
   return;
 }
 
-
 static unsigned arc_ifcvt (void);
-struct rtl_opt_pass pass_arc_ifcvt =
+
+namespace {
+
+  const pass_data pass_data_arc_ifcvt =
+    {
+      RTL_PASS,
+      "arc_ifcvt",	/* name */
+      OPTGROUP_NONE,	/* optinfo_flags */
+      TV_IFCVT2,	/* tv_id */
+      0,		/* properties_required */
+      0,		/* properties_provided */
+      0,		/* properties_destroyed */
+      0,		/* todo_flags_start */
+      TODO_df_finish	/* todo_flags_finish */
+    };
+
+  class pass_arc_ifcvt : public rtl_opt_pass
+  {
+  public:
+  pass_arc_ifcvt(gcc::context *ctxt)
+    : rtl_opt_pass(pass_data_arc_ifcvt, ctxt)
+      {}
+
+    /* opt_pass methods: */
+    opt_pass * clone () { return new pass_arc_ifcvt (m_ctxt); }
+    virtual unsigned int execute (function *) { return arc_ifcvt (); }
+  };
+
+} // anon namespace
+
+rtl_opt_pass *
+make_pass_arc_ifcvt (gcc::context *ctxt)
 {
- {
-  RTL_PASS,
-  "arc_ifcvt",				/* name */
-  OPTGROUP_NONE,			/* optinfo_flags */
-  NULL,					/* gate */
-  arc_ifcvt,				/* execute */
-  NULL,					/* sub */
-  NULL,					/* next */
-  0,					/* static_pass_number */
-  TV_IFCVT2,				/* tv_id */
-  0,					/* properties_required */
-  0,					/* properties_provided */
-  0,					/* properties_destroyed */
-  0,					/* todo_flags_start */
-  TODO_df_finish			/* todo_flags_finish */
- }
-};
+  return new pass_arc_ifcvt (ctxt);
+}
+
+static unsigned arc_predicate_delay_insns (void);
+
+namespace {
+
+  const pass_data pass_data_arc_predicate_delay_insns =
+    {
+      RTL_PASS,
+      "arc_predicate_delay_insns",	/* name */
+      OPTGROUP_NONE,			/* optinfo_flags */
+      TV_IFCVT2,			/* tv_id */
+      0,				/* properties_required */
+      0,				/* properties_provided */
+      0,				/* properties_destroyed */
+      0,				/* todo_flags_start */
+      TODO_df_finish			/* todo_flags_finish */
+    };
+
+  class pass_arc_predicate_delay_insns : public rtl_opt_pass
+  {
+  public:
+  pass_arc_predicate_delay_insns(gcc::context *ctxt)
+    : rtl_opt_pass(pass_data_arc_predicate_delay_insns, ctxt)
+      {}
+
+    /* opt_pass methods: */
+    virtual unsigned int execute (function *)
+    {
+      return arc_predicate_delay_insns ();
+    }
+  };
+
+} // anon namespace
+
+rtl_opt_pass *
+make_pass_arc_predicate_delay_insns (gcc::context *ctxt)
+{
+  return new pass_arc_predicate_delay_insns (ctxt);
+}
 
 /* Called by OVERRIDE_OPTIONS to initialize various things.  */
 
@@ -885,22 +977,28 @@ arc_init (void)
   arc_punct_chars['&'] = 1;
   arc_punct_chars['+'] = 1;
 
-  /* There are two target-independent ifcvt passes, and arc_reorg may do
-     one ore more arc_ifcvt calls.  */
-  static struct register_pass_info arc_ifcvt4_info
-    = { &pass_arc_ifcvt.pass, "dbr",
-	1, PASS_POS_INSERT_AFTER
-      };
-
-  static struct register_pass_info arc_ifcvt5_info
-    = { &pass_arc_ifcvt.pass, "shorten",
-	1, PASS_POS_INSERT_BEFORE
-      };
-
   if (optimize > 1 && !TARGET_NO_COND_EXEC)
     {
+      /* There are two target-independent ifcvt passes, and arc_reorg
+	 may do one or more arc_ifcvt calls.  */
+      opt_pass *pass_arc_ifcvt_4 = make_pass_arc_ifcvt (g);
+      struct register_pass_info arc_ifcvt4_info
+	= { pass_arc_ifcvt_4, "dbr", 1, PASS_POS_INSERT_AFTER };
+      struct register_pass_info arc_ifcvt5_info
+	= { pass_arc_ifcvt_4->clone (), "shorten", 1, PASS_POS_INSERT_BEFORE };
+
       register_pass (&arc_ifcvt4_info);
       register_pass (&arc_ifcvt5_info);
+    }
+
+  if (flag_delayed_branch)
+    {
+      opt_pass *pass_arc_predicate_delay_insns
+	= make_pass_arc_predicate_delay_insns (g);
+      struct register_pass_info arc_predicate_delay_info
+	= { pass_arc_predicate_delay_insns, "dbr", 1, PASS_POS_INSERT_AFTER };
+
+      register_pass (&arc_predicate_delay_info);
     }
 }
 
@@ -1158,10 +1256,10 @@ arc_short_comparison_p (rtx comparison, int offset)
 /* Given a comparison code (EQ, NE, etc.) and the first operand of a COMPARE,
    return the mode to be used for the comparison.  */
 
-enum machine_mode
+machine_mode
 arc_select_cc_mode (enum rtx_code op, rtx x, rtx y)
 {
-  enum machine_mode mode = GET_MODE (x);
+  machine_mode mode = GET_MODE (x);
   rtx x1;
 
   /* For an operation that sets the condition codes as a side-effect, the
@@ -1173,7 +1271,7 @@ arc_select_cc_mode (enum rtx_code op, rtx x, rtx y)
   if (GET_MODE_CLASS (mode) == MODE_INT
       && y == const0_rtx
       && (op == EQ || op == NE
-	  || ((op == LT || op == GE) && GET_MODE_SIZE (GET_MODE (x) <= 4))))
+	  || ((op == LT || op == GE) && GET_MODE_SIZE (GET_MODE (x)) <= 4)))
     return CC_ZNmode;
 
   /* add.f for if (a+b) */
@@ -1339,39 +1437,41 @@ arc_init_reg_tables (void)
 
   for (i = 0; i < NUM_MACHINE_MODES; i++)
     {
-      switch (GET_MODE_CLASS (i))
+      machine_mode m = (machine_mode) i;
+
+      switch (GET_MODE_CLASS (m))
 	{
 	case MODE_INT:
 	case MODE_PARTIAL_INT:
 	case MODE_COMPLEX_INT:
-	  if (GET_MODE_SIZE (i) <= 4)
+	  if (GET_MODE_SIZE (m) <= 4)
 	    arc_mode_class[i] = 1 << (int) S_MODE;
-	  else if (GET_MODE_SIZE (i) == 8)
+	  else if (GET_MODE_SIZE (m) == 8)
 	    arc_mode_class[i] = 1 << (int) D_MODE;
-	  else if (GET_MODE_SIZE (i) == 16)
+	  else if (GET_MODE_SIZE (m) == 16)
 	    arc_mode_class[i] = 1 << (int) T_MODE;
-	  else if (GET_MODE_SIZE (i) == 32)
+	  else if (GET_MODE_SIZE (m) == 32)
 	    arc_mode_class[i] = 1 << (int) O_MODE;
 	  else
 	    arc_mode_class[i] = 0;
 	  break;
 	case MODE_FLOAT:
 	case MODE_COMPLEX_FLOAT:
-	  if (GET_MODE_SIZE (i) <= 4)
+	  if (GET_MODE_SIZE (m) <= 4)
 	    arc_mode_class[i] = 1 << (int) SF_MODE;
-	  else if (GET_MODE_SIZE (i) == 8)
+	  else if (GET_MODE_SIZE (m) == 8)
 	    arc_mode_class[i] = 1 << (int) DF_MODE;
-	  else if (GET_MODE_SIZE (i) == 16)
+	  else if (GET_MODE_SIZE (m) == 16)
 	    arc_mode_class[i] = 1 << (int) TF_MODE;
-	  else if (GET_MODE_SIZE (i) == 32)
+	  else if (GET_MODE_SIZE (m) == 32)
 	    arc_mode_class[i] = 1 << (int) OF_MODE;
 	  else
 	    arc_mode_class[i] = 0;
 	  break;
 	case MODE_VECTOR_INT:
-	  if (GET_MODE_SIZE (i) == 4)
+	  if (GET_MODE_SIZE (m) == 4)
 	    arc_mode_class [i] = (1<< (int) S_MODE);
-	  else if (GET_MODE_SIZE (i) == 8)
+	  else if (GET_MODE_SIZE (m) == 8)
 	    arc_mode_class [i] = (1<< (int) D_MODE);
 	  else
 	    arc_mode_class [i] = (1<< (int) V_MODE);
@@ -1499,7 +1599,10 @@ arc_conditional_register_usage (void)
   if (TARGET_SIMD_SET)
     {
       int i;
-      for (i=64; i<88; i++)
+      for (i = ARC_FIRST_SIMD_VR_REG; i <= ARC_LAST_SIMD_VR_REG; i++)
+	reg_alloc_order [i] = i;
+      for (i = ARC_FIRST_SIMD_DMA_CONFIG_REG;
+	   i <= ARC_LAST_SIMD_DMA_CONFIG_REG; i++)
 	reg_alloc_order [i] = i;
     }
   /* For ARC600, lp_count may not be read in an instruction following
@@ -1749,13 +1852,13 @@ arc_set_default_type_attributes (tree type ATTRIBUTE_UNUSED)
    return the rtx for the cc reg in the proper mode.  */
 
 rtx
-gen_compare_reg (rtx comparison, enum machine_mode omode)
+gen_compare_reg (rtx comparison, machine_mode omode)
 {
   enum rtx_code code = GET_CODE (comparison);
   rtx x = XEXP (comparison, 0);
   rtx y = XEXP (comparison, 1);
   rtx tmp, cc_reg;
-  enum machine_mode mode, cmode;
+  machine_mode mode, cmode;
 
 
   cmode = GET_MODE (x);
@@ -1901,7 +2004,7 @@ arc_double_limm_p (rtx value)
 
 static void
 arc_setup_incoming_varargs (cumulative_args_t args_so_far,
-			    enum machine_mode mode, tree type,
+			    machine_mode mode, tree type,
 			    int *pretend_size, int no_rtl)
 {
   int first_anon_arg;
@@ -1946,7 +2049,7 @@ static bool arc_strict_argument_naming(cumulative_args_t cum ATTRIBUTE_UNUSED)
    If ADDR is not a valid address, its cost is irrelevant.  */
 
 int
-arc_address_cost (rtx addr, enum machine_mode, addr_space_t, bool speed)
+arc_address_cost (rtx addr, machine_mode, addr_space_t, bool speed)
 {
   switch (GET_CODE (addr))
     {
@@ -2213,7 +2316,8 @@ arc_compute_function_type (struct function *fun)
 	{
 	  tree value = TREE_VALUE (args);
 
-	  if (!strcmp (TREE_STRING_POINTER (value), "ilink1") || !strcmp (TREE_STRING_POINTER (value), "ilink"))
+	  if (!strcmp (TREE_STRING_POINTER (value), "ilink1")
+	      || !strcmp (TREE_STRING_POINTER (value), "ilink"))
 	    fn_type = ARC_FUNCTION_ILINK1;
 	  else if (!strcmp (TREE_STRING_POINTER (value), "ilink2"))
 	    fn_type = ARC_FUNCTION_ILINK2;
@@ -2417,14 +2521,15 @@ arc_save_restore (rtx base_reg,
       /* Millicode thunks implementation:
 	 Generates calls to millicodes for registers starting from r13 to r25
 	 Present Limitations:
-	    > Only one range supported. The remaining regs will have the ordinary
-	    st and ld instructions for store and loads. Hence a gmask asking
-	    to store r13-14, r16-r25 will only generate calls to store and
-	    load r13 to r14 while store and load insns will be generated for
-	    r16 to r25 in the prologue and epilogue respectively.
+	    - Only one range supported. The remaining regs will have
+	    the ordinary st and ld instructions for store and
+	    loads. Hence a gmask asking to store r13-14, r16-r25 will
+	    only generate calls to store and load r13 to r14 while
+	    store and load insns will be generated for r16 to r25 in
+	    the prologue and epilogue respectively.
 
-	    > Presently library only supports register ranges starting from
-	    r13
+	    - Presently library only supports register ranges starting
+	    from r13
       */
       if (epilogue_p == 2 || frame->millicode_end_reg > 14)
 	{
@@ -2438,7 +2543,7 @@ arc_save_restore (rtx base_reg,
 	  if (*first_offset)
 	    {
 	      /* "reg_size" won't be more than 127 .  */
-	      gcc_assert (epilogue_p || abs (*first_offset <= 127));
+	      gcc_assert (epilogue_p || abs (*first_offset) <= 127);
 	      frame_add (base_reg, *first_offset);
 	      *first_offset = 0;
 	    }
@@ -2469,33 +2574,7 @@ arc_save_restore (rtx base_reg,
 
       for (regno = 0; regno <= 31; regno++)
 	{
-#if 0
-	  if ((gmask & (1L << regno)) != 0)
-	    {
-	      rtx reg = gen_rtx_REG (SImode, regno);
-	      rtx addr, mem;
-
-	      if (*first_offset)
-		{
-		  gcc_assert (!offset);
-		  addr = plus_constant (Pmode, base_reg, *first_offset);
-		  addr = gen_rtx_PRE_MODIFY (Pmode, base_reg, addr);
-		  *first_offset = 0;
-		}
-	      else
-		{
-		  gcc_assert (SMALL_INT (offset));
-		  addr = plus_constant (Pmode, base_reg, offset);
-		}
-	      mem = gen_frame_mem (SImode, addr);
-	      if (epilogue_p)
-		frame_move_inc (reg, mem, base_reg, addr);
-	      else
-		frame_move_inc (mem, reg, base_reg, addr);
-	      offset += UNITS_PER_WORD;
-	    } /* if */
-#else
-	  enum machine_mode mode = SImode;
+	  machine_mode mode = SImode;
 	  bool found = false;
 
 	  if (TARGET_HS && TARGET_LL64
@@ -2542,7 +2621,6 @@ arc_save_restore (rtx base_reg,
 		  regno ++;
 		}
 	    } /* if */
-#endif
 	} /* for */
     }/* if */
   if (sibthunk_insn)
@@ -2564,7 +2642,8 @@ arc_save_restore (rtx base_reg,
 static void
 dwarf_emit_irq_save_regs(void)
 {
-  rtx tmp, par, insn, reg;
+  rtx_insn *insn;
+  rtx tmp, par, reg;
   int i, offset, j;
 
   par = gen_rtx_SEQUENCE (VOIDmode,
@@ -2771,188 +2850,180 @@ arc_expand_epilogue (int sibcall_p)
 	   ? arc_compute_frame_size (size)
 	   : cfun->machine->frame_info.total_size);
 
-  if (1)
+  unsigned int pretend_size = cfun->machine->frame_info.pretend_size;
+  unsigned int frame_size;
+  unsigned int size_to_deallocate;
+  int restored;
+  int can_trust_sp_p = !cfun->calls_alloca;
+  int first_offset = 0;
+  int millicode_p = cfun->machine->frame_info.millicode_end_reg > 0;
+
+  size_to_deallocate = size;
+
+  frame_size = size - (pretend_size +
+		       cfun->machine->frame_info.reg_size +
+		       cfun->machine->frame_info.extra_size);
+
+  /* ??? There are lots of optimizations that can be done here.
+     EG: Use fp to restore regs if it's closer.
+     Maybe in time we'll do them all.  For now, always restore regs from
+     sp, but don't restore sp if we don't have to.  */
+
+  if (!can_trust_sp_p)
+    gcc_assert (frame_pointer_needed);
+
+  /* Restore stack pointer to the beginning of saved register area for
+     ARCompact ISA.  */
+  if (frame_size)
     {
-      unsigned int pretend_size = cfun->machine->frame_info.pretend_size;
-      unsigned int frame_size;
-      unsigned int size_to_deallocate;
-      int restored;
-#if 0
-      bool fp_restored_p;
-#endif
-      int can_trust_sp_p = !cfun->calls_alloca;
-      int first_offset = 0;
-      int millicode_p = cfun->machine->frame_info.millicode_end_reg > 0;
-
-      size_to_deallocate = size;
-
-      frame_size = size - (pretend_size +
-			   cfun->machine->frame_info.reg_size +
-			   cfun->machine->frame_info.extra_size);
-
-      /* ??? There are lots of optimizations that can be done here.
-	 EG: Use fp to restore regs if it's closer.
-	 Maybe in time we'll do them all.  For now, always restore regs from
-	 sp, but don't restore sp if we don't have to.  */
-
-      if (!can_trust_sp_p)
-	gcc_assert (frame_pointer_needed);
-
-      /* Restore stack pointer to the beginning of saved register area for
-	 ARCompact ISA.  */
-      if (frame_size)
-	{
-	  if (frame_pointer_needed)
-	    frame_move (stack_pointer_rtx, frame_pointer_rtx);
-	  else
-	    first_offset = frame_size;
-	  size_to_deallocate -= frame_size;
-	}
-      else if (!can_trust_sp_p)
-	frame_stack_add (-frame_size);
-
-
-      /* Restore any saved registers.  */
       if (frame_pointer_needed)
+	frame_move (stack_pointer_rtx, frame_pointer_rtx);
+      else
+	first_offset = frame_size;
+      size_to_deallocate -= frame_size;
+    }
+  else if (!can_trust_sp_p)
+    frame_stack_add (-frame_size);
+
+
+  /* Restore any saved registers.  */
+  if (frame_pointer_needed)
+    {
+      /* Honor irq_ctrl_saved option. */
+      if (!(ARC_INTERRUPT_P (cfun->machine->fn_type)
+	    && (irq_ctrl_saved.irq_save_last_reg > 26)))
 	{
-	  /* Honor irq_ctrl_saved option. */
-	  if (!(ARC_INTERRUPT_P (cfun->machine->fn_type)
-		&& (irq_ctrl_saved.irq_save_last_reg > 26)))
-	    {
 
-	      rtx addr = gen_rtx_POST_INC (Pmode, stack_pointer_rtx);
+	  rtx addr = gen_rtx_POST_INC (Pmode, stack_pointer_rtx);
 
-	      frame_move_inc (frame_pointer_rtx, gen_frame_mem (Pmode, addr),
-			      stack_pointer_rtx, 0);
-	    }
-	  size_to_deallocate -= UNITS_PER_WORD;
+	  frame_move_inc (frame_pointer_rtx, gen_frame_mem (Pmode, addr),
+			  stack_pointer_rtx, 0);
 	}
+      size_to_deallocate -= UNITS_PER_WORD;
+    }
 
-      /* Load blink after the calls to thunk calls in case of optimize size.  */
-      if (millicode_p)
-	{
-	      int sibthunk_p = (!sibcall_p
-				&& fn_type == ARC_FUNCTION_NORMAL
-				&& !cfun->machine->frame_info.pretend_size);
+  /* Load blink after the calls to thunk calls in case of optimize size.  */
+  if (millicode_p)
+    {
+      int sibthunk_p = (!sibcall_p
+			&& fn_type == ARC_FUNCTION_NORMAL
+			&& !cfun->machine->frame_info.pretend_size);
 
-	      gcc_assert (!(cfun->machine->frame_info.gmask
-			    & (FRAME_POINTER_MASK | RETURN_ADDR_MASK)));
-	      arc_save_restore (stack_pointer_rtx,
-				cfun->machine->frame_info.gmask,
-				1 + sibthunk_p, &first_offset);
-	      if (sibthunk_p)
-		goto epilogue_done;
-	}
-      /* If we are to restore registers, and first_offset would require
-	 a limm to be encoded in a PRE_MODIFY, yet we can add it with a
-	 fast add to the stack pointer, do this now.  */
-      if ((!SMALL_INT (first_offset)
-	   && cfun->machine->frame_info.gmask
-	   && ((TARGET_ARC700 && !optimize_size)
-		? first_offset <= 0x800
-		: satisfies_constraint_C2a (GEN_INT (first_offset))))
-	   /* Also do this if we have both gprs and return
-	      address to restore, and they both would need a LIMM.  */
-	   || (MUST_SAVE_RETURN_ADDR
-	       && !SMALL_INT ((cfun->machine->frame_info.reg_size + first_offset) >> 2)
-	       && cfun->machine->frame_info.gmask))
-	{
-	  frame_stack_add (first_offset);
-	  first_offset = 0;
-	}
-      if (MUST_SAVE_RETURN_ADDR)
-	{
-	  /* Honor irq_ctrl_saved option. */
-	  if (ARC_INTERRUPT_P (cfun->machine->fn_type)
-	      && (irq_ctrl_saved.irq_save_blink
-		  || (irq_ctrl_saved.irq_save_last_reg == 31)))
-	    {
-	      size_to_deallocate -= UNITS_PER_WORD;
-	    }
-	  else
-	    {
-	      rtx ra = gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM);
-	      int ra_offs = cfun->machine->frame_info.reg_size + first_offset;
-	      rtx addr = plus_constant (Pmode, stack_pointer_rtx, ra_offs);
-
-	      /* If the load of blink would need a LIMM, but we can add
-		 the offset quickly to sp, do the latter.  */
-	      if (!SMALL_INT (ra_offs >> 2)
-		  && !cfun->machine->frame_info.gmask
-		  && ((TARGET_ARC700 && !optimize_size)
-		      ? ra_offs <= 0x800
-		      : satisfies_constraint_C2a (GEN_INT (ra_offs))))
-		{
-		  size_to_deallocate -= ra_offs - first_offset;
-		  first_offset = 0;
-		  frame_stack_add (ra_offs);
-		  ra_offs = 0;
-		  addr = stack_pointer_rtx;
-		}
-	      /* See if we can combine the load of the return address with the
-		 final stack adjustment.
-		 We need a separate load if there are still registers to
-		 restore.  We also want a separate load if the combined insn
-		 would need a limm, but a separate load doesn't.  */
-	      if (ra_offs
-		  && !cfun->machine->frame_info.gmask
-		  && (SMALL_INT (ra_offs) || !SMALL_INT (ra_offs >> 2)))
-		{
-		  addr = gen_rtx_PRE_MODIFY (Pmode, stack_pointer_rtx, addr);
-		  first_offset = 0;
-		  size_to_deallocate -= cfun->machine->frame_info.reg_size;
-		}
-	      else if (!ra_offs && size_to_deallocate == UNITS_PER_WORD)
-		{
-		  addr = gen_rtx_POST_INC (Pmode, addr);
-		  size_to_deallocate = 0;
-		}
-	      frame_move_inc (ra, gen_frame_mem (Pmode, addr), stack_pointer_rtx, addr);
-	    }
-	}
-
-      if (!millicode_p)
-	{
-	   if (cfun->machine->frame_info.reg_size)
-	     arc_save_restore (stack_pointer_rtx,
-	       /* The zeroing of these two bits is unnecessary, but leave this in for clarity.  */
-			       cfun->machine->frame_info.gmask
-			       & ~(FRAME_POINTER_MASK | RETURN_ADDR_MASK), 1, &first_offset);
-	}
-
-
-      /* The rest of this function does the following:
-	 ARCompact    : handle epilogue_delay, restore sp (phase-2), return
-      */
-
+      gcc_assert (!(cfun->machine->frame_info.gmask
+		    & (FRAME_POINTER_MASK | RETURN_ADDR_MASK)));
+      arc_save_restore (stack_pointer_rtx,
+			cfun->machine->frame_info.gmask,
+			1 + sibthunk_p, &first_offset);
+      if (sibthunk_p)
+	goto epilogue_done;
+    }
+  /* If we are to restore registers, and first_offset would require
+     a limm to be encoded in a PRE_MODIFY, yet we can add it with a
+     fast add to the stack pointer, do this now.  */
+  if ((!SMALL_INT (first_offset)
+       && cfun->machine->frame_info.gmask
+       && ((TARGET_ARC700 && !optimize_size)
+	   ? first_offset <= 0x800
+	   : satisfies_constraint_C2a (GEN_INT (first_offset))))
+      /* Also do this if we have both gprs and return
+	 address to restore, and they both would need a LIMM.  */
+      || (MUST_SAVE_RETURN_ADDR
+	  && !SMALL_INT ((cfun->machine->frame_info.reg_size + first_offset) >> 2)
+	  && cfun->machine->frame_info.gmask))
+    {
+      frame_stack_add (first_offset);
+      first_offset = 0;
+    }
+  if (MUST_SAVE_RETURN_ADDR)
+    {
       /* Honor irq_ctrl_saved option. */
       if (ARC_INTERRUPT_P (cfun->machine->fn_type)
-	  && irq_ctrl_saved.irq_save_last_reg > 0)
+	  && (irq_ctrl_saved.irq_save_blink
+	      || (irq_ctrl_saved.irq_save_last_reg == 31)))
 	{
-	  /* adjust the stack, some of the registers are restored by
-	     AUX_IRQ_CTRL mechanism. */
-	  unsigned int rsize = UNITS_PER_WORD * (irq_ctrl_saved.irq_save_last_reg + 1);
-	  first_offset -= rsize;
+	  size_to_deallocate -= UNITS_PER_WORD;
 	}
+      else
+	{
+	  rtx ra = gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM);
+	  int ra_offs = cfun->machine->frame_info.reg_size + first_offset;
+	  rtx addr = plus_constant (Pmode, stack_pointer_rtx, ra_offs);
 
-      /* Keep track of how much of the stack pointer we've restored.
-	 It makes the following a lot more readable.  */
-      size_to_deallocate += first_offset;
-      restored = size - size_to_deallocate;
-#if 0
-      fp_restored_p = 1;
-#endif
-
-      if (size > restored)
-	frame_stack_add (size - restored);
-      /* Emit the return instruction.  */
-      if (sibcall_p == FALSE)
-	emit_jump_insn (gen_simple_return ());
+	  /* If the load of blink would need a LIMM, but we can add
+	     the offset quickly to sp, do the latter.  */
+	  if (!SMALL_INT (ra_offs >> 2)
+	      && !cfun->machine->frame_info.gmask
+	      && ((TARGET_ARC700 && !optimize_size)
+		  ? ra_offs <= 0x800
+		  : satisfies_constraint_C2a (GEN_INT (ra_offs))))
+	    {
+	      size_to_deallocate -= ra_offs - first_offset;
+	      first_offset = 0;
+	      frame_stack_add (ra_offs);
+	      ra_offs = 0;
+	      addr = stack_pointer_rtx;
+	    }
+	  /* See if we can combine the load of the return address with the
+	     final stack adjustment.
+	     We need a separate load if there are still registers to
+	     restore.  We also want a separate load if the combined insn
+	     would need a limm, but a separate load doesn't.  */
+	  if (ra_offs
+	      && !cfun->machine->frame_info.gmask
+	      && (SMALL_INT (ra_offs) || !SMALL_INT (ra_offs >> 2)))
+	    {
+	      addr = gen_rtx_PRE_MODIFY (Pmode, stack_pointer_rtx, addr);
+	      first_offset = 0;
+	      size_to_deallocate -= cfun->machine->frame_info.reg_size;
+	    }
+	  else if (!ra_offs && size_to_deallocate == UNITS_PER_WORD)
+	    {
+	      addr = gen_rtx_POST_INC (Pmode, addr);
+	      size_to_deallocate = 0;
+	    }
+	  frame_move_inc (ra, gen_frame_mem (Pmode, addr), stack_pointer_rtx, addr);
+	}
     }
+
+  if (!millicode_p)
+    {
+      if (cfun->machine->frame_info.reg_size)
+	arc_save_restore (stack_pointer_rtx,
+			  /* The zeroing of these two bits is unnecessary, but leave this in for clarity.  */
+			  cfun->machine->frame_info.gmask
+			  & ~(FRAME_POINTER_MASK | RETURN_ADDR_MASK), 1, &first_offset);
+    }
+
+
+  /* The rest of this function does the following:
+     ARCompact    : handle epilogue_delay, restore sp (phase-2), return
+  */
+
+  /* Honor irq_ctrl_saved option. */
+  if (ARC_INTERRUPT_P (cfun->machine->fn_type)
+      && irq_ctrl_saved.irq_save_last_reg > 0)
+    {
+      /* adjust the stack, some of the registers are restored by
+	 AUX_IRQ_CTRL mechanism. */
+      unsigned int rsize = UNITS_PER_WORD * (irq_ctrl_saved.irq_save_last_reg + 1);
+      first_offset -= rsize;
+    }
+
+  /* Keep track of how much of the stack pointer we've restored.
+     It makes the following a lot more readable.  */
+  size_to_deallocate += first_offset;
+  restored = size - size_to_deallocate;
+
+  if (size > restored)
+    frame_stack_add (size - restored);
+  /* Emit the return instruction.  */
+  if (sibcall_p == FALSE)
+    emit_jump_insn (gen_simple_return ());
+
  epilogue_done:
   if (!TARGET_EPILOGUE_CFI)
     {
-      rtx insn;
+      rtx_insn *insn;
 
       for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
 	RTX_FRAME_RELATED_P (insn) = 0;
@@ -3037,7 +3108,7 @@ output_shift (rtx *operands)
 {
   /*  static int loopend_lab;*/
   rtx shift = operands[3];
-  enum machine_mode mode = GET_MODE (shift);
+  machine_mode mode = GET_MODE (shift);
   enum rtx_code code = GET_CODE (shift);
   const char *shift_one;
 
@@ -3307,10 +3378,10 @@ arc_print_operand (FILE *file, rtx x, int code)
       /* Unconditional branches / branches not depending on condition codes.
 	 This could also be a CALL_INSN.
 	 Output the appropriate delay slot suffix.  */
-      if (final_sequence && XVECLEN (final_sequence, 0) != 1)
+      if (final_sequence && final_sequence->len () != 1)
 	{
-	  rtx jump = XVECEXP (final_sequence, 0, 0);
-	  rtx delay = XVECEXP (final_sequence, 0, 1);
+	  rtx_insn *jump = final_sequence->insn (0);
+	  rtx_insn *delay = final_sequence->insn (1);
 
 	  /* Print the static branch prediction. */
 	  if (JUMP_P (jump) && TARGET_V2 && stpred
@@ -3329,7 +3400,7 @@ arc_print_operand (FILE *file, rtx x, int code)
 	    }
 
 	  /* For TARGET_PAD_RETURN we might have grabbed the delay insn.  */
-	  if (INSN_DELETED_P (delay))
+	  if (delay->deleted ())
 	    return;
 	  if (JUMP_P (jump) && INSN_ANNULLED_BRANCH_P (jump))
 	    fputs (INSN_FROM_TARGET_P (delay) ? ".d"
@@ -3356,8 +3427,8 @@ arc_print_operand (FILE *file, rtx x, int code)
 	  /* Is this insn in a delay slot sequence?  */
 	  if (!final_sequence || XVECLEN (final_sequence, 0) < 2
 	      || current_insn_predicate
-	      || CALL_P (XVECEXP (final_sequence, 0, 0))
-	      || simplejump_p (XVECEXP (final_sequence, 0, 0)))
+	      || CALL_P (final_sequence->insn (0))
+	      || simplejump_p (final_sequence->insn (0)))
 	    {
 	      /* This insn isn't in a delay slot sequence, or conditionalized
 		 independently of its position in a delay slot.  */
@@ -3483,10 +3554,10 @@ arc_print_operand (FILE *file, rtx x, int code)
 	  split_double (x, &first, &second);
 
 	  if((WORDS_BIG_ENDIAN) == 0)
-	      fprintf (file, "0x%08lx",
+	      fprintf (file, "0x%08" PRIx64,
 		       code == 'L' ? INTVAL (first) : INTVAL (second));
 	  else
-	      fprintf (file, "0x%08lx",
+	      fprintf (file, "0x%08" PRIx64,
 		       code == 'L' ? INTVAL (second) : INTVAL (first));
 
 
@@ -3916,7 +3987,7 @@ unspec_prof_htab_eq (const void *x, const void *y)
    before letting final output INSN.  */
 
 static void
-arc_ccfsm_advance (rtx insn, struct arc_ccfsm *state)
+arc_ccfsm_advance (rtx_insn *insn, struct arc_ccfsm *state)
 {
   /* BODY will hold the body of INSN.  */
   register rtx body;
@@ -3930,7 +4001,7 @@ arc_ccfsm_advance (rtx insn, struct arc_ccfsm *state)
 
   /* START_INSN will hold the insn from where we start looking.  This is the
      first insn after the following code_label if REVERSE is true.  */
-  rtx start_insn = insn;
+  rtx_insn *start_insn = insn;
 
   /* Type of the jump_insn. Brcc insns don't affect ccfsm changes,
      since they don't rely on a cmp preceding the.  */
@@ -4028,7 +4099,8 @@ arc_ccfsm_advance (rtx insn, struct arc_ccfsm *state)
       int then_not_else = TRUE;
       /* Nonzero if next insn must be the target label.  */
       int next_must_be_target_label_p;
-      rtx this_insn = start_insn, label = 0;
+      rtx_insn *this_insn = start_insn;
+      rtx label = 0;
 
       /* Register the insn jumped to.  */
       if (reverse)
@@ -4237,7 +4309,7 @@ arc_ccfsm_at_label (const char *prefix, int num, struct arc_ccfsm *state)
       && !strcmp (prefix, "L"))
     {
       state->state = 0;
-      state->target_insn = NULL_RTX;
+      state->target_insn = NULL;
     }
 }
 
@@ -4246,10 +4318,10 @@ arc_ccfsm_at_label (const char *prefix, int num, struct arc_ccfsm *state)
    the ccfsm state accordingly.
    REVERSE says branch will branch when the condition is false.  */
 void
-arc_ccfsm_record_condition (rtx cond, bool reverse, rtx jump,
+arc_ccfsm_record_condition (rtx cond, bool reverse, rtx_insn *jump,
 			    struct arc_ccfsm *state)
 {
-  rtx seq_insn = NEXT_INSN (PREV_INSN (jump));
+  rtx_insn *seq_insn = NEXT_INSN (PREV_INSN (jump));
   if (!state)
     state = &arc_ccfsm_current;
 
@@ -4258,7 +4330,7 @@ arc_ccfsm_record_condition (rtx cond, bool reverse, rtx jump,
     {
       rtx insn = XVECEXP (PATTERN (seq_insn), 0, 1);
 
-      if (!INSN_DELETED_P (insn)
+      if (!as_a<rtx_insn *> (insn)->deleted ()
 	  && INSN_ANNULLED_BRANCH_P (jump)
 	  && (TARGET_AT_DBR_CONDEXEC || INSN_FROM_TARGET_P (insn)))
 	{
@@ -4281,7 +4353,7 @@ arc_ccfsm_record_condition (rtx cond, bool reverse, rtx jump,
 /* Update *STATE as we would when we emit INSN.  */
 
 static void
-arc_ccfsm_post_advance (rtx insn, struct arc_ccfsm *state)
+arc_ccfsm_post_advance (rtx_insn *insn, struct arc_ccfsm *state)
 {
   enum attr_type type;
 
@@ -4337,8 +4409,8 @@ arc_ccfsm_cond_exec_p (void)
 /* Like next_active_insn, but return NULL if we find an ADDR_(DIFF_)VEC,
    and look inside SEQUENCEs.  */
 
-static rtx
-arc_next_active_insn (rtx insn, struct arc_ccfsm *statep)
+static rtx_insn *
+arc_next_active_insn (rtx_insn *insn, struct arc_ccfsm *statep)
 {
   rtx pat;
 
@@ -4348,7 +4420,7 @@ arc_next_active_insn (rtx insn, struct arc_ccfsm *statep)
 	arc_ccfsm_post_advance (insn, statep);
       insn = NEXT_INSN (insn);
       if (!insn || BARRIER_P (insn))
-	return NULL_RTX;
+	return NULL;
       if (statep)
 	arc_ccfsm_advance (insn, statep);
     }
@@ -4363,9 +4435,9 @@ arc_next_active_insn (rtx insn, struct arc_ccfsm *statep)
       gcc_assert (INSN_P (insn));
       pat = PATTERN (insn);
       if (GET_CODE (pat) == ADDR_VEC || GET_CODE (pat) == ADDR_DIFF_VEC)
-	return NULL_RTX;
+	return NULL;
       if (GET_CODE (pat) == SEQUENCE)
-	return XVECEXP (pat, 0, 0);
+	return as_a <rtx_insn *> (XVECEXP (pat, 0, 0));
     }
   return insn;
 }
@@ -4395,7 +4467,7 @@ arc_next_active_insn (rtx insn, struct arc_ccfsm *statep)
    If CHECK_ATTR is greater than 0, check the iscompact attribute first.  */
 
 int
-arc_verify_short (rtx insn, int, int check_attr)
+arc_verify_short (rtx_insn *insn, int, int check_attr)
 {
   enum attr_iscompact iscompact;
   struct machine_function *machine;
@@ -4421,7 +4493,7 @@ arc_verify_short (rtx insn, int, int check_attr)
 static void
 output_short_suffix (FILE *file)
 {
-  rtx insn = current_output_insn;
+  rtx_insn *insn = current_output_insn;
 
   if (arc_verify_short (insn, cfun->machine->unalign, 1))
     {
@@ -4433,12 +4505,12 @@ output_short_suffix (FILE *file)
 }
 
 
-static bool arc_primarysecondary_p (rtx insn, int len);
+static bool arc_primarysecondary_p (rtx_insn *insn, int len);
 
 /* Implement FINAL_PRESCAN_INSN.  */
 
 void
-arc_final_prescan_insn (rtx insn, rtx *opvec ATTRIBUTE_UNUSED,
+arc_final_prescan_insn (rtx_insn *insn, rtx *opvec ATTRIBUTE_UNUSED,
 			int noperands ATTRIBUTE_UNUSED)
 {
   if (TARGET_DUMPISIZE)
@@ -4534,7 +4606,7 @@ arc_frame_pointer_required (void)
 /* Return the destination address of a branch.  */
 
 static int
-branch_dest (rtx branch)
+branch_dest (rtx_insn *branch)
 {
   rtx pat = PATTERN (branch);
   rtx dest = (GET_CODE (pat) == PARALLEL
@@ -5221,7 +5293,7 @@ arc_output_pic_addr_const (FILE * file, rtx x, int code)
 /* Emit insns to move operands[1] into operands[0].  */
 
 void
-emit_pic_move (rtx *operands, enum machine_mode)
+emit_pic_move (rtx *operands, machine_mode)
 {
   rtx temp = reload_in_progress ? operands[0] : gen_reg_rtx (Pmode);
 
@@ -5289,7 +5361,7 @@ void arc_init_cumulative_args (CUMULATIVE_ARGS *cum,
  */
 static int
 arc_hard_regno_nregs (int regno,
-		      enum machine_mode mode,
+		      machine_mode mode,
 		      const_tree type)
 {
   int bytes = (mode == BLKmode
@@ -5310,7 +5382,7 @@ arc_hard_regno_nregs (int regno,
  */
 static rtx
 arc_function_args_impl (CUMULATIVE_ARGS *cum,
-			enum machine_mode mode,
+			machine_mode mode,
 			const_tree type,
 			bool named,
 			bool advance)
@@ -5423,7 +5495,7 @@ arc_function_args_impl (CUMULATIVE_ARGS *cum,
 /* Implement TARGET_ARG_PARTIAL_BYTES.  */
 
 static int
-arc_arg_partial_bytes (cumulative_args_t cum_v, enum machine_mode mode,
+arc_arg_partial_bytes (cumulative_args_t cum_v, machine_mode mode,
 		       tree type, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
@@ -5501,7 +5573,7 @@ arc_arg_partial_bytes (cumulative_args_t cum_v, enum machine_mode mode,
    and the rest are pushed.  */
 
 static rtx
-arc_function_arg (cumulative_args_t cum_v, enum machine_mode mode,
+arc_function_arg (cumulative_args_t cum_v, machine_mode mode,
 		  const_tree type ATTRIBUTE_UNUSED, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
@@ -5568,7 +5640,7 @@ arc_function_arg (cumulative_args_t cum_v, enum machine_mode mode,
    course function_arg_partial_nregs will come into play.  */
 
 static void
-arc_function_arg_advance (cumulative_args_t cum_v, enum machine_mode mode,
+arc_function_arg_advance (cumulative_args_t cum_v, machine_mode mode,
 			  const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
@@ -5600,7 +5672,7 @@ arc_function_value (const_tree valtype,
 		    const_tree fn_decl_or_type ATTRIBUTE_UNUSED,
 		    bool outgoing ATTRIBUTE_UNUSED)
 {
-  enum machine_mode mode = TYPE_MODE (valtype);
+  machine_mode mode = TYPE_MODE (valtype);
   int unsignedp ATTRIBUTE_UNUSED;
 
   unsignedp = TYPE_UNSIGNED (valtype);
@@ -5634,7 +5706,7 @@ arc_legitimate_pic_operand_p (rtx x)
    satisfies CONSTANT_P.  */
 
 bool
-arc_legitimate_constant_p (enum machine_mode, rtx x)
+arc_legitimate_constant_p (machine_mode, rtx x)
 {
   if (!flag_pic)
     return true;
@@ -5693,7 +5765,7 @@ arc_legitimate_constant_p (enum machine_mode, rtx x)
 }
 
 static bool
-arc_legitimate_address_p (enum machine_mode mode, rtx x, bool strict)
+arc_legitimate_address_p (machine_mode mode, rtx x, bool strict)
 {
   if (RTX_OK_FOR_BASE_P (x, strict))
      return true;
@@ -5755,9 +5827,12 @@ arc_mode_dependent_address_p (const_rtx addr,
   /* SYMBOL_REF is not mode dependent: it is either a small data reference,
      which is valid for loads and stores, or a limm offset, which is valid for
      loads.  */
-  /* Scaled indices are scaled by the access mode. */
+  /* Scaled indices are scaled by the access mode; likewise for scaled
+     offsets, which are needed for maximum offset stores.  */
   if (GET_CODE (addr) == PLUS
-      && GET_CODE (XEXP ((addr), 0)) == MULT)
+      && (GET_CODE (XEXP ((addr), 0)) == MULT
+	  || (CONST_INT_P (XEXP ((addr), 1))
+	      && !SMALL_INT (INTVAL (XEXP ((addr), 1))))))
     return true;
   return false;
 }
@@ -5765,7 +5840,7 @@ arc_mode_dependent_address_p (const_rtx addr,
 /* Determine if it's legal to put X into the constant pool.  */
 
 static bool
-arc_cannot_force_const_mem (enum machine_mode mode, rtx x)
+arc_cannot_force_const_mem (machine_mode mode, rtx x)
 {
   return !arc_legitimate_constant_p (mode, x);
 }
@@ -5931,7 +6006,7 @@ arc_init_builtins (void)
       arc_init_simd_builtins ();
 }
 
-static rtx arc_expand_simd_builtin (tree, rtx, rtx, enum machine_mode, int);
+static rtx arc_expand_simd_builtin (tree, rtx, rtx, machine_mode, int);
 
 
 /*Helper to expand __builtin_arc_aligned (void* val, int alignval) */
@@ -5999,7 +6074,7 @@ static rtx
 arc_expand_builtin (tree exp,
 		    rtx target,
                     rtx subtarget ATTRIBUTE_UNUSED,
-                    enum machine_mode mode,
+                    machine_mode mode,
                     int ignore)
 {
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
@@ -6009,7 +6084,7 @@ arc_expand_builtin (tree exp,
   rtx pat = NULL_RTX;
   rtx xop[2];
   enum insn_code icode = d->icode;
-  enum machine_mode tmode = insn_data[icode].operand[0].mode;
+  machine_mode tmode = insn_data[icode].operand[0].mode;
   int nonvoid;
 
   if (id > ARC_SIMD_BUILTIN_BEGIN && id < ARC_SIMD_BUILTIN_END)
@@ -6077,9 +6152,9 @@ arc_expand_builtin (tree exp,
   for (i = 0; i < n_args; i++)
     {
       tree arg = CALL_EXPR_ARG (exp, i);
-      enum machine_mode mode = insn_data[icode].operand[i+nonvoid].mode;
+      machine_mode mode = insn_data[icode].operand[i+nonvoid].mode;
       rtx op = expand_expr (arg, NULL_RTX, mode, EXPAND_NORMAL);
-      enum machine_mode opmode = GET_MODE (op);
+      machine_mode opmode = GET_MODE (op);
 
       if (CONST_INT_P (op))
 	opmode = mode;
@@ -6225,7 +6300,7 @@ arc_output_mi_thunk (FILE *file, tree thunk ATTRIBUTE_UNUSED,
 	 add this,this,r12        --> this+ = *(*this + vcall_offset) */
       asm_fprintf (file, "\tld\t%s, [%s]\n",
 		   ARC_TEMP_SCRATCH_REG, reg_names[this_regno]);
-      asm_fprintf (file, "\tadd\t%s, %s, %ld\n",
+      asm_fprintf (file, "\tadd\t%s, %s, " HOST_WIDE_INT_PRINT_DEC "\n",
 		   ARC_TEMP_SCRATCH_REG, ARC_TEMP_SCRATCH_REG, vcall_offset);
       asm_fprintf (file, "\tld\t%s, [%s]\n",
 		   ARC_TEMP_SCRATCH_REG, ARC_TEMP_SCRATCH_REG);
@@ -6395,7 +6470,7 @@ walk_stores (rtx x, void (*fun) (rtx, rtx, void *), void *data)
 
 static bool
 arc_pass_by_reference (cumulative_args_t ca_v ATTRIBUTE_UNUSED,
-		       enum machine_mode mode ATTRIBUTE_UNUSED,
+		       machine_mode mode ATTRIBUTE_UNUSED,
 		       const_tree type,
 		       bool named ATTRIBUTE_UNUSED)
 {
@@ -6405,11 +6480,28 @@ arc_pass_by_reference (cumulative_args_t ca_v ATTRIBUTE_UNUSED,
 }
 
 
+/* Implement TARGET_CAN_USE_DOLOOP_P.  */
+
+static bool
+arc_can_use_doloop_p (const widest_int &iterations, const widest_int &,
+		      unsigned int loop_depth, bool entered_at_top)
+{
+  if (loop_depth > 1)
+    return false;
+  /* Setting up the loop with two sr instructions costs 6 cycles.  */
+  if (TARGET_ARC700
+      && !entered_at_top
+      && wi::gtu_p (iterations, 0)
+      && wi::leu_p (iterations, flag_pic ? 6 : 3))
+    return false;
+  return true;
+}
+
 /* NULL if INSN insn is valid within a low-overhead loop.
    Otherwise return why doloop cannot be applied.  */
 
 static const char *
-arc_invalid_within_doloop (const_rtx insn)
+arc_invalid_within_doloop (const rtx_insn *insn)
 {
   if (CALL_P (insn))
     return "Function call in the loop.";
@@ -6422,7 +6514,7 @@ arc_invalid_within_doloop (const_rtx insn)
 static void
 workaround_arc_anomaly (void)
 {
-  rtx insn, succ0, succ1;
+  rtx_insn *insn, *succ0, *succ1;
 
   /* For any architecture: call arc_hazard here. */
   for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
@@ -6465,7 +6557,8 @@ static int arc_reorg_in_progress = 0;
 static void
 arc_reorg (void)
 {
-  rtx insn, pattern;
+  rtx_insn *insn;
+  rtx pattern;
   rtx pc_target;
   long offset;
   int changed;
@@ -6479,7 +6572,6 @@ arc_reorg (void)
   if (crtl->profile)
     {
       section *save_text_section;
-      rtx insn;
       int size = get_max_uid () >> 4;
       htab_t htab = htab_create (size, unspec_prof_hash, unspec_prof_htab_eq,
 				 NULL);
@@ -6500,13 +6592,15 @@ arc_reorg (void)
       if (GET_CODE (insn) == JUMP_INSN
 	  && recog_memoized (insn) == CODE_FOR_doloop_end_i)
 	{
-	  rtx top_label
-	    = XEXP (XEXP (SET_SRC (XVECEXP (PATTERN (insn), 0, 0)), 1), 0);
+	  rtx_insn *top_label
+	    = as_a <rtx_insn *> (XEXP (XEXP (SET_SRC (XVECEXP (PATTERN (insn), 0, 0)), 1), 0));
 	  rtx num = GEN_INT (CODE_LABEL_NUMBER (top_label));
-	  rtx lp, prev = prev_nonnote_insn (top_label);
-	  rtx lp_simple = NULL_RTX;
-	  rtx next = NULL_RTX;
+	  rtx_insn *lp, *prev = prev_nonnote_insn (top_label);
+	  rtx_insn *lp_simple = NULL;
+	  rtx_insn *next = NULL;
 	  rtx op0 = XEXP (XVECEXP (PATTERN (insn), 0, 1), 0);
+	  HOST_WIDE_INT loop_end_id
+	    = -INTVAL (XEXP (XVECEXP (PATTERN (insn), 0, 4), 0));
 	  int seen_label = 0;
 
 	  for (lp = prev;
@@ -6517,14 +6611,14 @@ arc_reorg (void)
 	  if (!lp || !NONJUMP_INSN_P (lp)
 	      || dead_or_set_regno_p (lp, LP_COUNT))
 	    {
-	      for (prev = next = insn, lp = NULL_RTX ; prev || next;)
+	      for (prev = next = insn, lp = NULL ; prev || next;)
 		{
 		  if (prev)
 		    {
 		      if (NONJUMP_INSN_P (prev)
 			  && recog_memoized (prev) == CODE_FOR_doloop_begin_i
 			  && (INTVAL (XEXP (XVECEXP (PATTERN (prev), 0, 5), 0))
-			      == INSN_UID (insn)))
+			      == loop_end_id))
 			{
 			  lp = prev;
 			  break;
@@ -6538,7 +6632,7 @@ arc_reorg (void)
 		      if (NONJUMP_INSN_P (next)
 			  && recog_memoized (next) == CODE_FOR_doloop_begin_i
 			  && (INTVAL (XEXP (XVECEXP (PATTERN (next), 0, 5), 0))
-			      == INSN_UID (insn)))
+			      == loop_end_id))
 			{
 			  lp = next;
 			  break;
@@ -6546,7 +6640,7 @@ arc_reorg (void)
 		      next = next_nonnote_insn (next);
 		    }
 		}
-	      prev = NULL_RTX;
+	      prev = NULL;
 	    }
 	  else
 	    lp_simple = lp;
@@ -6582,7 +6676,8 @@ arc_reorg (void)
 		 move exists.  */
 	      if (true_regnum (begin_cnt) != LP_COUNT)
 		{
-		  rtx mov, set, note;
+		  rtx_insn *mov;
+		  rtx set, note;
 
 		  for (mov = prev_nonnote_insn (lp); mov;
 		       mov = prev_nonnote_insn (mov))
@@ -6634,16 +6729,16 @@ arc_reorg (void)
 				   XEXP (XVECEXP (PATTERN (lp), 0, 3), 0),
 				   const0_rtx);
 
-		  lc_set = emit_insn_before (lc_set, insn);
+		  rtx_insn *lc_set_insn = emit_insn_before (lc_set, insn);
 		  delete_insn (lp);
 		  delete_insn (insn);
-		  insn = lc_set;
+		  insn = lc_set_insn;
 		}
 	      /* If the loop is non-empty with zero length, we can't make it
 		 a zero-overhead loop.  That can happen for empty asms.  */
 	      else
 		{
-		  rtx scan;
+		  rtx_insn *scan;
 
 		  for (scan = top_label;
 		       (scan && scan != insn
@@ -6727,7 +6822,7 @@ arc_reorg (void)
       if (optimize > 1 && !TARGET_NO_COND_EXEC)
 	{
 	  arc_ifcvt ();
-	  unsigned int flags = pass_arc_ifcvt.pass.todo_flags_finish;
+	  unsigned int flags = pass_data_arc_ifcvt.todo_flags_finish;
 	  df_finish_pass ((flags & TODO_df_verify) != 0);
 	}
 
@@ -6782,7 +6877,7 @@ arc_reorg (void)
 	    continue;
 
 	  /* Now check if the jump is beyond the s9 range.  */
-	  if (find_reg_note (insn, REG_CROSSING_JUMP, NULL_RTX))
+	  if (CROSSING_JUMP_P (insn))
 	    continue;
 	  offset = branch_dest (insn) - INSN_ADDRESSES (INSN_UID (insn));
 
@@ -6796,7 +6891,8 @@ arc_reorg (void)
 	  label = XEXP (pc_target, 1);
 
 	    {
-	      rtx pat, scan, link_insn = NULL;
+	      rtx pat;
+	      rtx_insn *scan, *link_insn = NULL;
 
 	      for (scan = PREV_INSN (insn);
 		   scan && GET_CODE (scan) != CODE_LABEL;
@@ -7010,7 +7106,7 @@ arc_in_small_data_p (const_tree decl)
       const char *name;
 
       /* Reject anything that isn't in a known small-data section.  */
-      name = TREE_STRING_POINTER (DECL_SECTION_NAME (decl));
+      name = DECL_SECTION_NAME (decl);
       if (strcmp (name, ".sdata") != 0 && strcmp (name, ".sbss") != 0)
 	return false;
 
@@ -7061,7 +7157,7 @@ arc_in_small_data_p (const_tree decl)
    as a gp+symref.  */
 
 static bool
-arc_rewrite_small_data_p (rtx x)
+arc_rewrite_small_data_p (const_rtx x)
 {
   if (GET_CODE (x) == CONST)
     x = XEXP (x, 0);
@@ -7076,37 +7172,6 @@ arc_rewrite_small_data_p (rtx x)
 	  && SYMBOL_REF_SMALL_P(x));
 }
 
-/* A for_each_rtx callback, used by arc_rewrite_small_data.  */
-
-static int
-arc_rewrite_small_data_1 (rtx *loc, void *data)
-{
-  if (arc_rewrite_small_data_p (*loc))
-    {
-      rtx top;
-
-      *loc = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, *loc);
-      if (loc == data)
-	return -1;
-      top = *(rtx*) data;
-      if (GET_CODE (top) == MEM && &XEXP (top, 0) == loc)
-	; /* OK.  */
-      else if (GET_CODE (top) == MEM
-	  && GET_CODE (XEXP (top, 0)) == PLUS
-	  && GET_CODE (XEXP (XEXP (top, 0), 0)) == MULT)
-	*loc = force_reg (Pmode, *loc);
-      else
-	gcc_unreachable ();
-      return -1;
-    }
-
-  if (GET_CODE (*loc) == PLUS
-      && rtx_equal_p (XEXP (*loc, 0), pic_offset_table_rtx))
-    return -1;
-
-  return 0;
-}
-
 /* If possible, rewrite OP so that it refers to small data using
    explicit relocations.  */
 
@@ -7114,30 +7179,53 @@ rtx
 arc_rewrite_small_data (rtx op)
 {
   op = copy_insn (op);
-  for_each_rtx (&op, arc_rewrite_small_data_1, &op);
+  subrtx_ptr_iterator::array_type array;
+  FOR_EACH_SUBRTX_PTR (iter, array, &op, ALL)
+    {
+      rtx *loc = *iter;
+      if (arc_rewrite_small_data_p (*loc))
+	{
+	  gcc_assert (SDATA_BASE_REGNUM == PIC_OFFSET_TABLE_REGNUM);
+	  *loc = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, *loc);
+	  if (loc != &op)
+	    {
+	      if (GET_CODE (op) == MEM && &XEXP (op, 0) == loc)
+		; /* OK.  */
+	      else if (GET_CODE (op) == MEM
+		       && GET_CODE (XEXP (op, 0)) == PLUS
+		       && GET_CODE (XEXP (XEXP (op, 0), 0)) == MULT)
+		*loc = force_reg (Pmode, *loc);
+	      else
+		gcc_unreachable ();
+	    }
+	  iter.skip_subrtxes ();
+	}
+      else if (GET_CODE (*loc) == PLUS
+	       && rtx_equal_p (XEXP (*loc, 0), pic_offset_table_rtx))
+	iter.skip_subrtxes ();
+    }
   return op;
-}
-
-/* A for_each_rtx callback for small_data_pattern.  */
-
-static int
-small_data_pattern_1 (rtx *loc, void *data ATTRIBUTE_UNUSED)
-{
-  if (GET_CODE (*loc) == PLUS
-      && rtx_equal_p (XEXP (*loc, 0), pic_offset_table_rtx))
-    return  -1;
-
-  return arc_rewrite_small_data_p (*loc);
 }
 
 /* Return true if OP refers to small data symbols directly, not through
    a PLUS.  */
 
 bool
-small_data_pattern (rtx op, enum machine_mode)
+small_data_pattern (rtx op, machine_mode)
 {
-  return (GET_CODE (op) != SEQUENCE
-	  && for_each_rtx (&op, small_data_pattern_1, 0));
+  if (GET_CODE (op) == SEQUENCE)
+    return false;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, op, ALL)
+    {
+      const_rtx x = *iter;
+      if (GET_CODE (x) == PLUS
+	  && rtx_equal_p (XEXP (x, 0), pic_offset_table_rtx))
+	iter.skip_subrtxes ();
+      else if (arc_rewrite_small_data_p (x))
+	return true;
+    }
+  return false;
 }
 
 /* Return true if OP is an acceptable memory operand for ARCompact
@@ -7148,7 +7236,7 @@ small_data_pattern (rtx op, enum machine_mode)
 /* volatile cache option still to be handled.  */
 
 bool
-compact_sda_memory_operand (rtx op, enum machine_mode mode)
+compact_sda_memory_operand (rtx op, machine_mode mode)
 {
   rtx addr;
   int size;
@@ -7199,39 +7287,6 @@ arc_asm_output_aligned_decl_local (FILE * stream, tree decl, const char * name,
   if (size != 0)
     ASM_OUTPUT_SKIP (stream, size);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* SIMD builtins support.  */
 enum simd_insn_args_type {
@@ -7552,7 +7607,7 @@ static rtx
 arc_expand_simd_builtin (tree exp,
 			 rtx target,
 			 rtx subtarget ATTRIBUTE_UNUSED,
-			 enum machine_mode mode ATTRIBUTE_UNUSED,
+			 machine_mode mode ATTRIBUTE_UNUSED,
 			 int ignore ATTRIBUTE_UNUSED)
 {
   tree              fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
@@ -7569,11 +7624,11 @@ arc_expand_simd_builtin (tree exp,
   unsigned int         i;
   int               fcode = DECL_FUNCTION_CODE (fndecl);
   int               icode;
-  enum machine_mode mode0;
-  enum machine_mode mode1;
-  enum machine_mode mode2;
-  enum machine_mode mode3;
-  enum machine_mode mode4;
+  machine_mode mode0;
+  machine_mode mode1;
+  machine_mode mode2;
+  machine_mode mode3;
+  machine_mode mode4;
   const struct builtin_description * d;
 
   for (i = 0, d = arc_simd_builtin_desc_list;
@@ -8013,7 +8068,7 @@ arc_preserve_reload_p (rtx in)
 }
 
 int
-arc_register_move_cost (enum machine_mode,
+arc_register_move_cost (machine_mode,
 			enum reg_class from_class, enum reg_class to_class)
 {
   /* The ARC600 has no bypass for extension registers, hence a nop might be
@@ -8061,7 +8116,7 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
   int neg_intval = -intval;
   int short_0 = satisfies_constraint_Rcq (operands[0]);
   int short_p = (!cond_p && short_0 && satisfies_constraint_Rcq (operands[1]));
-  static int ret = 0;
+  int ret = 0;
 
 #define ADDSI_OUTPUT1(FORMAT) do {\
   if (output_p) \
@@ -8074,22 +8129,6 @@ arc_output_addsi (rtx *operands, bool cond_p, bool output_p)
   ADDSI_OUTPUT1 (format);\
   return ret; \
 } while (0)
-
-  /* When it is asked if the current insn is compact or not, return
-     the previous computed return value. Hence, we avoid problems like
-     add3 r0,sp,8 to be matched in the second round as add_s
-     r0,sp,64*/
-#if 0
-  /* CZI: this "shortcut" is buggy as this procedure is not called
-     successively with constant arguments and output_p set to true
-     and then set to false. */
-  if (!cond_p && !output_p && (ret != 0))
-    {
-      int tmp = ret;
-      ret = 0;
-      return tmp;
-    }
-#endif
 
   /* First try to emit a 16 bit insn.  */
   ret = 2;
@@ -8324,7 +8363,7 @@ arc_expand_movmem (rtx *operands)
   for (i = 0; size > 0; i ^= 1, size -= piece)
     {
       rtx tmp;
-      enum machine_mode mode;
+      machine_mode mode;
 
       if (piece > size)
 	piece = size & -size;
@@ -8356,7 +8395,7 @@ arc_expand_movmem (rtx *operands)
    been emitted.  */
 
 bool
-prepare_move_operands (rtx *operands, enum machine_mode mode)
+prepare_move_operands (rtx *operands, machine_mode mode)
 {
   /* We used to do this only for MODE_INT Modes, but addresses to floating
      point variables may well be in the small data section.  */
@@ -8444,7 +8483,7 @@ prepare_move_operands (rtx *operands, enum machine_mode mode)
 
 bool
 prepare_extend_operands (rtx *operands, enum rtx_code code,
-			 enum machine_mode omode)
+			 machine_mode omode)
 {
   if (!TARGET_NO_SDATA_SET && small_data_pattern (operands[1], Pmode))
     {
@@ -8495,38 +8534,6 @@ disi_highpart (rtx in)
   return simplify_gen_subreg (SImode, in, DImode, TARGET_BIG_ENDIAN ? 0 : 4);
 }
 
-/* Called by arc600_corereg_hazard via for_each_rtx.
-   If a hazard is found, return a conservative estimate of the required
-   length adjustment to accomodate a nop.  */
-
-static int
-arc600_corereg_hazard_1 (rtx *xp, void *data)
-{
-  rtx x = *xp;
-  rtx dest;
-  rtx pat = (rtx) data;
-
-  switch (GET_CODE (x))
-    {
-    case SET: case POST_INC: case POST_DEC: case PRE_INC: case PRE_DEC:
-      break;
-    default:
-    /* This is also fine for PRE/POST_MODIFY, because they contain a SET.  */
-      return 0;
-    }
-  dest = XEXP (x, 0);
-  /* Check if this sets a an extension register.  N.B. we use 61 for the
-     condition codes, which is definitely not an extension register.  */
-  if (REG_P (dest) && REGNO (dest) >= 32 && REGNO (dest) < 61
-      /* Check if the same register is used by the PAT.  */
-      && (refers_to_regno_p
-	   (REGNO (dest),
-	   REGNO (dest) + (GET_MODE_SIZE (GET_MODE (dest)) + 3) / 4U, pat, 0)))
-    return 4;
-
-  return 0;
-}
-
 /* Return length adjustment for INSN.
    For ARC600:
    A write to a core reg greater or equal to 32 must not be immediately
@@ -8534,7 +8541,7 @@ arc600_corereg_hazard_1 (rtx *xp, void *data)
    between PRED and SUCC to prevent a hazard.  */
 
 static int
-arc600_corereg_hazard (rtx pred, rtx succ)
+arc600_corereg_hazard (rtx_insn *pred, rtx_insn *succ)
 {
   if (!TARGET_ARC600)
     return 0;
@@ -8547,9 +8554,9 @@ arc600_corereg_hazard (rtx pred, rtx succ)
   if (recog_memoized (succ) == CODE_FOR_doloop_begin_i)
     return 0;
   if (GET_CODE (PATTERN (pred)) == SEQUENCE)
-    pred = XVECEXP (PATTERN (pred), 0, 1);
+    pred = as_a <rtx_sequence *> (PATTERN (pred))->insn (1);
   if (GET_CODE (PATTERN (succ)) == SEQUENCE)
-    succ = XVECEXP (PATTERN (succ), 0, 0);
+    succ = as_a <rtx_sequence *> (PATTERN (succ))->insn (0);
   if (recog_memoized (pred) == CODE_FOR_mulsi_600
       || recog_memoized (pred) == CODE_FOR_umul_600
       || recog_memoized (pred) == CODE_FOR_mac_600
@@ -8558,8 +8565,31 @@ arc600_corereg_hazard (rtx pred, rtx succ)
       || recog_memoized (pred) == CODE_FOR_umul64_600
       || recog_memoized (pred) == CODE_FOR_umac64_600)
     return 0;
-  return for_each_rtx (&PATTERN (pred), arc600_corereg_hazard_1,
-		       PATTERN (succ));
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, PATTERN (pred), NONCONST)
+    {
+      const_rtx x = *iter;
+      switch (GET_CODE (x))
+	{
+	case SET: case POST_INC: case POST_DEC: case PRE_INC: case PRE_DEC:
+	  break;
+	default:
+	  /* This is also fine for PRE/POST_MODIFY, because they
+	     contain a SET.  */
+	  continue;
+	}
+      rtx dest = XEXP (x, 0);
+      /* Check if this sets a an extension register.  N.B. we use 61 for the
+	 condition codes, which is definitely not an extension register.  */
+      if (REG_P (dest) && REGNO (dest) >= 32 && REGNO (dest) < 61
+	  /* Check if the same register is used by the PAT.  */
+	  && (refers_to_regno_p
+	      (REGNO (dest),
+	       REGNO (dest) + (GET_MODE_SIZE (GET_MODE (dest)) + 3) / 4U,
+	       PATTERN (succ), 0)))
+	return 4;
+    }
+  return 0;
 }
 
 /* We might have a CALL to a non-returning function before a loop end.
@@ -8569,10 +8599,10 @@ arc600_corereg_hazard (rtx pred, rtx succ)
    too. For ARC700, and ARCv2 is not allowed to have the last ZOL
    instruction a jump to a location where lp_count is modified. */
 static bool
-arc_loop_hazard (rtx pred, rtx succ)
+arc_loop_hazard (rtx_insn *pred, rtx_insn *succ)
 {
-  rtx jump  = NULL_RTX;
-  rtx label = NULL_RTX;
+  rtx_insn *jump  = NULL;
+  rtx_insn *label = NULL;
   basic_block succ_bb;
 
   if (recog_memoized (succ) != CODE_FOR_doloop_end_i)
@@ -8594,11 +8624,11 @@ arc_loop_hazard (rtx pred, rtx succ)
     jump = pred;
   else if (GET_CODE (PATTERN (pred)) == SEQUENCE
 	   && JUMP_P (XVECEXP (PATTERN (pred), 0, 0)))
-    jump = XVECEXP (PATTERN (pred), 0, 0);
+    jump = as_a <rtx_insn *> XVECEXP (PATTERN (pred), 0, 0);
   else
     return false;
 
-  label = JUMP_LABEL (jump);
+  label = JUMP_LABEL_AS_INSN (jump);
   if (!label)
     return false;
 
@@ -8635,7 +8665,7 @@ arc_loop_hazard (rtx pred, rtx succ)
    followed by a use.  Anticipate the length requirement to insert a nop
    between PRED and SUCC to prevent a hazard.  */
 int
-arc_hazard (rtx pred, rtx succ)
+arc_hazard (rtx_insn *pred, rtx_insn *succ)
 {
   if (!pred || !INSN_P (pred) || !succ || !INSN_P (succ))
     return 0;
@@ -8652,7 +8682,7 @@ arc_hazard (rtx pred, rtx succ)
 /* Return length adjustment for INSN.  */
 
 int
-arc_adjust_insn_length (rtx insn, int len, bool)
+arc_adjust_insn_length (rtx_insn *insn, int len, bool)
 {
   if (!INSN_P (insn))
     return len;
@@ -8667,7 +8697,7 @@ arc_adjust_insn_length (rtx insn, int len, bool)
      loop.  */
   if (recog_memoized (insn) == CODE_FOR_doloop_end_i)
     {
-      rtx prev = prev_nonnote_insn (insn);
+      rtx_insn *prev = prev_nonnote_insn (insn);
 
       return ((LABEL_P (prev)
 	       || (TARGET_ARC600
@@ -8686,18 +8716,19 @@ arc_adjust_insn_length (rtx insn, int len, bool)
       && GET_CODE (PATTERN (insn)) != ADDR_DIFF_VEC
       && get_attr_type (insn) == TYPE_RETURN)
     {
-      rtx prev = prev_active_insn (insn);
+      rtx_insn *prev = prev_active_insn (insn);
 
       if (!prev || !(prev = prev_active_insn (prev))
 	  || ((NONJUMP_INSN_P (prev)
 	       && GET_CODE (PATTERN (prev)) == SEQUENCE)
-	      ? CALL_ATTR (XVECEXP (PATTERN (prev), 0, 0), NON_SIBCALL)
+	      ? CALL_ATTR (as_a <rtx_sequence *> (PATTERN (prev))->insn (0),
+			   NON_SIBCALL)
 	      : CALL_ATTR (prev, NON_SIBCALL)))
 	return len + 4;
     }
   if (TARGET_ARC600)
     {
-      rtx succ = next_real_insn (insn);
+      rtx_insn *succ = next_real_insn (insn);
 
       /* One the ARC600, a write to an extension register must be separated
 	 from a read.  */
@@ -8728,7 +8759,7 @@ enum
 
 /* While the infrastructure patch is waiting for review, duplicate the
    struct definitions, to allow this file to compile.  */
-#if 0
+#if 1
 typedef struct
 {
   unsigned align_set;
@@ -8748,7 +8779,7 @@ typedef struct insn_length_parameters_s
   int align_unit_log;
   int align_base_log;
   int max_variants;
-  int (*get_variants) (rtx, int, bool, bool, insn_length_variant_t *);
+  int (*get_variants) (rtx_insn *, int, bool, bool, insn_length_variant_t *);
 } insn_length_parameters_t;
 
 static void
@@ -8756,7 +8787,7 @@ arc_insn_length_parameters (insn_length_parameters_t *ilp) ATTRIBUTE_UNUSED;
 #endif
 
 static int
-arc_get_insn_variants (rtx insn, int len, bool, bool target_p,
+arc_get_insn_variants (rtx_insn *insn, int len, bool, bool target_p,
 		       insn_length_variant_t *ilv)
 {
   if (!NONDEBUG_INSN_P (insn))
@@ -8766,15 +8797,15 @@ arc_get_insn_variants (rtx insn, int len, bool, bool target_p,
      get_variants mechanism, so turn this off for now.  */
   if (optimize_size)
     return 0;
-  if (GET_CODE (PATTERN (insn)) == SEQUENCE)
+  if (rtx_sequence *pat = dyn_cast <rtx_sequence *> (PATTERN (insn)))
     {
       /* The interaction of a short delay slot insn with a short branch is
 	 too weird for shorten_branches to piece together, so describe the
 	 entire SEQUENCE.  */
-      rtx pat, inner;
+      rtx_insn *inner;
       if (TARGET_UPSIZE_DBR
-	  && get_attr_length (XVECEXP ((pat = PATTERN (insn)), 0, 1)) <= 2
-	  && (((type = get_attr_type (inner = XVECEXP (pat, 0, 0)))
+	  && get_attr_length (pat->insn (1)) <= 2
+	  && (((type = get_attr_type (inner = pat->insn (0)))
 	       == TYPE_UNCOND_BRANCH)
 	      || type == TYPE_BRANCH)
 	  && get_attr_delay_slot_filled (inner) == DELAY_SLOT_FILLED_YES)
@@ -8816,10 +8847,11 @@ arc_get_insn_variants (rtx insn, int len, bool, bool target_p,
   /* If the previous instruction is an sfunc call, this insn is always
      a target, even though the middle-end is unaware of this.  */
   bool force_target = false;
-  rtx prev = prev_active_insn (insn);
+  rtx_insn *prev = prev_active_insn (insn);
   if (prev && arc_next_active_insn (prev, 0) == insn
       && ((NONJUMP_INSN_P (prev) && GET_CODE (PATTERN (prev)) == SEQUENCE)
-	  ? CALL_ATTR (XVECEXP (PATTERN (prev), 0, 0), NON_SIBCALL)
+	  ? CALL_ATTR (as_a <rtx_sequence *> (PATTERN (prev))->insn (0),
+		       NON_SIBCALL)
 	  : (CALL_ATTR (prev, NON_SIBCALL)
 	     && NEXT_INSN (PREV_INSN (prev)) == prev)))
     force_target = true;
@@ -9029,13 +9061,57 @@ arc_get_ccfsm_cond (struct arc_ccfsm *statep, bool reverse)
 
   gcc_assert (ARC_INVERSE_CONDITION_CODE (raw_cc) == statep->cc);
 
-  enum machine_mode ccm = GET_MODE (XEXP (cond, 0));
+  machine_mode ccm = GET_MODE (XEXP (cond, 0));
   enum rtx_code code = reverse_condition (GET_CODE (cond));
   if (code == UNKNOWN || ccm == CC_FP_GTmode || ccm == CC_FP_GEmode)
     code = reverse_condition_maybe_unordered (GET_CODE (cond));
 
   return gen_rtx_fmt_ee (code, GET_MODE (cond),
 			 copy_rtx (XEXP (cond, 0)), copy_rtx (XEXP (cond, 1)));
+}
+
+/* Return version of PAT conditionalized with COND, which is part of INSN.
+   ANNULLED indicates if INSN is an annulled delay-slot insn.
+   Register further changes if necessary.  */
+static rtx
+conditionalize_nonjump (rtx pat, rtx cond, rtx insn, bool annulled)
+{
+  /* For commutative operators, we generally prefer to have
+     the first source match the destination.  */
+  if (GET_CODE (pat) == SET)
+    {
+      rtx src = SET_SRC (pat);
+
+      if (COMMUTATIVE_P (src))
+	{
+	  rtx src0 = XEXP (src, 0);
+	  rtx src1 = XEXP (src, 1);
+	  rtx dst = SET_DEST (pat);
+
+	  if (rtx_equal_p (src1, dst) && !rtx_equal_p (src0, dst)
+	      /* Leave add_n alone - the canonical form is to
+		 have the complex summand first.  */
+	      && REG_P (src0))
+	    pat = gen_rtx_SET (VOIDmode, dst,
+			       gen_rtx_fmt_ee (GET_CODE (src), GET_MODE (src),
+					       src1, src0));
+	}
+    }
+
+  /* dwarf2out.c:dwarf2out_frame_debug_expr doesn't know
+     what to do with COND_EXEC.  */
+  if (RTX_FRAME_RELATED_P (insn))
+    {
+      /* If this is the delay slot insn of an anulled branch,
+	 dwarf2out.c:scan_trace understands the anulling semantics
+	 without the COND_EXEC.  */
+      gcc_assert (annulled);
+      rtx note = alloc_reg_note (REG_FRAME_RELATED_EXPR, pat,
+				 REG_NOTES (insn));
+      validate_change (insn, &REG_NOTES (insn), note, 1);
+    }
+  pat = gen_rtx_COND_EXEC (VOIDmode, cond, pat);
+  return pat;
 }
 
 /* Use the ccfsm machinery to do if conversion.  */
@@ -9047,7 +9123,7 @@ arc_ifcvt (void)
   basic_block merge_bb = 0;
 
   memset (statep, 0, sizeof *statep);
-  for (rtx insn = get_insns (); insn; insn = next_insn (insn))
+  for (rtx_insn *insn = get_insns (); insn; insn = next_insn (insn))
     {
       arc_ccfsm_advance (insn, statep);
 
@@ -9066,7 +9142,7 @@ arc_ifcvt (void)
 	      = BLOCK_FOR_INSN (NEXT_INSN (NEXT_INSN (PREV_INSN (insn))));
 	    arc_ccfsm_post_advance (insn, statep);
 	    gcc_assert (!IN_RANGE (statep->state, 1, 2));
-	    rtx seq = NEXT_INSN (PREV_INSN (insn));
+	    rtx_insn *seq = NEXT_INSN (PREV_INSN (insn));
 	    if (seq != insn)
 	      {
 		rtx slot = XVECEXP (PATTERN (seq), 0, 1);
@@ -9121,7 +9197,9 @@ arc_ifcvt (void)
 
 	  /* Conditionalized insn.  */
 
-	  rtx prev, pprev, *patp, pat, cond;
+	  rtx_insn *prev, *pprev;
+	  rtx *patp, pat, cond;
+	  bool annulled; annulled = false;
 
 	  /* If this is a delay slot insn in a non-annulled branch,
 	     don't conditionalize it.  N.B., this should be fine for
@@ -9131,9 +9209,12 @@ arc_ifcvt (void)
 	  prev = PREV_INSN (insn);
 	  pprev = PREV_INSN (prev);
 	  if (pprev && NEXT_INSN (NEXT_INSN (pprev)) == NEXT_INSN (insn)
-	      && JUMP_P (prev) && get_attr_cond (prev) == COND_USE
-	      && !INSN_ANNULLED_BRANCH_P (prev))
-	    break;
+	      && JUMP_P (prev) && get_attr_cond (prev) == COND_USE)
+	    {
+	      if (!INSN_ANNULLED_BRANCH_P (prev))
+		break;
+	      annulled = true;
+	    }
 
 	  patp = &PATTERN (insn);
 	  pat = *patp;
@@ -9142,22 +9223,8 @@ arc_ifcvt (void)
 	    {
 	      /* ??? don't conditionalize if all side effects are dead
 		 in the not-execute case.  */
-	      /* dwarf2out.c:dwarf2out_frame_debug_expr doesn't know
-		 what to do with COND_EXEC.  */
-	      if (RTX_FRAME_RELATED_P (insn))
-		{
-		  /* If this is the delay slot insn of an anulled branch,
-		     dwarf2out.c:scan_trace understands the anulling semantics
-		     without the COND_EXEC.  */
-		  gcc_assert
-		   (pprev && NEXT_INSN (NEXT_INSN (pprev)) == NEXT_INSN (insn)
-		    && JUMP_P (prev) && get_attr_cond (prev) == COND_USE
-		    && INSN_ANNULLED_BRANCH_P (prev));
-		  rtx note = alloc_reg_note (REG_FRAME_RELATED_EXPR, pat,
-					     REG_NOTES (insn));
-		  validate_change (insn, &REG_NOTES (insn), note, 1);
-		}
-	      pat = gen_rtx_COND_EXEC (VOIDmode, cond, pat);
+
+	      pat = conditionalize_nonjump (pat, cond, insn, annulled);
 	    }
 	  else if (simplejump_p (insn))
 	    {
@@ -9176,7 +9243,7 @@ arc_ifcvt (void)
 	    gcc_unreachable ();
 	  if (JUMP_P (insn))
 	    {
-	      rtx next = next_nonnote_insn (insn);
+	      rtx_insn *next = next_nonnote_insn (insn);
 	      if (GET_CODE (next) == BARRIER)
 		delete_insn (next);
 	      if (statep->state == 3)
@@ -9191,6 +9258,63 @@ arc_ifcvt (void)
   return 0;
 }
 
+/* Find annulled delay insns and convert them to use the appropriate predicate.
+   This allows branch shortening to size up these insns properly.  */
+
+static unsigned
+arc_predicate_delay_insns (void)
+{
+  for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    {
+      rtx pat, jump, dlay, src, cond, *patp;
+      int reverse;
+
+      if (!NONJUMP_INSN_P (insn)
+	  || GET_CODE (pat = PATTERN (insn)) != SEQUENCE)
+	continue;
+      jump = XVECEXP (pat, 0, 0);
+      dlay = XVECEXP (pat, 0, 1);
+      if (!JUMP_P (jump) || !INSN_ANNULLED_BRANCH_P (jump))
+	continue;
+      /* If the branch insn does the annulling, leave the delay insn alone.  */
+      if (!TARGET_AT_DBR_CONDEXEC && !INSN_FROM_TARGET_P (dlay))
+	continue;
+      /* ??? Could also leave DLAY un-conditionalized if its target is dead
+	 on the other path.  */
+      gcc_assert (GET_CODE (PATTERN (jump)) == SET);
+      gcc_assert (SET_DEST (PATTERN (jump)) == pc_rtx);
+      src = SET_SRC (PATTERN (jump));
+      gcc_assert (GET_CODE (src) == IF_THEN_ELSE);
+      cond = XEXP (src, 0);
+      if (XEXP (src, 2) == pc_rtx)
+	reverse = 0;
+      else if (XEXP (src, 1) == pc_rtx)
+	reverse = 1;
+      else
+	gcc_unreachable ();
+      if (reverse != !INSN_FROM_TARGET_P (dlay))
+	{
+	  machine_mode ccm = GET_MODE (XEXP (cond, 0));
+	  enum rtx_code code = reverse_condition (GET_CODE (cond));
+	  if (code == UNKNOWN || ccm == CC_FP_GTmode || ccm == CC_FP_GEmode)
+	    code = reverse_condition_maybe_unordered (GET_CODE (cond));
+
+	  cond = gen_rtx_fmt_ee (code, GET_MODE (cond),
+				 copy_rtx (XEXP (cond, 0)),
+				 copy_rtx (XEXP (cond, 1)));
+	}
+      else
+	cond = copy_rtx (cond);
+      patp = &PATTERN (dlay);
+      pat = *patp;
+      pat = conditionalize_nonjump (pat, cond, dlay, true);
+      validate_change (dlay, patp, pat, 1);
+      if (!apply_change_group ())
+	gcc_unreachable ();
+    }
+  return 0;
+}
+
 /* For ARC600: If a write to a core reg >=32 appears in a delay slot
   (other than of a forward brcc), it creates a hazard when there is a read
   of the same register at the branch target.  We can't know what is at the
@@ -9199,34 +9323,30 @@ arc_ifcvt (void)
   be hoisted out into a delay slot, a basic block can also be emptied this
   way, and branch and/or fall through targets be redirected.  Hence we don't
   want such writes in a delay slot.  */
-/* Called by arc_write_ext_corereg via for_each_rtx.  */
-
-static int
-write_ext_corereg_1 (rtx *xp, void *data ATTRIBUTE_UNUSED)
-{
-  rtx x = *xp;
-  rtx dest;
-
-  switch (GET_CODE (x))
-    {
-    case SET: case POST_INC: case POST_DEC: case PRE_INC: case PRE_DEC:
-      break;
-    default:
-    /* This is also fine for PRE/POST_MODIFY, because they contain a SET.  */
-      return 0;
-    }
-  dest = XEXP (x, 0);
-  if (REG_P (dest) && REGNO (dest) >= 32 && REGNO (dest) < 61)
-    return 1;
-  return 0;
-}
 
 /* Return nonzreo iff INSN writes to an extension core register.  */
 
 int
 arc_write_ext_corereg (rtx insn)
 {
-  return for_each_rtx (&PATTERN (insn), write_ext_corereg_1, 0);
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
+    {
+      const_rtx x = *iter;
+      switch (GET_CODE (x))
+	{
+	case SET: case POST_INC: case POST_DEC: case PRE_INC: case PRE_DEC:
+	  break;
+	default:
+	  /* This is also fine for PRE/POST_MODIFY, because they
+	     contain a SET.  */
+	  continue;
+	}
+      const_rtx dest = XEXP (x, 0);
+      if (REG_P (dest) && REGNO (dest) >= 32 && REGNO (dest) < 61)
+	return 1;
+    }
+  return 0;
 }
 
 /* Return true if the insn is in a delay slot and needs to be executed
@@ -9255,9 +9375,9 @@ arc_bdr_iscond (rtx insn)
   3.  The secondary branch is not allowed to have a delay slot.
 */
 static bool
-arc_secondarybranch_p (rtx insn)
+arc_secondarybranch_p (rtx_insn *insn)
 {
-  rtx tinsn = NULL_RTX;
+  rtx_insn *tinsn = NULL;
 
   if (simplejump_p (insn))
     return false;
@@ -9295,10 +9415,10 @@ arc_secondarybranch_p (rtx insn)
 */
 
 static bool
-arc_primarysecondary_p (rtx insn, int len)
+arc_primarysecondary_p (rtx_insn *insn, int len)
 {
-  rtx pinsn = prev_active_insn (insn);
-  rtx ninsn = next_active_insn (insn);
+  rtx_insn *pinsn = prev_active_insn (insn);
+  rtx_insn *ninsn = next_active_insn (insn);
 
   if (!INSN_ADDRESSES_SET_P())
     return false;
@@ -9333,7 +9453,7 @@ arc_primarysecondary_p (rtx insn, int len)
 
 static rtx
 arc_legitimize_address_0 (rtx x, rtx oldx ATTRIBUTE_UNUSED,
-			  enum machine_mode mode)
+			  machine_mode mode)
 {
   rtx addr, inner;
 
@@ -9364,13 +9484,13 @@ arc_legitimize_address_0 (rtx x, rtx oldx ATTRIBUTE_UNUSED,
     }
   else if (GET_CODE (addr) == SYMBOL_REF && !SYMBOL_REF_FUNCTION_P (addr))
     x = force_reg (Pmode, x);
-  if (memory_address_p ((enum machine_mode) mode, x))
+  if (memory_address_p ((machine_mode) mode, x))
      return x;
   return NULL_RTX;
 }
 
 static rtx
-arc_legitimize_address (rtx orig_x, rtx oldx, enum machine_mode mode)
+arc_legitimize_address (rtx orig_x, rtx oldx, machine_mode mode)
 {
   rtx new_x = arc_legitimize_address_0 (orig_x, oldx, mode);
 
@@ -9499,8 +9619,8 @@ arc_branch_size_unknown_p (void)
 void
 arc_pad_return (void)
 {
-  rtx insn = current_output_insn;
-  rtx prev = prev_active_insn (insn);
+  rtx_insn *insn = current_output_insn;
+  rtx_insn *prev = prev_active_insn (insn);
   int want_long;
 
   if (!prev)
@@ -9520,7 +9640,8 @@ arc_pad_return (void)
     }
   if (!prev
       || ((NONJUMP_INSN_P (prev) && GET_CODE (PATTERN (prev)) == SEQUENCE)
-	  ? CALL_ATTR (XVECEXP (PATTERN (prev), 0, 0), NON_SIBCALL)
+	  ? CALL_ATTR (as_a <rtx_sequence *> (PATTERN (prev))->insn (0),
+		       NON_SIBCALL)
 	  : CALL_ATTR (prev, NON_SIBCALL)))
     {
       if (want_long)
@@ -9541,14 +9662,16 @@ arc_pad_return (void)
 	      || !reg_set_p (gen_rtx_REG (CCmode, CC_REG),
 			     XVECEXP (final_sequence, 0, 1))))
 	{
-	  prev = XVECEXP (final_sequence, 0, 1);
+	  prev = as_a <rtx_insn *> (XVECEXP (final_sequence, 0, 1));
 	  gcc_assert (!prev_real_insn (insn)
 		      || !arc_hazard (prev_real_insn (insn), prev));
 	  cfun->machine->force_short_suffix = !want_long;
+	  rtx save_pred = current_insn_predicate;
 	  final_scan_insn (prev, asm_out_file, optimize, 1, NULL);
 	  cfun->machine->force_short_suffix = -1;
-	  INSN_DELETED_P (prev) = 1;
+	  prev->set_deleted ();
 	  current_output_insn = insn;
+	  current_insn_predicate = save_pred;
 	}
       else if (want_long)
 	fputs ("\tnop\n", asm_out_file);
@@ -9567,7 +9690,7 @@ static struct machine_function *
 arc_init_machine_status (void)
 {
   struct machine_function *machine;
-  machine = ggc_alloc_cleared_machine_function ();
+  machine = ggc_cleared_alloc<machine_function> ();
   machine->fn_type = ARC_FUNCTION_UNKNOWN;
   machine->force_short_suffix = -1;
 
@@ -9798,7 +9921,7 @@ arc_process_double_reg_moves (rtx *operands)
 rtx
 arc_split_move (rtx *operands)
 {
-  enum machine_mode mode = GET_MODE (operands[0]);
+  machine_mode mode = GET_MODE (operands[0]);
   int i;
   int swap = 0;
   rtx xop[4];
@@ -9876,7 +9999,7 @@ arc_split_move (rtx *operands)
    and l_tmpl (for long INSNs).  */
 
 const char *
-arc_short_long (rtx insn, const char *s_tmpl, const char *l_tmpl)
+arc_short_long (rtx_insn *insn, const char *s_tmpl, const char *l_tmpl)
 {
   int is_short = arc_verify_short (insn, cfun->machine->unalign, -1);
 
@@ -9894,7 +10017,7 @@ arc_regno_use_in (unsigned int regno, rtx x)
   int i, j;
   rtx tem;
 
-  if (REG_P (x) && refers_to_regno_p (regno, regno+1, x, (rtx *) 0))
+  if (REG_P (x) && refers_to_regno_p (regno, x))
     return x;
 
   fmt = GET_RTX_FORMAT (GET_CODE (x));
@@ -9918,7 +10041,7 @@ arc_regno_use_in (unsigned int regno, rtx x)
    INSN can't have attributes.  */
 
 int
-arc_attr_type (rtx insn)
+arc_attr_type (rtx_insn *insn)
 {
   if (NONJUMP_INSN_P (insn)
       ? (GET_CODE (PATTERN (insn)) == USE
@@ -9934,10 +10057,11 @@ arc_attr_type (rtx insn)
 /* Return true if insn sets the condition codes.  */
 
 bool
-arc_sets_cc_p (rtx insn)
+arc_sets_cc_p (rtx_insn *insn)
 {
-  if (NONJUMP_INSN_P (insn) && GET_CODE (PATTERN (insn)) == SEQUENCE)
-    insn = XVECEXP (PATTERN (insn), 0, XVECLEN (PATTERN (insn), 0) - 1);
+  if (NONJUMP_INSN_P (insn))
+    if (rtx_sequence *seq = dyn_cast <rtx_sequence *> (PATTERN (insn)))
+      insn = seq->insn (seq->len () - 1);
   return arc_attr_type (insn) == TYPE_COMPARE;
 }
 
@@ -9945,9 +10069,9 @@ arc_sets_cc_p (rtx insn)
    to fill.  */
 
 bool
-arc_need_delay (rtx insn)
+arc_need_delay (rtx_insn *insn)
 {
-  rtx next;
+  rtx_insn *next;
 
   if (!flag_delayed_branch)
     return false;
@@ -9997,7 +10121,7 @@ arc_label_align (rtx label)
 
   if (loop_align > align_labels_log)
     {
-      rtx prev = prev_nonnote_insn (label);
+      rtx_insn *prev = prev_nonnote_insn (label);
 
       if (prev && NONJUMP_INSN_P (prev)
 	  && GET_CODE (PATTERN (prev)) == PARALLEL
@@ -10008,7 +10132,7 @@ arc_label_align (rtx label)
      ADDR_DIFF_VEC.  */
   if (align_labels_log < 1)
     {
-      rtx next = next_nonnote_nondebug_insn (label);
+      rtx_insn *next = next_nonnote_nondebug_insn (label);
       if (INSN_P (next) && recog_memoized (next) >= 0)
 	return 1;
     }
@@ -10018,19 +10142,18 @@ arc_label_align (rtx label)
 /* Return true if LABEL is in executable code. */
 
 bool
-arc_text_label (rtx label)
+arc_text_label (rtx_insn *label)
 {
-  rtx next;
+  rtx_insn *next;
 
   /* ??? We use deleted labels like they were still there, see
      gcc.c-torture/compile/20000326-2.c .  */
   gcc_assert (GET_CODE (label) == CODE_LABEL
 	      || (GET_CODE (label) == NOTE
 		  && NOTE_KIND (label) == NOTE_INSN_DELETED_LABEL));
-
   next = next_nonnote_insn (label);
   if (next)
-    return (GET_CODE (next) != JUMP_INSN
+    return (!JUMP_TABLE_DATA_P (next)
 	    || GET_CODE (PATTERN (next)) != ADDR_VEC);
   else if (!PREV_INSN (label))
     /* ??? sometimes text labels get inserted very late, see
@@ -10050,19 +10173,19 @@ arc_decl_pretend_args (tree decl)
   return crtl->args.pretend_args_size;
 }
 
-/* Without this, gcc.dg/tree-prof/bb-reorg.c fails to assemble
-  when compiling with -O2 -freorder-blocks-and-partition -fprofile-use
-  -D_PROFILE_USE; delay branch scheduling then follows a REG_CROSSING_JUMP
+/* Without this, gcc.dg/tree-prof/bb-reorg.c fails to assemble when
+  compiling with -O2 -freorder-blocks-and-partition -fprofile-use
+  -D_PROFILE_USE; delay branch scheduling then follows a crossing jump
   to redirect two breqs.  */
 
 static bool
-arc_can_follow_jump (const_rtx follower, const_rtx followee)
+arc_can_follow_jump (const rtx_insn *follower, const rtx_insn *followee)
 {
   /* ??? get_attr_type is declared to take an rtx.  */
-  union { const_rtx c; rtx r; } u;
+  union { const rtx_insn *c; rtx_insn *r; } u;
 
   u.c = follower;
-  if (find_reg_note (followee, REG_CROSSING_JUMP, NULL_RTX))
+  if (CROSSING_JUMP_P (followee))
     switch (get_attr_type (u.r))
       {
       case TYPE_BRCC:
@@ -10133,7 +10256,7 @@ arc_register_priority (int r)
 }
 
 static reg_class_t
-arc_spill_class (reg_class_t /* orig_class */, enum machine_mode)
+arc_spill_class (reg_class_t /* orig_class */, machine_mode)
 {
   return GENERAL_REGS;
 }
@@ -10143,7 +10266,7 @@ arc_spill_class (reg_class_t /* orig_class */, enum machine_mode)
    be scaled. CODE_DENSITY indicates ARCv2 code density operations are
    available. */
 bool
-compact_memory_operand_p (rtx op, enum machine_mode mode, bool code_density, bool scaled)
+compact_memory_operand_p (rtx op, machine_mode mode, bool code_density, bool scaled)
 {
   rtx addr, plus0, plus1;
   int size, off;
@@ -10268,7 +10391,7 @@ compact_memory_operand_p (rtx op, enum machine_mode mode, bool code_density, boo
 }
 
 bool
-arc_legitimize_reload_address (rtx *p, enum machine_mode mode, int opnum,
+arc_legitimize_reload_address (rtx *p, machine_mode mode, int opnum,
 			       int itype)
 {
   rtx x = *p;
@@ -10335,11 +10458,25 @@ arc_legitimize_reload_address (rtx *p, enum machine_mode mode, int opnum,
   return false;
 }
 
+/* Implement TARGET_USE_BY_PIECES_INFRASTRUCTURE_P.  */
+
+static bool
+arc_use_by_pieces_infrastructure_p (unsigned HOST_WIDE_INT size,
+				    unsigned int align,
+				    enum by_pieces_operation op,
+				    bool speed_p)
+{
+  /* Let the movmem expander handle small block moves.  */
+  if (op == MOVE_BY_PIECES)
+    return false;
+  return default_use_by_pieces_infrastructure_p (size, align, op, speed_p);
+}
+
 /* Return true if a load instruction (CONSUMER) uses the same address
    as a store instruction (PRODUCER). This function is used to avoid
    st/ld address hazard in ARC700 cores. */
 bool
-arc_store_addr_hazard_p (rtx producer, rtx consumer)
+arc_store_addr_hazard_p (rtx_insn *producer, rtx_insn *consumer)
 {
   rtx in_set, out_set;
   rtx out_addr, in_addr;
@@ -10455,7 +10592,7 @@ static vec<arc_sched_insn_info> insn_info;
 #define INSN_INFO_UNIT_P(N) (((N) < (int)insn_info.length ()) && (insn_info[(N)].valid & ~VALID_UNIT)
 
 static void
-insn_set_unit (rtx insn, int unit)
+insn_set_unit (rtx_insn *insn, int unit)
 {
   int uid = INSN_UID (insn);
 
@@ -10466,12 +10603,12 @@ insn_set_unit (rtx insn, int unit)
   INSN_INFO_ENTRY (uid).valid |= VALID_UNIT;
 }
 
-static int arc_sched_adjust_cost(rtx insn, rtx link, rtx dep_insn, int cost);
+static int arc_sched_adjust_cost(rtx_insn *insn, rtx link, rtx_insn *dep_insn, int cost);
 
 /* Set the clock cycle of INSN to CYCLE.  Also clears the insn's entry in
    new_conditions.  */
 static void
-insn_set_clock (rtx insn, int cycle)
+insn_set_clock (rtx_insn *insn, int cycle)
 {
   int uid = INSN_UID (insn);
 
@@ -10518,7 +10655,7 @@ arc_asm_insn_p (rtx x)
 #if 0
 /* Given an insn, go on its dep and find its unit. */
 static void
-arc_guess_unit (rtx insn)
+arc_guess_unit (rtx_insn *insn)
 {
   int cost = 0;
 
@@ -10545,9 +10682,9 @@ arc_guess_unit (rtx insn)
 }
 #endif
 
-static int arc_sched_adjust_cost(rtx insn,
+static int arc_sched_adjust_cost(rtx_insn *insn,
 				 rtx link,
-				 rtx dep_insn,
+				 rtx_insn *dep_insn,
 				 int cost)
 {
   int rcost = cost; /* return cost*/
@@ -10895,7 +11032,7 @@ static int curr_sched_clock = -1;
 static int
 arc_sched_dfa_new_cycle (FILE *dump ATTRIBUTE_UNUSED,
 			 int sched_verbose ATTRIBUTE_UNUSED,
-			 rtx insn ATTRIBUTE_UNUSED,
+			 rtx_insn *insn ATTRIBUTE_UNUSED,
 			 int last_clock ATTRIBUTE_UNUSED,
 			 int clock_var,
 			 int *sort_p ATTRIBUTE_UNUSED)
@@ -10907,7 +11044,7 @@ arc_sched_dfa_new_cycle (FILE *dump ATTRIBUTE_UNUSED,
 
 /* Given an insn, return the number of cycles until BB_END. */
 static int
-insn_cycle_count (rtx insn)
+insn_cycle_count (rtx_insn *insn)
 {
   int cycles = 0;
   basic_block bb = BLOCK_FOR_INSN (insn);
@@ -10936,7 +11073,7 @@ insn_cycle_count (rtx insn)
    correct execution unit. Assumption: all the default latencies are
    the minimum ones. */
 static int
-arc_sched_correct_unit (rtx insn, int clock)
+arc_sched_correct_unit (rtx_insn *insn, int clock)
 {
   int latency = 0;
   int unit = 0;
@@ -10953,7 +11090,7 @@ arc_sched_correct_unit (rtx insn, int clock)
   dep_t dep;
   FOR_EACH_DEP(insn, SD_LIST_RES_BACK, sd_it, dep)
     {
-      rtx pro = DEP_PRO (dep);
+      rtx_insn *pro = DEP_PRO (dep);
       int uid = INSN_UID (pro);
       enum reg_note dep_type = DEP_TYPE (dep);
 
@@ -11068,7 +11205,7 @@ arc_sched_correct_unit (rtx insn, int clock)
 /* Given an insn reset the cost of all the forward dependencies. This
    forces the call of targetm.sched.adjust_cost hook. */
 static void
-arc_sched_reset_dep_cost (rtx insn)
+arc_sched_reset_dep_cost (rtx_insn *insn)
 {
    sd_iterator_def sd_it;
    dep_t dep;
@@ -11087,7 +11224,7 @@ arc_sched_reset_dep_cost (rtx insn)
 static int
 arc_variable_issue (FILE *dump ATTRIBUTE_UNUSED,
 		    int sched_verbose ATTRIBUTE_UNUSED,
-		    rtx insn, int can_issue_more ATTRIBUTE_UNUSED)
+		    rtx_insn *insn, int can_issue_more ATTRIBUTE_UNUSED)
 {
   if (!TARGET_HS)
     return can_issue_more-1; /* Do not use this hook if we compiler
@@ -11134,9 +11271,9 @@ arc_variable_issue (FILE *dump ATTRIBUTE_UNUSED,
 static void
 arc_print_format_registers(FILE *stream,
 			   unsigned regno,
-			   enum machine_mode mode)
+			   machine_mode mode)
 {
-  unsigned int  j, nregs = hard_regno_nregs[regno][mode];
+  unsigned int  j, nregs = hard_regno_nregs[regno][(int) mode];
   unsigned int ll = 0;
   for (j = regno+nregs; j > regno; j--)
     {
@@ -11195,7 +11332,7 @@ arc_dump_stack_info(FILE *stream,
 	  if (REG_P (rtl))
 	    {
 	      unsigned regno = REGNO(rtl);
-	      enum machine_mode mode = GET_MODE(rtl);
+	      machine_mode mode = GET_MODE(rtl);
 	      arc_print_format_registers(stream, regno, mode);
 	    }
 	  else if (MEM_P(rtl))
@@ -11306,7 +11443,7 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
   rtx res = gen_reg_rtx (SImode);
   rtx resv = gen_reg_rtx (SImode);
   rtx memsi, val, mask, end_label, loop_label, cc, x;
-  enum machine_mode mode;
+  machine_mode mode;
   bool is_weak = (weak != const0_rtx);
 
   /* Truncate the address. */
@@ -11432,7 +11569,7 @@ void
 arc_expand_compare_and_swap (rtx operands[])
 {
   rtx bval, rval, mem, oldval, newval, is_weak, mod_s, mod_f, x;
-  enum machine_mode mode;
+  machine_mode mode;
 
   bval = operands[0];
   rval = operands[1];
@@ -11466,7 +11603,7 @@ void
 arc_split_compare_and_swap (rtx operands[])
 {
   rtx rval, mem, oldval, newval;
-  enum machine_mode mode;
+  machine_mode mode;
   enum memmodel mod_s, mod_f;
   bool is_weak;
   rtx label1, label2, x, cond;
@@ -11538,7 +11675,7 @@ arc_expand_atomic_op (enum rtx_code code, rtx mem, rtx val,
 			 rtx orig_before, rtx orig_after, rtx model_rtx)
 {
   enum memmodel model = (enum memmodel) INTVAL (model_rtx);
-  enum machine_mode mode = GET_MODE (mem);
+  machine_mode mode = GET_MODE (mem);
   rtx label, x, cond;
   rtx before = orig_before, after = orig_after;
 
