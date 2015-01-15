@@ -29,7 +29,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include "unix.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 
 
 /* IO locking rules:

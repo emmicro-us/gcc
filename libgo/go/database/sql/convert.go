@@ -175,26 +175,6 @@ func convertAssign(dest, src interface{}) error {
 			*d = RawBytes(b)
 			return nil
 		}
-	case *[]byte:
-		sv = reflect.ValueOf(src)
-		switch sv.Kind() {
-		case reflect.Bool,
-			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
-			*d = []byte(fmt.Sprintf("%v", src))
-			return nil
-		}
-	case *RawBytes:
-		sv = reflect.ValueOf(src)
-		switch sv.Kind() {
-		case reflect.Bool,
-			reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-			reflect.Float32, reflect.Float64:
-			*d = RawBytes(fmt.Sprintf("%v", src))
-			return nil
-		}
 	case *bool:
 		bv, err := driver.Bool.ConvertValue(src)
 		if err == nil {

@@ -84,35 +84,6 @@
 #define UNWIND_COLUMN_IN_RANGE(x) \
     __builtin_expect((x) <= __LIBGCC_DWARF_FRAME_REGISTERS__, 1)
 
-/* ??? For the public function interfaces, we tend to gcc_assert that the
-   column numbers are in range.  For the dwarf2 unwind info this does happen,
-   although so far in a case that doesn't actually matter.
-
-   See PR49146, in which a call from x86_64 ms abi to x86_64 unix abi stores
-   the call-saved xmm registers and annotates them.  We havn't bothered
-   providing support for the xmm registers for the x86_64 port primarily
-   because the 64-bit windows targets don't use dwarf2 unwind, using sjlj or
-   SEH instead.  Adding the support for unix targets would generally be a
-   waste.  However, some runtime libraries supplied with ICC do contain such
-   an unorthodox transition, as well as the unwind info to match.  This loss
-   of register restoration doesn't matter in practice, because the exception
-   is caught in the native unix abi, where all of the xmm registers are 
-   call clobbered.
-
-   Ideally, we'd record some bit to notice when we're failing to restore some
-   register recorded in the unwind info, but to do that we need annotation on
-   the unix->ms abi edge, so that we know when the register data may be
-   discarded.  And since this edge is also within the ICC library, we're
-   unlikely to be able to get the new annotation.
-
-   Barring a magic solution to restore the ms abi defined 128-bit xmm registers
-   (as distictly opposed to the full runtime width) without causing extra
-   overhead for normal unix abis, the best solution seems to be to simply
-   ignore unwind data for unknown columns.  */
-
-#define UNWIND_COLUMN_IN_RANGE(x) \
-    __builtin_expect((x) <= DWARF_FRAME_REGISTERS, 1)
-
 #ifdef REG_VALUE_IN_UNWIND_CONTEXT
 typedef _Unwind_Word _Unwind_Context_Reg_Val;
 

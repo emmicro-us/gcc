@@ -153,12 +153,3 @@ ismapkey (const struct __go_type_descriptor *typ)
 {
   return typ != NULL && typ->__hashfn != __go_type_hash_error;
 }
-
-extern _Bool ismapkey (const struct __go_type_descriptor *)
-  __asm__ (GOSYM_PREFIX "reflect.ismapkey");
-
-_Bool
-ismapkey (const struct __go_type_descriptor *typ)
-{
-  return typ != NULL && typ->__hashfn != __go_type_hash_error;
-}

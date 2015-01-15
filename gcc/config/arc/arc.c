@@ -3391,7 +3391,7 @@ arc_print_operand (FILE *file, rtx x, int code)
 	      rtx note = find_reg_note (jump, REG_BR_PROB, 0);
 	      if (note)
 		{
-		  HOST_WIDE_INT prob = INTVAL (XEXP (note, 0));
+		  HOST_WIDE_INT prob = XINT (note, 0);
 		  if (prob > (REG_BR_PROB_BASE / 2))
 		    fputs (".t", file);
 		  else

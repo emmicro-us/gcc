@@ -92,17 +92,6 @@ func TestParseExpr(t *testing.T) {
 		t.Errorf("ParseExpr(%s): got %T, want *ast.StructType", src, x)
 	}
 
-	// a valid type expression
-	src = "struct{x *int}"
-	x, err = ParseExpr(src)
-	if err != nil {
-		t.Fatalf("ParseExpr(%s): %v", src, err)
-	}
-	// sanity check
-	if _, ok := x.(*ast.StructType); !ok {
-		t.Errorf("ParseExpr(%s): got %T, expected *ast.StructType", src, x)
-	}
-
 	// an invalid expression
 	src = "a + *"
 	_, err = ParseExpr(src)

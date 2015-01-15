@@ -1720,7 +1720,7 @@ cond_if_else_store_replacement_1 (basic_block then_bb, basic_block else_bb,
 				  basic_block join_bb, gimple then_assign,
 				  gimple else_assign)
 {
-  tree lhs_base, lhs, else_lhs, then_rhs, else_rhs, name;
+  tree lhs_base, lhs, then_rhs, else_rhs, name;
   source_location then_locus, else_locus;
   gimple_stmt_iterator gsi;
   gphi *newphi;
@@ -1737,10 +1737,8 @@ cond_if_else_store_replacement_1 (basic_block then_bb, basic_block else_bb,
     return false;
 
   lhs = gimple_assign_lhs (then_assign);
-  else_lhs = gimple_assign_lhs (else_assign);
   if (!is_gimple_reg_type (TREE_TYPE (lhs))
-      || !operand_equal_p (lhs, else_lhs, 0)
-      || !types_compatible_p (TREE_TYPE (lhs), TREE_TYPE (else_lhs)))
+      || !operand_equal_p (lhs, gimple_assign_lhs (else_assign), 0))
     return false;
 
   lhs_base = get_base_address (lhs);

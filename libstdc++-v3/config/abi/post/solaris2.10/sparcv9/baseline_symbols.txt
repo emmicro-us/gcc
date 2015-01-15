@@ -1569,8 +1569,6 @@ FUNC:_ZNSt15_List_node_base7_M_hookEPS_@@GLIBCXX_3.4.14
 FUNC:_ZNSt15_List_node_base7reverseEv@@GLIBCXX_3.4
 FUNC:_ZNSt15_List_node_base8transferEPS_S0_@@GLIBCXX_3.4
 FUNC:_ZNSt15_List_node_base9_M_unhookEv@@GLIBCXX_3.4.14
-FUNC:_ZNSt6chrono3_V212steady_clock3nowEv@@GLIBCXX_3.4.19
-FUNC:_ZNSt6chrono3_V212system_clock3nowEv@@GLIBCXX_3.4.19
 FUNC:_ZNSt15__exception_ptr13exception_ptr4swapERS0_@@CXXABI_1.3.3
 FUNC:_ZNSt15__exception_ptr13exception_ptrC1EMS0_FvvE@@CXXABI_1.3.3
 FUNC:_ZNSt15__exception_ptr13exception_ptrC1ERKS0_@@CXXABI_1.3.3

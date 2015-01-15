@@ -1,5 +1,4 @@
 /* { dg-do compile } */
-/* { dg-do compile { target { nonpic } } } */
 /* { dg-options "-O2 -Werror-implicit-function-declaration -mmmx" } */
 /* { dg-add-options bind_pic_locally } */
 

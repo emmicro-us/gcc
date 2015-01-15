@@ -3788,7 +3788,7 @@
   ""
   "*
 {
-  rtx diff_vec = PATTERN (next_real_insn (operands[3]));
+  rtx diff_vec = PATTERN (next_nonnote_insn (operands[3]));
 
   if (GET_CODE (diff_vec) != ADDR_DIFF_VEC)
     {
