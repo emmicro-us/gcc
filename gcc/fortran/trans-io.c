@@ -22,7 +22,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "options.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "stringpool.h"
 #include "stor-layout.h"
 #include "ggc.h"
@@ -1175,33 +1186,6 @@ gfc_trans_flush (gfc_code * code)
 }
 
 
-/* Create a dummy iostat variable to catch any error due to bad unit.  */
-
-static gfc_expr *
-create_dummy_iostat (void)
-{
-  gfc_symtree *st;
-  gfc_expr *e;
-
-  gfc_get_ha_sym_tree ("@iostat", &st);
-  st->n.sym->ts.type = BT_INTEGER;
-  st->n.sym->ts.kind = gfc_default_integer_kind;
-  gfc_set_sym_referenced (st->n.sym);
-  gfc_commit_symbol (st->n.sym);
-  st->n.sym->backend_decl
-	= gfc_create_var (gfc_get_int_type (st->n.sym->ts.kind),
-			  st->n.sym->name);
-
-  e = gfc_get_expr ();
-  e->expr_type = EXPR_VARIABLE;
-  e->symtree = st;
-  e->ts.type = BT_INTEGER;
-  e->ts.kind = st->n.sym->ts.kind;
-
-  return e;
-}
-
-
 /* Translate the non-IOLENGTH form of an INQUIRE statement.  */
 
 tree
@@ -1244,13 +1228,6 @@ gfc_trans_inquire (gfc_code * code)
     {
       mask |= set_parameter_ref (&block, &post_block, var, IOPARM_inquire_exist,
 				 p->exist);
-
-      if (p->unit && !p->iostat)
-	{
-	  p->iostat = create_dummy_iostat ();
-	  mask |= set_parameter_ref (&block, &post_block, var,
-				     IOPARM_common_iostat, p->iostat);
-	}
     }
 
   if (p->opened)

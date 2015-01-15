@@ -161,17 +161,23 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "varasm.h"
 #include "stor-layout.h"
 #include "stringpool.h"
 #include "output.h"
 #include "rtl.h"
 #include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
 #include "hard-reg-set.h"
 #include "input.h"
 #include "function.h"
@@ -2108,12 +2114,15 @@ ipa_passes (void)
       if (g->have_offload)
 	{
 	  section_name_prefix = OFFLOAD_SECTION_NAME_PREFIX;
-	  ipa_write_summaries (true);
+	  lto_stream_offload_p = true;
+	  ipa_write_summaries ();
+	  lto_stream_offload_p = false;
 	}
       if (flag_lto)
 	{
 	  section_name_prefix = LTO_SECTION_NAME_PREFIX;
-	  ipa_write_summaries (false);
+	  lto_stream_offload_p = false;
+	  ipa_write_summaries ();
 	}
     }
 

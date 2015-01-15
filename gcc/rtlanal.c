@@ -41,6 +41,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "predict.h"
 #include "basic-block.h"
 #include "df.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
 #include "emit-rtl.h"  /* FIXME: Can go away once crtl is moved to rtl.h.  */
 #include "addresses.h"
@@ -997,6 +1000,17 @@ reg_set_between_p (const_rtx reg, const rtx_insn *from_insn,
 int
 reg_set_p (const_rtx reg, const_rtx insn)
 {
+  /* After delay slot handling, call and branch insns might be in a
+     sequence.  Check all the elements there.  */
+  if (INSN_P (insn) && GET_CODE (PATTERN (insn)) == SEQUENCE)
+    {
+      for (int i = 0; i < XVECLEN (PATTERN (insn), 0); ++i)
+	if (reg_set_p (reg, XVECEXP (PATTERN (insn), 0, i)))
+	  return true;
+
+      return false;
+    }
+
   /* We can be passed an insn or part of one.  If we are passed an insn,
      check if a side-effect of the insn clobbers REG.  */
   if (INSN_P (insn)
@@ -1008,7 +1022,7 @@ reg_set_p (const_rtx reg, const_rtx insn)
 					       GET_MODE (reg), REGNO (reg)))
 		  || MEM_P (reg)
 		  || find_reg_fusage (insn, CLOBBER, reg)))))
-    return 1;
+    return true;
 
   return set_of (reg, insn) != NULL_RTX;
 }

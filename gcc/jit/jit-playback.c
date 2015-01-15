@@ -22,13 +22,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "opts.h"
+#include "hashtab.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "input.h"
+#include "statistics.h"
+#include "vec.h"
+#include "double-int.h"
+#include "real.h"
+#include "fixed-value.h"
+#include "alias.h"
+#include "flags.h"
+#include "symtab.h"
+#include "tree-core.h"
+#include "inchash.h"
 #include "tree.h"
 #include "hash-map.h"
 #include "is-a.h"
 #include "plugin-api.h"
 #include "vec.h"
 #include "hashtab.h"
-#include "hash-set.h"
 #include "machmode.h"
 #include "tm.h"
 #include "hard-reg-set.h"
@@ -48,6 +61,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "gcc-driver-name.h"
 #include "attribs.h"
 #include "context.h"
+#include "fold-const.h"
+#include "debug.h"
 
 #include "jit-common.h"
 #include "jit-logging.h"
@@ -95,6 +110,7 @@ playback::context::context (recording::context *ctxt)
 {
   JIT_LOG_SCOPE (get_logger ());
   m_functions.create (0);
+  m_globals.create (0);
   m_source_files.create (0);
   m_cached_locations.create (0);
 }
@@ -104,8 +120,18 @@ playback::context::context (recording::context *ctxt)
 playback::context::~context ()
 {
   JIT_LOG_SCOPE (get_logger ());
-  if (m_tempdir)
-    delete m_tempdir;
+
+  /* Normally the playback::context is responsible for cleaning up the
+     tempdir (including "fake.so" within the filesystem).
+
+     In the normal case, clean it up now.
+
+     However m_tempdir can be NULL if the context has handed over
+     responsibility for the tempdir cleanup to the jit::result object, so
+     that the cleanup can be delayed (see PR jit/64206).  If that's the
+     case this "delete NULL;" is a no-op. */
+  delete m_tempdir;
+
   m_functions.release ();
 }
 
@@ -458,6 +484,7 @@ new_function (location *loc,
 playback::lvalue *
 playback::context::
 new_global (location *loc,
+	    enum gcc_jit_global_kind kind,
 	    type *type,
 	    const char *name)
 {
@@ -466,22 +493,55 @@ new_global (location *loc,
   tree inner = build_decl (UNKNOWN_LOCATION, VAR_DECL,
 			   get_identifier (name),
 			   type->as_tree ());
-  TREE_PUBLIC (inner) = 1;
+  TREE_PUBLIC (inner) = (kind != GCC_JIT_GLOBAL_INTERNAL);
   DECL_COMMON (inner) = 1;
-  DECL_EXTERNAL (inner) = 1;
+  switch (kind)
+    {
+    default:
+      gcc_unreachable ();
+
+    case GCC_JIT_GLOBAL_EXPORTED:
+      TREE_STATIC (inner) = 1;
+      break;
+
+    case GCC_JIT_GLOBAL_INTERNAL:
+      TREE_STATIC (inner) = 1;
+      break;
+
+    case GCC_JIT_GLOBAL_IMPORTED:
+      DECL_EXTERNAL (inner) = 1;
+      break;
+    }
 
   if (loc)
     set_tree_location (inner, loc);
 
+  varpool_node::get_create (inner);
+
+  m_globals.safe_push (inner);
+
   return new lvalue (this, inner);
 }
 
-/* Construct a playback::rvalue instance (wrapping a tree).  */
+/* Implementation of the various
+      gcc::jit::playback::context::new_rvalue_from_const <HOST_TYPE>
+   methods.
+   Each of these constructs a playback::rvalue instance (wrapping a tree).
 
-playback::rvalue *
-playback::context::
-new_rvalue_from_int (type *type,
-		     int value)
+   These specializations are required to be in the same namespace
+   as the template, hence we now have to enter the gcc::jit::playback
+   namespace.  */
+
+namespace playback
+{
+
+/* Specialization of making an rvalue from a const, for host <int>.  */
+
+template <>
+rvalue *
+context::
+new_rvalue_from_const <int> (type *type,
+			     int value)
 {
   // FIXME: type-checking, or coercion?
   tree inner_type = type->as_tree ();
@@ -499,12 +559,37 @@ new_rvalue_from_int (type *type,
     }
 }
 
-/* Construct a playback::rvalue instance (wrapping a tree).  */
+/* Specialization of making an rvalue from a const, for host <long>.  */
 
-playback::rvalue *
-playback::context::
-new_rvalue_from_double (type *type,
-			double value)
+template <>
+rvalue *
+context::
+new_rvalue_from_const <long> (type *type,
+			      long value)
+{
+  // FIXME: type-checking, or coercion?
+  tree inner_type = type->as_tree ();
+  if (INTEGRAL_TYPE_P (inner_type))
+    {
+      tree inner = build_int_cst (inner_type, value);
+      return new rvalue (this, inner);
+    }
+  else
+    {
+      REAL_VALUE_TYPE real_value;
+      real_from_integer (&real_value, VOIDmode, value, SIGNED);
+      tree inner = build_real (inner_type, real_value);
+      return new rvalue (this, inner);
+    }
+}
+
+/* Specialization of making an rvalue from a const, for host <double>.  */
+
+template <>
+rvalue *
+context::
+new_rvalue_from_const <double> (type *type,
+				double value)
 {
   // FIXME: type-checking, or coercion?
   tree inner_type = type->as_tree ();
@@ -529,18 +614,25 @@ new_rvalue_from_double (type *type,
   return new rvalue (this, inner);
 }
 
-/* Construct a playback::rvalue instance (wrapping a tree).  */
+/* Specialization of making an rvalue from a const, for host <void *>.  */
 
-playback::rvalue *
-playback::context::
-new_rvalue_from_ptr (type *type,
-		     void *value)
+template <>
+rvalue *
+context::
+new_rvalue_from_const <void *> (type *type,
+				void *value)
 {
   tree inner_type = type->as_tree ();
   /* FIXME: how to ensure we have a wide enough type?  */
   tree inner = build_int_cstu (inner_type, (unsigned HOST_WIDE_INT)value);
   return new rvalue (this, inner);
 }
+
+/* We're done implementing the specializations of
+      gcc::jit::playback::context::new_rvalue_from_const <T>
+   so we can exit the gcc::jit::playback namespace.  */
+
+} // namespace playback
 
 /* Construct a playback::rvalue instance (wrapping a tree).  */
 
@@ -579,6 +671,45 @@ as_truth_value (tree expr, location *loc)
 
   return expr;
 }
+
+/* For use by jit_langhook_write_globals.
+   Calls varpool_node::finalize_decl on each global.  */
+
+void
+playback::context::
+write_global_decls_1 ()
+{
+  /* Compare with e.g. the C frontend's c_write_global_declarations.  */
+  JIT_LOG_SCOPE (get_logger ());
+
+  int i;
+  tree decl;
+  FOR_EACH_VEC_ELT (m_globals, i, decl)
+    {
+      gcc_assert (TREE_CODE (decl) == VAR_DECL);
+      varpool_node::finalize_decl (decl);
+    }
+}
+
+/* For use by jit_langhook_write_globals.
+   Calls debug_hooks->global_decl on each global.  */
+
+void
+playback::context::
+write_global_decls_2 ()
+{
+  /* Compare with e.g. the C frontend's c_write_global_declarations_2. */
+  JIT_LOG_SCOPE (get_logger ());
+
+  int i;
+  tree decl;
+  FOR_EACH_VEC_ELT (m_globals, i, decl)
+    {
+      gcc_assert (TREE_CODE (decl) == VAR_DECL);
+      debug_hooks->global_decl (decl);
+    }
+}
+
 
 /* Construct a playback::rvalue instance (wrapping a tree) for a
    unary op.  */
@@ -1554,7 +1685,7 @@ compile ()
   int keep_intermediates =
     get_bool_option (GCC_JIT_BOOL_OPTION_KEEP_INTERMEDIATES);
 
-  m_tempdir = new tempdir (keep_intermediates);
+  m_tempdir = new tempdir (get_logger (), keep_intermediates);
   if (!m_tempdir->create ())
     return NULL;
 
@@ -1816,6 +1947,7 @@ playback::context::read_dump_file (const char *path)
     {
       add_error (NULL, "error reading from %s", path);
       free (result);
+      fclose (f_in);
       return NULL;
     }
 
@@ -1935,7 +2067,37 @@ dlopen_built_dso ()
     add_error (NULL, "%s", error);
   }
   if (handle)
-    result_obj = new result (get_logger (), handle);
+    {
+      /* We've successfully dlopened the result; create a
+	 jit::result object to wrap it.
+
+	 We're done with the tempdir for now, but if the user
+	 has requested debugging, the user's debugger might not
+	 be capable of dealing with the .so file being unlinked
+	 immediately, so keep it around until after the result
+	 is released.  We do this by handing over ownership of
+	 the jit::tempdir to the result.  See PR jit/64206.  */
+      tempdir *handover_tempdir;
+      if (get_bool_option (GCC_JIT_BOOL_OPTION_DEBUGINFO))
+	{
+	  handover_tempdir = m_tempdir;
+	  m_tempdir = NULL;
+	  /* The tempdir will eventually be cleaned up in the
+	     jit::result's dtor. */
+	  log ("GCC_JIT_BOOL_OPTION_DEBUGINFO was set:"
+	       " handing over tempdir to jit::result");
+	}
+      else
+	{
+	  handover_tempdir = NULL;
+	  /* ... and retain ownership of m_tempdir so we clean it
+	     up it the playback::context's dtor. */
+	  log ("GCC_JIT_BOOL_OPTION_DEBUGINFO was not set:"
+	       " retaining ownership of tempdir");
+	}
+
+      result_obj = new result (get_logger (), handle, handover_tempdir);
+    }
   else
     result_obj = NULL;
 

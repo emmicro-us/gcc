@@ -25,7 +25,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "gfortran.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "stringpool.h"
 #include "stor-layout.h"
 #include "varasm.h"
@@ -36,10 +46,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"	/* For internal_error.  */
 #include "toplev.h"	/* For announce_function.  */
 #include "target.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "machmode.h"
 #include "hard-reg-set.h"
 #include "input.h"
 #include "function.h"
@@ -2321,8 +2327,9 @@ create_function_arglist (gfc_symbol * sym)
       /* Fill in arg stuff.  */
       DECL_CONTEXT (parm) = fndecl;
       DECL_ARG_TYPE (parm) = TREE_VALUE (typelist);
-      /* All implementation args are read-only.  */
-      TREE_READONLY (parm) = 1;
+      /* All implementation args except for VALUE are read-only.  */
+      if (!f->sym->attr.value)
+	TREE_READONLY (parm) = 1;
       if (POINTER_TYPE_P (type)
 	  && (!f->sym->attr.proc_pointer
 	      && f->sym->attr.flavor != FL_PROCEDURE))

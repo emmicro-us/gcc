@@ -23,7 +23,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "rtl.h"
 #include "hard-reg-set.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "stringpool.h"
 #include "varasm.h"
 #include "stor-layout.h"
@@ -1401,7 +1411,8 @@ clear_tree_used (tree block)
 enum {
   SPCT_FLAG_DEFAULT = 1,
   SPCT_FLAG_ALL = 2,
-  SPCT_FLAG_STRONG = 3
+  SPCT_FLAG_STRONG = 3,
+  SPCT_FLAG_EXPLICIT = 4
 };
 
 /* Examine TYPE and determine a bit mask of the following features.  */
@@ -1474,7 +1485,10 @@ stack_protect_decl_phase (tree decl)
     has_short_buffer = true;
 
   if (flag_stack_protect == SPCT_FLAG_ALL
-      || flag_stack_protect == SPCT_FLAG_STRONG)
+      || flag_stack_protect == SPCT_FLAG_STRONG
+      || (flag_stack_protect == SPCT_FLAG_EXPLICIT
+	  && lookup_attribute ("stack_protect",
+			       DECL_ATTRIBUTES (current_function_decl))))
     {
       if ((bits & (SPCT_HAS_SMALL_CHAR_ARRAY | SPCT_HAS_LARGE_CHAR_ARRAY))
 	  && !(bits & SPCT_HAS_AGGREGATE))
@@ -1849,7 +1863,11 @@ expand_used_vars (void)
 
       /* If stack protection is enabled, we don't share space between
 	 vulnerable data and non-vulnerable data.  */
-      if (flag_stack_protect)
+      if (flag_stack_protect != 0
+	  && (flag_stack_protect != SPCT_FLAG_EXPLICIT
+	      || (flag_stack_protect == SPCT_FLAG_EXPLICIT
+		  && lookup_attribute ("stack_protect",
+				       DECL_ATTRIBUTES (current_function_decl)))))
 	add_stack_protection_conflicts ();
 
       /* Now that we have collected all stack variables, and have computed a
@@ -1867,15 +1885,24 @@ expand_used_vars (void)
 
     case SPCT_FLAG_STRONG:
       if (gen_stack_protect_signal
-	  || cfun->calls_alloca || has_protected_decls)
+	  || cfun->calls_alloca || has_protected_decls
+	  || lookup_attribute ("stack_protect",
+			       DECL_ATTRIBUTES (current_function_decl)))
 	create_stack_guard ();
       break;
 
     case SPCT_FLAG_DEFAULT:
-      if (cfun->calls_alloca || has_protected_decls)
+      if (cfun->calls_alloca || has_protected_decls
+	  || lookup_attribute ("stack_protect",
+			       DECL_ATTRIBUTES (current_function_decl)))
 	create_stack_guard ();
       break;
 
+    case SPCT_FLAG_EXPLICIT:
+      if (lookup_attribute ("stack_protect",
+			    DECL_ATTRIBUTES (current_function_decl)))
+	create_stack_guard ();
+      break;
     default:
       ;
     }
@@ -1901,7 +1928,11 @@ expand_used_vars (void)
 	  expand_stack_vars (stack_protect_decl_phase_1, &data);
 
 	  /* Phase 2 contains other kinds of arrays.  */
-	  if (flag_stack_protect == 2)
+	  if (flag_stack_protect == SPCT_FLAG_ALL
+	      || flag_stack_protect == SPCT_FLAG_STRONG
+	      || (flag_stack_protect == SPCT_FLAG_EXPLICIT
+		  && lookup_attribute ("stack_protect",
+				       DECL_ATTRIBUTES (current_function_decl))))
 	    expand_stack_vars (stack_protect_decl_phase_2, &data);
 	}
 
@@ -3049,8 +3080,6 @@ static void
 expand_computed_goto (tree exp)
 {
   rtx x = expand_normal (exp);
-
-  x = convert_memory_address (Pmode, x);
 
   do_pending_stack_adjust ();
   emit_indirect_jump (x);

@@ -24,13 +24,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "tree.h"
-#include "stringpool.h"
-#include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
 #include "hash-set.h"
 #include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
+#include "tree.h"
+#include "fold-const.h"
+#include "stringpool.h"
+#include "predict.h"
 #include "hard-reg-set.h"
 #include "input.h"
 #include "function.h"
@@ -187,7 +193,7 @@ lto_symtab_encoder_delete_node (lto_symtab_encoder_t encoder,
 }
 
 
-/* Return TRUE if we should encode initializer of NODE (if any).  */
+/* Return TRUE if we should encode the body of NODE (if any).  */
 
 bool
 lto_symtab_encoder_encode_body_p (lto_symtab_encoder_t encoder,
@@ -197,7 +203,7 @@ lto_symtab_encoder_encode_body_p (lto_symtab_encoder_t encoder,
   return encoder->nodes[index].body;
 }
 
-/* Return TRUE if we should encode body of NODE (if any).  */
+/* Specify that we encode the body of NODE in this partition.  */
 
 static void
 lto_set_symtab_encoder_encode_body (lto_symtab_encoder_t encoder,
@@ -220,7 +226,7 @@ lto_symtab_encoder_encode_initializer_p (lto_symtab_encoder_t encoder,
   return encoder->nodes[index].initializer;
 }
 
-/* Return TRUE if we should encode initializer of NODE (if any).  */
+/* Specify that we should encode initializer of NODE (if any).  */
 
 static void
 lto_set_symtab_encoder_encode_initializer (lto_symtab_encoder_t encoder,
@@ -230,7 +236,7 @@ lto_set_symtab_encoder_encode_initializer (lto_symtab_encoder_t encoder,
   encoder->nodes[index].initializer = true;
 }
 
-/* Return TRUE if we should encode initializer of NODE (if any).  */
+/* Return TRUE if NODE is in this partition.  */
 
 bool
 lto_symtab_encoder_in_partition_p (lto_symtab_encoder_t encoder,
@@ -242,7 +248,7 @@ lto_symtab_encoder_in_partition_p (lto_symtab_encoder_t encoder,
   return encoder->nodes[index].in_partition;
 }
 
-/* Return TRUE if we should encode body of NODE (if any).  */
+/* Specify that NODE is in this partition.  */
 
 void
 lto_set_symtab_encoder_in_partition (lto_symtab_encoder_t encoder,
@@ -836,11 +842,11 @@ create_references (lto_symtab_encoder_t encoder, symtab_node *node)
 /* Select what needs to be streamed out.  In regular lto mode stream everything.
    In offload lto mode stream only nodes marked as offloadable.  */
 void
-select_what_to_stream (bool offload_lto_mode)
+select_what_to_stream (void)
 {
   struct symtab_node *snode;
   FOR_EACH_SYMBOL (snode)
-    snode->need_lto_streaming = !offload_lto_mode || snode->offloadable;
+    snode->need_lto_streaming = !lto_stream_offload_p || snode->offloadable;
 }
 
 /* Find all symbols we want to stream into given partition and insert them

@@ -22,12 +22,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tree.h"
-#include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
 #include "hash-set.h"
 #include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "options.h"
+#include "wide-int.h"
+#include "inchash.h"
+#include "tree.h"
+#include "fold-const.h"
+#include "predict.h"
 #include "tm.h"
 #include "hard-reg-set.h"
 #include "input.h"
@@ -260,7 +267,7 @@ func_checker::compare_memory_operand (tree t1, tree t2)
   /* Compare alias sets for memory operands.  */
   if (source_is_memop && target_is_memop)
     {
-      if (TREE_THIS_VOLATILE (b1) != TREE_THIS_VOLATILE (b2))
+      if (TREE_THIS_VOLATILE (t1) != TREE_THIS_VOLATILE (t2))
 	return return_false_with_msg ("different operand volatility");
 
       if (ao_ref_alias_set (&r1) != ao_ref_alias_set (&r2)
@@ -441,6 +448,8 @@ func_checker::compare_operand (tree t1, tree t2)
 
 	return return_with_debug (ret);
       }
+    case IMAGPART_EXPR:
+    case REALPART_EXPR:
     case ADDR_EXPR:
       {
 	x1 = TREE_OPERAND (t1, 0);
@@ -451,7 +460,17 @@ func_checker::compare_operand (tree t1, tree t2)
       }
     case BIT_FIELD_REF:
       {
-	ret = compare_decl (t1, t2);
+	x1 = TREE_OPERAND (t1, 0);
+	x2 = TREE_OPERAND (t2, 0);
+	y1 = TREE_OPERAND (t1, 1);
+	y2 = TREE_OPERAND (t2, 1);
+	z1 = TREE_OPERAND (t1, 2);
+	z2 = TREE_OPERAND (t2, 2);
+
+	ret = compare_operand (x1, x2)
+	      && compare_cst_or_decl (y1, y2)
+	      && compare_cst_or_decl (z1, z2);
+
 	return return_with_debug (ret);
       }
     case SSA_NAME:

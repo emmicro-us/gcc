@@ -21,6 +21,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
 #include "stor-layout.h"
 #include "stringpool.h"
@@ -1203,6 +1212,8 @@ c_cpp_builtins (cpp_reader *pfile)
   /* Make the choice of the stack protector runtime visible to source code.
      The macro names and values here were chosen for compatibility with an
      earlier implementation, i.e. ProPolice.  */
+  if (flag_stack_protect == 4)
+    cpp_define (pfile, "__SSP_EXPLICIT__=4");
   if (flag_stack_protect == 3)
     cpp_define (pfile, "__SSP_STRONG__=3");
   if (flag_stack_protect == 2)

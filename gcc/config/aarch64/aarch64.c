@@ -25,7 +25,17 @@
 #include "insn-codes.h"
 #include "rtl.h"
 #include "insn-attr.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "stringpool.h"
 #include "stor-layout.h"
 #include "calls.h"
@@ -50,10 +60,6 @@
 #include "target-def.h"
 #include "targhooks.h"
 #include "ggc.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "machmode.h"
 #include "input.h"
 #include "function.h"
 #include "tm_p.h"
@@ -10514,8 +10520,8 @@ fusion_load_store (rtx_insn *insn, rtx *base, rtx *offset)
   src = SET_SRC (x);
   dest = SET_DEST (x);
 
-  if (GET_MODE (src) != SImode && GET_MODE (src) != DImode
-      && GET_MODE (src) != SFmode && GET_MODE (src) != DFmode)
+  if (GET_MODE (dest) != SImode && GET_MODE (dest) != DImode
+      && GET_MODE (dest) != SFmode && GET_MODE (dest) != DFmode)
     return SCHED_FUSION_NONE;
 
   if (GET_CODE (src) == SIGN_EXTEND)
@@ -10624,6 +10630,10 @@ aarch64_operands_ok_for_ldpstp (rtx *operands, bool load,
       reg_2 = operands[3];
     }
 
+  /* The mems cannot be volatile.  */
+  if (MEM_VOLATILE_P (mem_1) || MEM_VOLATILE_P (mem_2))
+    return false;
+
   /* Check if the addresses are in the form of [base+offset].  */
   extract_base_offset_in_addr (mem_1, &base_1, &offset_1);
   if (base_1 == NULL_RTX || offset_1 == NULL_RTX)
@@ -10729,6 +10739,11 @@ aarch64_operands_adjust_ok_for_ldpstp (rtx *operands, bool load,
     }
   /* Skip if memory operand is by itslef valid for ldp/stp.  */
   if (!MEM_P (mem_1) || aarch64_mem_pair_operand (mem_1, mode))
+    return false;
+
+  /* The mems cannot be volatile.  */
+  if (MEM_VOLATILE_P (mem_1) || MEM_VOLATILE_P (mem_2)
+      || MEM_VOLATILE_P (mem_3) ||MEM_VOLATILE_P (mem_4))
     return false;
 
   /* Check if the addresses are in the form of [base+offset].  */

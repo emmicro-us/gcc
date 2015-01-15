@@ -24,14 +24,20 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "dumpfile.h"
 #include "tm.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 #include "stor-layout.h"
 #include "target.h"
 #include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
 #include "hard-reg-set.h"
 #include "input.h"
 #include "function.h"
@@ -5783,6 +5789,20 @@ vectorizable_load (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
 	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
 			     "cannot perform implicit CSE when performing "
 			     "group loads with negative dependence distance\n");
+	  return false;
+	}
+
+      /* Similarly when the stmt is a load that is both part of a SLP
+         instance and a loop vectorized stmt via the same-dr mechanism
+	 we have to give up.  */
+      if (STMT_VINFO_GROUP_SAME_DR_STMT (stmt_info)
+	  && (STMT_SLP_TYPE (stmt_info)
+	      != STMT_SLP_TYPE (vinfo_for_stmt
+				 (STMT_VINFO_GROUP_SAME_DR_STMT (stmt_info)))))
+	{
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			     "conflicting SLP types for CSEd load\n");
 	  return false;
 	}
     }
