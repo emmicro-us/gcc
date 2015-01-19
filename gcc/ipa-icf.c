@@ -69,7 +69,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "predict.h"
 #include "tm.h"
 #include "hard-reg-set.h"
-#include "input.h"
 #include "function.h"
 #include "dominance.h"
 #include "cfg.h"
@@ -79,6 +78,20 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-expr.h"
 #include "is-a.h"
 #include "gimple.h"
+#include "hashtab.h"
+#include "rtl.h"
+#include "flags.h"
+#include "statistics.h"
+#include "real.h"
+#include "fixed-value.h"
+#include "insn-config.h"
+#include "expmed.h"
+#include "dojump.h"
+#include "explow.h"
+#include "calls.h"
+#include "emit-rtl.h"
+#include "varasm.h"
+#include "stmt.h"
 #include "expr.h"
 #include "gimple-iterator.h"
 #include "gimple-ssa.h"
@@ -109,7 +122,6 @@ along with GCC; see the file COPYING3.  If not see
 #include <list>
 #include "ipa-icf-gimple.h"
 #include "ipa-icf.h"
-#include "varasm.h"
 
 using namespace ipa_icf_gimple;
 
@@ -1640,7 +1652,8 @@ sem_item_optimizer::filter_removed_items (void)
     {
       sem_item *item = m_items[i];
 
-      if (!flag_ipa_icf_functions && item->type == FUNC)
+      if (item->type == FUNC
+	  && !opt_for_fn (item->decl, flag_ipa_icf_functions))
 	{
 	  remove_item (item);
 	  continue;
@@ -2487,7 +2500,7 @@ public:
   /* opt_pass methods: */
   virtual bool gate (function *)
   {
-    return flag_ipa_icf_variables || flag_ipa_icf_functions;
+    return in_lto_p || flag_ipa_icf_variables || flag_ipa_icf_functions;
   }
 
   virtual unsigned int execute (function *)
