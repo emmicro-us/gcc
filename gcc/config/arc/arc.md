@@ -4278,19 +4278,6 @@
   [(set_attr "length" "4,8")
    (set_attr "type" "two_cycle_core,two_cycle_core")])
 
-;;czi;;(define_insn "norm_f"
-;;czi;;  [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
-;;czi;;	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
-;;czi;;			    UNSPEC_ARC_NORM))
-;;czi;;   (set (reg:CC_ZN CC_REG)
-;;czi;;	(compare:CC_ZN (match_dup 1) (const_int 0)))]
-;;czi;;  "TARGET_NORM"
-;;czi;;  "@
-;;czi;;   norm.f\t%0, %1
-;;czi;;   norm.f\t%0, %S1"
-;;czi;;  [(set_attr "length" "4,8")
-;;czi;;   (set_attr "type" "two_cycle_core,two_cycle_core")])
-
 (define_insn "normw"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")
 	(unspec:SI [(match_operand:SI 1 "general_operand" "cL,Cal")]
@@ -4311,54 +4298,41 @@
    (set_attr "type" "two_cycle_core,two_cycle_core")])
 
 (define_expand "clzsi2"
-  [(set (match_operand:SI 0 "dest_reg_operand" "")
-	(clz:SI (match_operand:SI 1 "register_operand" "")))]
+  [(parallel [(set (match_dup 2)
+		   (clrsb:SI (match_operand:SI 1 "register_operand" "")))
+	      (set (reg:CC_ZN CC_REG)
+		   (compare:CC_ZN (match_dup 1) (const_int 0)))])
+   (set (match_dup 2) (plus:SI (match_dup 2) (const_int 1)))
+   (set (match_operand:SI 0 "dest_reg_operand" "")
+	(if_then_else:SI (lt:SI (reg:CC_ZN CC_REG) (const_int 0))
+			 (const_int 0)
+			 (match_dup 2)))]
   "TARGET_NORM"
-{
-  emit_insn (gen_norm_f (operands[0], operands[1]));
-  emit_insn
-    (gen_rtx_COND_EXEC
-      (VOIDmode,
-       gen_rtx_LT (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
-       gen_rtx_SET (VOIDmode, operands[0], const0_rtx)));
-  emit_insn
-    (gen_rtx_COND_EXEC
-      (VOIDmode,
-       gen_rtx_GE (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
-       gen_rtx_SET (VOIDmode, operands[0],
-		    plus_constant (SImode, operands[0], 1))));
-  DONE;
-})
+  {
+   operands[2] = gen_reg_rtx (SImode);
+   })
 
 (define_expand "ctzsi2"
-  [(set (match_operand:SI 0 "register_operand" "")
-	(ctz:SI (match_operand:SI 1 "register_operand" "")))]
+  [(set (match_dup 2) (plus:SI (match_operand:SI 1 "register_operand" "")
+			       (const_int -1)))
+   (parallel [(set (reg:CC_ZN CC_REG)
+		   (compare:CC_ZN
+		    (and:SI (match_dup 2)
+			    (not:SI (match_dup 1)))
+		    (const_int 0)))
+	      (set (match_dup 2)
+		   (and:SI (match_dup 2) (not:SI (match_dup 1))))])
+   (set (match_dup 2)
+	(clrsb:SI (match_dup 2)))
+   (set (match_dup 2) (minus:SI (const_int 31) (match_dup 2)))
+   (set (match_operand:SI 0 "register_operand" "")
+	(if_then_else:SI (lt:SI (reg:CC_ZN CC_REG) (const_int 0))
+			 (const_int 32)
+			 (match_dup 2)))]
   "TARGET_NORM"
-{
-  rtx temp = operands[0];
-
-  if (reg_overlap_mentioned_p (temp, operands[1])
-      || (REGNO (temp) < FIRST_PSEUDO_REGISTER
-	  && !TEST_HARD_REG_BIT (reg_class_contents[GENERAL_REGS],
-				 REGNO (temp))))
-    temp = gen_reg_rtx (SImode);
-  emit_insn (gen_addsi3 (temp, operands[1], constm1_rtx));
-  emit_insn (gen_bic_f_zn (temp, temp, operands[1]));
-  emit_insn (gen_clrsbsi2 (temp, temp));
-  emit_insn
-    (gen_rtx_COND_EXEC
-      (VOIDmode,
-       gen_rtx_LT (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
-       gen_rtx_SET (VOIDmode, operands[0], GEN_INT (32))));
-  emit_insn
-    (gen_rtx_COND_EXEC
-      (VOIDmode,
-       gen_rtx_GE (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
-       gen_rtx_SET (VOIDmode, operands[0],
-		    gen_rtx_MINUS (SImode, GEN_INT (31), temp))));
-  DONE;
-})
-
+  {
+   operands[2] = gen_reg_rtx (SImode);
+   })
 
 (define_insn "swap"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w,w")
@@ -4563,24 +4537,22 @@
   [(set_attr "length" "4,8")
    (set_attr "type" "two_cycle_core,two_cycle_core")])
 
+
 (define_expand "ffssi2"
-  [(set (match_operand:SI 0 "dest_reg_operand" "")
-	(ffs:SI (match_operand:SI 1 "register_operand" "")))]
+  [(parallel [(set (match_dup 2)
+		   (unspec:SI [(match_operand:SI 1 "register_operand" "")]
+			      UNSPEC_ARC_FFS))
+	      (set (reg:CC_ZN CC_REG)
+		   (compare:CC_ZN (match_dup 1) (const_int 0)))])
+   (set (match_dup 2) (plus:SI (match_dup 2) (const_int 1)))
+   (set (match_operand:SI 0 "dest_reg_operand" "")
+	(if_then_else:SI (eq:SI (reg:CC_ZN CC_REG) (const_int 0))
+			 (const_int 0)
+			 (match_dup 2)))]
   "TARGET_NORM && TARGET_V2"
-{
- emit_insn (gen_ffs_f (operands[0], operands[1]));
- emit_insn (gen_rtx_COND_EXEC
-	    (VOIDmode,
-	     gen_rtx_EQ (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
-	     gen_rtx_SET (VOIDmode, operands[0], const0_rtx)));
-  emit_insn
-    (gen_rtx_COND_EXEC
-      (VOIDmode,
-       gen_rtx_NE (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
-       gen_rtx_SET (VOIDmode, operands[0],
-		    plus_constant (SImode, operands[0], 1))));
-  DONE;
- })
+  {
+   operands[2] = gen_reg_rtx (SImode);
+   })
 
 (define_insn "fls"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w")

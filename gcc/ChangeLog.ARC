@@ -1,3 +1,8 @@
+2015-01-21 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.md: Refurbish clzsi2, ctzsi2, and ffssi2
+          patterns.
+
 2015-01-19 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_secondary_reload): Handle subreg(mem).
