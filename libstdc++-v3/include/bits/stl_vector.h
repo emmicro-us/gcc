@@ -1184,7 +1184,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 			    _InputIterator __last, std::input_iterator_tag)
         {
 	  for (; __first != __last; ++__first)
+#if __cplusplus >= 201103L
+	    emplace_back(*__first);
+#else
 	    push_back(*__first);
+#endif
 	}
 
       // Called by the second initialize_dispatch above
@@ -1357,7 +1361,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       void
       _M_move_assign(vector&& __x, std::true_type) noexcept
       {
-	const vector __tmp(std::move(*this));
+	vector __tmp(get_allocator());
+	this->_M_impl._M_swap_data(__tmp._M_impl);
 	this->_M_impl._M_swap_data(__x._M_impl);
 	if (_Alloc_traits::_S_propagate_on_move_assign())
 	  std::__alloc_on_move(_M_get_Tp_allocator(),

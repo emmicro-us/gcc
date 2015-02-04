@@ -203,12 +203,12 @@ cp_convert_to_pointer (tree type, tree expr, tsubst_flags_t complain)
 
   if (null_ptr_cst_p (expr))
     {
-      if (complain & tf_warning)
-	maybe_warn_zero_as_null_pointer_constant (expr, loc);
-
       if (TYPE_PTRMEMFUNC_P (type))
 	return build_ptrmemfunc (TYPE_PTRMEMFUNC_FN_TYPE (type), expr, 0,
 				 /*c_cast_p=*/false, complain);
+
+      if (complain & tf_warning)
+	maybe_warn_zero_as_null_pointer_constant (expr, loc);
 
       /* A NULL pointer-to-data-member is represented by -1, not by
 	 zero.  */
@@ -620,6 +620,9 @@ cp_convert_and_check (tree type, tree expr, tsubst_flags_t complain)
 
   if (TREE_TYPE (expr) == type)
     return expr;
+
+  if (TREE_CODE (expr) == SIZEOF_EXPR)
+    expr = maybe_constant_value (expr);
   
   result = cp_convert (type, expr, complain);
 
@@ -740,6 +743,7 @@ ocp_convert (tree type, tree expr, int convtype, int flags,
 	     unspecified.  */
 	  if ((complain & tf_warning)
 	      && TREE_CODE (e) == INTEGER_CST
+	      && ENUM_UNDERLYING_TYPE (type)
 	      && !int_fits_type_p (e, ENUM_UNDERLYING_TYPE (type)))
 	    warning_at (loc, OPT_Wconversion, 
 			"the result of the conversion is unspecified because "
@@ -1580,17 +1584,6 @@ build_expr_type_conversion (int desires, tree expr, bool complain)
       if (DECL_NONCONVERTING_P (cand))
 	continue;
 
-      if (TREE_CODE (cand) == TEMPLATE_DECL)
-	{
-	  if (complain)
-	    {
-	      error ("ambiguous default type conversion from %qT",
-		     basetype);
-	      error ("  candidate conversions include %qD", cand);
-	    }
-	  return error_mark_node;
-	}
-
       candidate = non_reference (TREE_TYPE (TREE_TYPE (cand)));
 
       switch (TREE_CODE (candidate))
@@ -1624,11 +1617,23 @@ build_expr_type_conversion (int desires, tree expr, bool complain)
 	  break;
 
 	default:
+	  /* A wildcard could be instantiated to match any desired
+	     type, but we can't deduce the template argument.  */
+	  if (WILDCARD_TYPE_P (candidate))
+	    win = true;
 	  break;
 	}
 
       if (win)
 	{
+	  if (TREE_CODE (cand) == TEMPLATE_DECL)
+	    {
+	      if (complain)
+		error ("default type conversion can't deduce template"
+		       " argument for %qD", cand);
+	      return error_mark_node;
+	    }
+
 	  if (winner)
 	    {
 	      if (complain)

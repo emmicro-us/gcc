@@ -735,15 +735,18 @@ create_mul_imm_cand (gimple gs, tree base_in, tree stride_in, bool speed)
 	     X = Y * c
 	     ============================
 	     X = (B + i') * (S * c)  */
-	  base = base_cand->base_expr;
-	  index = base_cand->index;
 	  temp = tree_to_double_int (base_cand->stride)
 		 * tree_to_double_int (stride_in);
-	  stride = double_int_to_tree (TREE_TYPE (stride_in), temp);
-	  ctype = base_cand->cand_type;
-	  if (has_single_use (base_in))
-	    savings = (base_cand->dead_savings 
-		       + stmt_cost (base_cand->cand_stmt, speed));
+	  if (double_int_fits_to_tree_p (TREE_TYPE (stride_in), temp))
+	    {
+	      base = base_cand->base_expr;
+	      index = base_cand->index;
+	      stride = double_int_to_tree (TREE_TYPE (stride_in), temp);
+	      ctype = base_cand->cand_type;
+	      if (has_single_use (base_in))
+		savings = (base_cand->dead_savings 
+			   + stmt_cost (base_cand->cand_stmt, speed));
+	    }
 	}
       else if (base_cand->kind == CAND_ADD
 	       && operand_equal_p (base_cand->stride, integer_one_node, 0))
@@ -1525,11 +1528,23 @@ unconditional_cands_with_known_stride_p (slsr_cand_t root)
 static void
 replace_ref (tree *expr, slsr_cand_t c)
 {
-  tree add_expr = fold_build2 (POINTER_PLUS_EXPR, TREE_TYPE (c->base_expr),
-			       c->base_expr, c->stride);
-  tree mem_ref = fold_build2 (MEM_REF, TREE_TYPE (*expr), add_expr,
-			      double_int_to_tree (c->cand_type, c->index));
-  
+  tree add_expr, mem_ref, acc_type = TREE_TYPE (*expr);
+  unsigned HOST_WIDE_INT misalign;
+  unsigned align;
+
+  /* Ensure the memory reference carries the minimum alignment
+     requirement for the data type.  See PR58041.  */
+  get_object_alignment_1 (*expr, &align, &misalign);
+  if (misalign != 0)
+    align = (misalign & -misalign);
+  if (align < TYPE_ALIGN (acc_type))
+    acc_type = build_aligned_type (acc_type, align);
+
+  add_expr = fold_build2 (POINTER_PLUS_EXPR, TREE_TYPE (c->base_expr),
+			  c->base_expr, c->stride);
+  mem_ref = fold_build2 (MEM_REF, acc_type, add_expr,
+			 double_int_to_tree (c->cand_type, c->index));
+
   /* Gimplify the base addressing expression for the new MEM_REF tree.  */
   gimple_stmt_iterator gsi = gsi_for_stmt (c->cand_stmt);
   TREE_OPERAND (mem_ref, 0)
@@ -1829,16 +1844,20 @@ record_increment (slsr_cand_t c, double_int increment)
       if (c->kind == CAND_ADD
 	  && c->index == increment
 	  && (increment.sgt (double_int_one)
-	      || increment.slt (double_int_minus_one)))
+	      || increment.slt (double_int_minus_one))
+	  && (gimple_assign_rhs_code (c->cand_stmt) == PLUS_EXPR
+	      || gimple_assign_rhs_code (c->cand_stmt) == POINTER_PLUS_EXPR))
 	{
-	  tree t0;
+	  tree t0 = NULL_TREE;
 	  tree rhs1 = gimple_assign_rhs1 (c->cand_stmt);
 	  tree rhs2 = gimple_assign_rhs2 (c->cand_stmt);
 	  if (operand_equal_p (rhs1, c->base_expr, 0))
 	    t0 = rhs2;
-	  else
+	  else if (operand_equal_p (rhs2, c->base_expr, 0))
 	    t0 = rhs1;
-	  if (SSA_NAME_DEF_STMT (t0) && gimple_bb (SSA_NAME_DEF_STMT (t0)))
+	  if (t0
+	      && SSA_NAME_DEF_STMT (t0)
+	      && gimple_bb (SSA_NAME_DEF_STMT (t0)))
 	    {
 	      incr_vec[incr_vec_len].initializer = t0;
 	      incr_vec[incr_vec_len++].init_bb

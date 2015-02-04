@@ -3796,6 +3796,7 @@ vectorizable_store (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
   enum vect_def_type dt;
   stmt_vec_info prev_stmt_info = NULL;
   tree dataref_ptr = NULL_TREE;
+  gimple ptr_incr = NULL;
   int nunits = TYPE_VECTOR_SUBPARTS (vectype);
   int ncopies;
   int j;
@@ -4040,7 +4041,6 @@ vectorizable_store (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
   for (j = 0; j < ncopies; j++)
     {
       gimple new_stmt;
-      gimple ptr_incr;
 
       if (j == 0)
 	{
@@ -4313,7 +4313,7 @@ vectorizable_load (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
   tree dummy;
   enum dr_alignment_support alignment_support_scheme;
   tree dataref_ptr = NULL_TREE;
-  gimple ptr_incr;
+  gimple ptr_incr = NULL;
   int nunits = TYPE_VECTOR_SUBPARTS (vectype);
   int ncopies;
   int i, j, group_size;
@@ -4366,6 +4366,20 @@ vectorizable_load (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
       if (dump_enabled_p ())
         dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
                          "multiple types in nested loop.");
+      return false;
+    }
+
+  /* Invalidate assumptions made by dependence analysis when vectorization
+     on the unrolled body effectively re-orders stmts.  */
+  if (ncopies > 1
+      && STMT_VINFO_MIN_NEG_DIST (stmt_info) != 0
+      && ((unsigned)LOOP_VINFO_VECT_FACTOR (loop_vinfo)
+	  > STMT_VINFO_MIN_NEG_DIST (stmt_info)))
+    {
+      if (dump_enabled_p ())
+	dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			 "cannot perform implicit CSE when unrolling "
+			 "with negative dependence distance\n");
       return false;
     }
 
@@ -4424,6 +4438,20 @@ vectorizable_load (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
 	    load_lanes_p = true;
 	  else if (!vect_grouped_load_supported (vectype, group_size))
 	    return false;
+	}
+
+      /* Invalidate assumptions made by dependence analysis when vectorization
+	 on the unrolled body effectively re-orders stmts.  */
+      if (!PURE_SLP_STMT (stmt_info)
+	  && STMT_VINFO_MIN_NEG_DIST (stmt_info) != 0
+	  && ((unsigned)LOOP_VINFO_VECT_FACTOR (loop_vinfo)
+	      > STMT_VINFO_MIN_NEG_DIST (stmt_info)))
+	{
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			     "cannot perform implicit CSE when performing "
+			     "group loads with negative dependence distance\n");
+	  return false;
 	}
     }
 
@@ -6054,8 +6082,7 @@ get_vectype_for_scalar_type_and_size (tree scalar_type, unsigned size)
      corresponding to that mode.  The theory is that any use that
      would cause problems with this will disable vectorization anyway.  */
   else if (!SCALAR_FLOAT_TYPE_P (scalar_type)
-	   && !INTEGRAL_TYPE_P (scalar_type)
-	   && !POINTER_TYPE_P (scalar_type))
+	   && !INTEGRAL_TYPE_P (scalar_type))
     scalar_type = lang_hooks.types.type_for_mode (inner_mode, 1);
 
   /* We can't build a vector type of elements with alignment bigger than

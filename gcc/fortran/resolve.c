@@ -1,5 +1,5 @@
 /* Perform type resolution on the various structures.
-   Copyright (C) 2001-2013 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -1259,9 +1259,10 @@ resolve_structure_cons (gfc_expr *expr, int init)
 	}
 
       /* F2003, C1272 (3).  */
-      if (gfc_pure (NULL) && cons->expr->expr_type == EXPR_VARIABLE
-	  && (gfc_impure_variable (cons->expr->symtree->n.sym)
-	      || gfc_is_coindexed (cons->expr)))
+      bool impure = cons->expr->expr_type == EXPR_VARIABLE
+		    && (gfc_impure_variable (cons->expr->symtree->n.sym)
+			|| gfc_is_coindexed (cons->expr));
+      if (impure && gfc_pure (NULL))
 	{
 	  t = FAILURE;
 	  gfc_error ("Invalid expression in the structure constructor for "
@@ -1269,12 +1270,8 @@ resolve_structure_cons (gfc_expr *expr, int init)
 		     comp->name, &cons->expr->where);
 	}
 
-      if (gfc_implicit_pure (NULL)
-	    && cons->expr->expr_type == EXPR_VARIABLE
-	    && (gfc_impure_variable (cons->expr->symtree->n.sym)
-		|| gfc_is_coindexed (cons->expr)))
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
-
+      if (impure)
+	gfc_unset_implicit_pure (NULL);
     }
 
   return t;
@@ -3247,6 +3244,7 @@ resolve_function (gfc_expr *expr)
       for (arg = expr->value.function.actual; arg; arg = arg->next)
 	{
 	  if ((GENERIC_ID == GFC_ISYM_UBOUND || GENERIC_ID == GFC_ISYM_SIZE)
+	      && arg == expr->value.function.actual
 	      && arg->next != NULL && arg->next->expr)
 	    {
 	      if (arg->next->expr->expr_type != EXPR_CONSTANT)
@@ -3294,8 +3292,7 @@ resolve_function (gfc_expr *expr)
 	  t = FAILURE;
 	}
 
-      if (gfc_implicit_pure (NULL))
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
+      gfc_unset_implicit_pure (NULL);
     }
 
   /* Functions without the RECURSIVE attribution are not allowed to
@@ -3360,8 +3357,7 @@ pure_subroutine (gfc_code *c, gfc_symbol *sym)
     gfc_error ("Subroutine call to '%s' at %L is not PURE", sym->name,
 	       &c->loc);
 
-  if (gfc_implicit_pure (NULL))
-    gfc_current_ns->proc_name->attr.implicit_pure = 0;
+  gfc_unset_implicit_pure (NULL);
 }
 
 
@@ -8704,10 +8700,11 @@ resolve_transfer (gfc_code *code)
 	 && exp->value.op.op == INTRINSIC_PARENTHESES)
     exp = exp->value.op.op1;
 
-  if (exp && exp->expr_type == EXPR_NULL && exp->ts.type == BT_UNKNOWN)
+  if (exp && exp->expr_type == EXPR_NULL
+      && code->ext.dt)
     {
-      gfc_error ("NULL intrinsic at %L in data transfer statement requires "
-		 "MOLD=", &exp->where);
+      gfc_error ("Invalid context for NULL () intrinsic at %L",
+		 &exp->where);
       return;
     }
 
@@ -9611,7 +9608,7 @@ resolve_ordinary_assign (gfc_code *code, gfc_namespace *ns)
       if (lhs->expr_type == EXPR_VARIABLE
 	    && lhs->symtree->n.sym != gfc_current_ns->proc_name
 	    && lhs->symtree->n.sym->ns != gfc_current_ns)
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
+	gfc_unset_implicit_pure (NULL);
 
       if (lhs->ts.type == BT_DERIVED
 	    && lhs->expr_type == EXPR_VARIABLE
@@ -9619,11 +9616,11 @@ resolve_ordinary_assign (gfc_code *code, gfc_namespace *ns)
 	    && rhs->expr_type == EXPR_VARIABLE
 	    && (gfc_impure_variable (rhs->symtree->n.sym)
 		|| gfc_is_coindexed (rhs)))
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
+	gfc_unset_implicit_pure (NULL);
 
       /* Fortran 2008, C1283.  */
       if (gfc_is_coindexed (lhs))
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
+	gfc_unset_implicit_pure (NULL);
     }
 
   /* F03:7.4.1.2.  */
@@ -9745,6 +9742,10 @@ get_temp_from_expr (gfc_expr *e, gfc_namespace *ns)
 
   /* Add the attributes and the arrayspec to the temporary.  */
   tmp->n.sym->attr = gfc_expr_attr (e);
+  tmp->n.sym->attr.function = 0;
+  tmp->n.sym->attr.result = 0;
+  tmp->n.sym->attr.flavor = FL_VARIABLE;
+
   if (as)
     {
       tmp->n.sym->as = gfc_copy_array_spec (as);
@@ -9758,6 +9759,7 @@ get_temp_from_expr (gfc_expr *e, gfc_namespace *ns)
 
   gfc_set_sym_referenced (tmp->n.sym);
   gfc_add_flavor (&tmp->n.sym->attr, FL_VARIABLE, name, NULL);
+  gfc_commit_symbol (tmp->n.sym);
   e = gfc_lval_expr_from_sym (tmp->n.sym);
 
   /* Should the lhs be a section, use its array ref for the
@@ -9991,6 +9993,26 @@ generate_component_assignments (gfc_code **code, gfc_namespace *ns)
 		  temp_code = build_assignment (EXEC_ASSIGN,
 						t1, (*code)->expr1,
 				NULL, NULL, (*code)->loc);
+
+		  /* For allocatable LHS, check whether it is allocated.  Note
+		     that allocatable components with defined assignment are
+		     not yet support.  See PR 57696.  */
+		  if ((*code)->expr1->symtree->n.sym->attr.allocatable)
+		    {
+		      gfc_code *block;
+		      gfc_expr *e =
+			gfc_lval_expr_from_sym ((*code)->expr1->symtree->n.sym);
+		      block = gfc_get_code ();
+		      block->op = EXEC_IF;
+		      block->block = gfc_get_code ();
+		      block->block->op = EXEC_IF;
+		      block->block->expr1
+			  = gfc_build_intrinsic_call (ns,
+				    GFC_ISYM_ALLOCATED, "allocated",
+				    (*code)->loc, 1, e);
+		      block->block->next = temp_code;
+		      temp_code = block;
+		    }
 		  add_code_to_chain (&temp_code, &tmp_head, &tmp_tail);
 		}
 
@@ -9999,8 +10021,37 @@ generate_component_assignments (gfc_code **code, gfc_namespace *ns)
 	      gfc_free_expr (this_code->ext.actual->expr);
 	      this_code->ext.actual->expr = gfc_copy_expr (t1);
 	      add_comp_ref (this_code->ext.actual->expr, comp1);
+
+	      /* If the LHS variable is allocatable and wasn't allocated and
+                 the temporary is allocatable, pointer assign the address of
+                 the freshly allocated LHS to the temporary.  */
+	      if ((*code)->expr1->symtree->n.sym->attr.allocatable
+		  && gfc_expr_attr ((*code)->expr1).allocatable)
+		{
+		  gfc_code *block;
+		  gfc_expr *cond;
+
+		  cond = gfc_get_expr ();
+		  cond->ts.type = BT_LOGICAL;
+		  cond->ts.kind = gfc_default_logical_kind;
+		  cond->expr_type = EXPR_OP;
+		  cond->where = (*code)->loc;
+		  cond->value.op.op = INTRINSIC_NOT;
+		  cond->value.op.op1 = gfc_build_intrinsic_call (ns,
+					  GFC_ISYM_ALLOCATED, "allocated",
+					  (*code)->loc, 1, gfc_copy_expr (t1));
+		  block = gfc_get_code ();
+		  block->op = EXEC_IF;
+		  block->block = gfc_get_code ();
+		  block->block->op = EXEC_IF;
+		  block->block->expr1 = cond;
+		  block->block->next = build_assignment (EXEC_POINTER_ASSIGN,
+					t1, (*code)->expr1,
+					NULL, NULL, (*code)->loc);
+		  add_code_to_chain (&block, &head, &tail);
+		}
 	    }
-	  }
+	}
       else if (this_code->op == EXEC_ASSIGN && !this_code->next)
 	{
 	  /* Don't add intrinsic assignments since they are already
@@ -10022,19 +10073,36 @@ generate_component_assignments (gfc_code **code, gfc_namespace *ns)
 	}
     }
 
-  /* This is probably not necessary.  */
-  if (this_code)
-    {
-      gfc_free_statements (this_code);
-      this_code = NULL;
-    }
-
   /* Put the temporary assignments at the top of the generated code.  */
   if (tmp_head && component_assignment_level == 1)
     {
       gfc_append_code (tmp_head, head);
       head = tmp_head;
       tmp_head = tmp_tail = NULL;
+    }
+
+  // If we did a pointer assignment - thus, we need to ensure that the LHS is
+  // not accidentally deallocated. Hence, nullify t1.
+  if (t1 && (*code)->expr1->symtree->n.sym->attr.allocatable
+      && gfc_expr_attr ((*code)->expr1).allocatable)
+    {
+      gfc_code *block;
+      gfc_expr *cond;
+      gfc_expr *e;
+
+      e = gfc_lval_expr_from_sym ((*code)->expr1->symtree->n.sym);
+      cond = gfc_build_intrinsic_call (ns, GFC_ISYM_ASSOCIATED, "associated",
+				       (*code)->loc, 2, gfc_copy_expr (t1), e);
+      block = gfc_get_code ();
+      block->op = EXEC_IF;
+      block->block = gfc_get_code ();
+      block->block->op = EXEC_IF;
+      block->block->expr1 = cond;
+      block->block->next = build_assignment (EXEC_POINTER_ASSIGN,
+					t1, gfc_get_null_expr (&(*code)->loc),
+					NULL, NULL, (*code)->loc);
+      gfc_append_code (tail, block);
+      tail = block;
     }
 
   /* Now attach the remaining code chain to the input code.  Step on
@@ -10046,7 +10114,8 @@ generate_component_assignments (gfc_code **code, gfc_namespace *ns)
   gfc_free_expr ((*code)->expr1);
   gfc_free_expr ((*code)->expr2);
   **code = *head;
-  free (head);
+  if (head != tail)
+    free (head);
   *code = tail;
 
   component_assignment_level--;
@@ -10984,7 +11053,7 @@ build_default_init_expr (gfc_symbol *sym)
 	  init_expr = NULL;
 	}
       if (!init_expr && gfc_option.flag_init_character == GFC_INIT_CHARACTER_ON
-	  && sym->ts.u.cl->length)
+	  && sym->ts.u.cl->length && gfc_option.flag_max_stack_var_size != 0)
 	{
 	  gfc_actual_arglist *arg;
 	  init_expr = gfc_get_expr ();
@@ -11804,6 +11873,7 @@ check_generic_tbp_ambiguity (gfc_tbp_generic* t1, gfc_tbp_generic* t2,
 {
   gfc_symbol *sym1, *sym2;
   const char *pass1, *pass2;
+  gfc_formal_arglist *dummy_args;
 
   gcc_assert (t1->specific && t2->specific);
   gcc_assert (!t1->specific->is_generic);
@@ -11826,19 +11896,33 @@ check_generic_tbp_ambiguity (gfc_tbp_generic* t1, gfc_tbp_generic* t2,
       return FAILURE;
     }
 
-  /* Compare the interfaces.  */
+  /* Determine PASS arguments.  */
   if (t1->specific->nopass)
     pass1 = NULL;
   else if (t1->specific->pass_arg)
     pass1 = t1->specific->pass_arg;
   else
-    pass1 = gfc_sym_get_dummy_args (t1->specific->u.specific->n.sym)->sym->name;
+    {
+      dummy_args = gfc_sym_get_dummy_args (t1->specific->u.specific->n.sym);
+      if (dummy_args)
+	pass1 = dummy_args->sym->name;
+      else
+	pass1 = NULL;
+    }
   if (t2->specific->nopass)
     pass2 = NULL;
   else if (t2->specific->pass_arg)
     pass2 = t2->specific->pass_arg;
   else
-    pass2 = gfc_sym_get_dummy_args (t2->specific->u.specific->n.sym)->sym->name;
+    {
+      dummy_args = gfc_sym_get_dummy_args (t2->specific->u.specific->n.sym);
+      if (dummy_args)
+	pass2 = dummy_args->sym->name;
+      else
+	pass2 = NULL;
+    }
+
+  /* Compare the interfaces.  */
   if (gfc_compare_interfaces (sym1, sym2, sym2->name, !t1->is_operator, 0,
 			      NULL, 0, pass1, pass2))
     {
@@ -12351,9 +12435,6 @@ resolve_typebound_procedures (gfc_symbol* derived)
 
   resolve_bindings_derived = derived;
   resolve_bindings_result = SUCCESS;
-
-  /* Make sure the vtab has been generated.  */
-  gfc_find_derived_vtab (derived);
 
   if (derived->f2k_derived->tb_sym_root)
     gfc_traverse_symtree (derived->f2k_derived->tb_sym_root,
@@ -13183,7 +13264,8 @@ resolve_symbol (gfc_symbol *sym)
   if (sym->attr.flavor == FL_UNKNOWN
       || (sym->attr.flavor == FL_PROCEDURE && !sym->attr.intrinsic
 	  && !sym->attr.generic && !sym->attr.external
-	  && sym->attr.if_source == IFSRC_UNKNOWN))
+	  && sym->attr.if_source == IFSRC_UNKNOWN
+	  && sym->ts.type == BT_UNKNOWN))
     {
 
     /* If we find that a flavorless symbol is an interface in one of the
@@ -14300,6 +14382,33 @@ gfc_implicit_pure (gfc_symbol *sym)
 
   return sym->attr.flavor == FL_PROCEDURE && sym->attr.implicit_pure
     && !sym->attr.pure;
+}
+
+
+void
+gfc_unset_implicit_pure (gfc_symbol *sym)
+{
+  gfc_namespace *ns;
+
+  if (sym == NULL)
+    {
+      /* Check if the current procedure is implicit_pure.  Walk up
+	 the procedure list until we find a procedure.  */
+      for (ns = gfc_current_ns; ns; ns = ns->parent)
+	{
+	  sym = ns->proc_name;
+	  if (sym == NULL)
+	    return;
+
+	  if (sym->attr.flavor == FL_PROCEDURE)
+	    break;
+	}
+    }
+
+  if (sym->attr.flavor == FL_PROCEDURE)
+    sym->attr.implicit_pure = 0;
+  else
+    sym->attr.pure = 0;
 }
 
 

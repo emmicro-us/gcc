@@ -118,6 +118,8 @@ along with GCC; see the file COPYING3.  If not see
       builtin_define ("__ARC_SIMD__");		\
     if (TARGET_BARREL_SHIFTER)			\
       builtin_define ("__Xbarrel_shifter");	\
+    if (TARGET_LL64)				\
+      builtin_define ("__LL64__");		\
 						\
     switch (TARGET_CPU_DEFAULT)			\
       {						\
@@ -192,8 +194,6 @@ along with GCC; see the file COPYING3.  If not see
 %{mcpu=ARC700:-mARC700} \
 %{mcpu=ARC700:-mEA} \
 %{!mcpu=*:%{!mA6:%{!mARC600:%{!mARC700:" ASM_DEFAULT "}}}} \
-%{mcpu=ARCv2EM:%<mbarrel-shifter %<mno-mpy %<mnorm %<mswap}\
-%{mcpu=ARCv2HS:%<mbarrel-shifter %<mno-mpy %<mnorm %<mswap}\
 %{mbarrel-shifter} %{mno-mpy} %{mmul64} %{mmul32x16:-mdsp-packa} %{mnorm} \
 %{mswap} %{mEA} %{mmin-max} %{mspfp*} %{mdpfp*} \
 %{msimd} %{mfpu=fpuda:-mfpuda} \
@@ -288,9 +288,6 @@ ASM_DEFOPT "%{matomic:-mlock} \
   "%{mcpu=arc601: -mcpu=ARC601 %<mcpu=arc601}"				\
   "%{mcpu=arcem: -mcpu=ARCv2EM %<mcpu=arcem}"				\
   "%{mcpu=archs: -mcpu=ARCv2HS %<mcpu=archs}"				\
-  "%{mmpy_option*: -mmpy-option%* %<mmpy_option*}"			\
-  "%{mcode_densit*: -mcode-densit%* %<mcode_densit*}"			\
-  "%{mbarrel_shifte*: -mbarrel-shifte%* %<mbarrel_shifte*}"		\
   "%{mspfp_*: -mspfp-%* %<mspfp_*}"					\
   "%{mdpfp_*: -mdpfp-%* %<mdpfp_*}"					\
   "%{mdsp_pack*: -mdsp-pack%* %<mdsp_pack*}"				\
@@ -487,8 +484,8 @@ if (GET_MODE_CLASS (MODE) == MODE_INT		\
 /* Define this as 1 if `char' should by default be signed; else as 0.  */
 #define DEFAULT_SIGNED_CHAR 0
 
-#define SIZE_TYPE "long unsigned int"
-#define PTRDIFF_TYPE "long int"
+#define SIZE_TYPE "unsigned int"
+#define PTRDIFF_TYPE "int"
 #define WCHAR_TYPE "int"
 #define WCHAR_TYPE_SIZE 32
 
@@ -775,6 +772,11 @@ enum reg_class
 #define ARC_FIRST_SIMD_DMA_CONFIG_IN_REG   128
 #define ARC_FIRST_SIMD_DMA_CONFIG_OUT_REG  136
 #define ARC_LAST_SIMD_DMA_CONFIG_REG       143
+
+#define ACC_REG_FIRST 58
+#define ACC_REG_LAST  59
+#define ACCL_REGNO    (TARGET_BIG_ENDIAN ? ACC_REG_FIRST + 1 : ACC_REG_FIRST)
+#define ACCH_REGNO    (TARGET_BIG_ENDIAN ? ACC_REG_FIRST : ACC_REG_FIRST + 1)
 
 /* The same information, inverted:
    Return the class number of the smallest class containing

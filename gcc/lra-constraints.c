@@ -1054,9 +1054,6 @@ static int goal_alt_number;
 /* Number of necessary reloads and overall cost reflecting the
    previous value and other unpleasantness of the best alternative.  */
 static int best_losers, best_overall;
-/* Number of small register classes used for operands of the best
-   alternative.	 */
-static int best_small_class_operands_num;
 /* Overall number hard registers used for reloads.  For example, on
    some targets we need 2 general registers to reload DFmode and only
    one floating point register.	 */
@@ -1159,6 +1156,8 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
   enum machine_mode mode;
   rtx reg, new_reg;
   rtx operand = *curr_id->operand_loc[nop];
+  enum reg_class regclass;
+  enum op_type type;
 
   before = after = NULL_RTX;
 
@@ -1167,6 +1166,7 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
 
   mode = GET_MODE (operand);
   reg = SUBREG_REG (operand);
+  type = curr_static_id->operand[nop].type;
   /* If we change address for paradoxical subreg of memory, the
      address might violate the necessary alignment or the access might
      be slow.  So take this into consideration.  We should not worry
@@ -1237,6 +1237,55 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
       SUBREG_REG (operand) = new_reg;
       lra_process_new_insns (curr_insn, before, after,
 			     "Inserting subreg reload");
+      return true;
+    }
+  /* Force a reload for a paradoxical subreg. For paradoxical subreg,
+     IRA allocates hardreg to the inner pseudo reg according to its mode
+     instead of the outermode, so the size of the hardreg may not be enough
+     to contain the outermode operand, in that case we may need to insert
+     reload for the reg. For the following two types of paradoxical subreg,
+     we need to insert reload:
+     1. If the op_type is OP_IN, and the hardreg could not be paired with
+        other hardreg to contain the outermode operand
+        (checked by in_hard_reg_set_p), we need to insert the reload.
+     2. If the op_type is OP_OUT or OP_INOUT.  */
+  else if (REG_P (reg)
+	   && REGNO (reg) >= FIRST_PSEUDO_REGISTER
+	   && (hard_regno = lra_get_regno_hard_regno (REGNO (reg))) >= 0
+	   && (hard_regno_nregs[hard_regno][GET_MODE (reg)]
+	       < hard_regno_nregs[hard_regno][mode])
+	   && (regclass = lra_get_allocno_class (REGNO (reg)))
+	   && (type != OP_IN
+	       || !in_hard_reg_set_p (reg_class_contents[regclass],
+				      mode, hard_regno)))
+    {
+      /* The class will be defined later in curr_insn_transform.  */
+      enum reg_class rclass
+	= (enum reg_class) targetm.preferred_reload_class (reg, ALL_REGS);
+      rtx subreg;
+      
+      new_reg = lra_create_new_reg_with_unique_value (mode, reg, rclass,
+						      "paradoxical subreg");
+      PUT_MODE (new_reg, mode);
+      subreg = simplify_gen_subreg (GET_MODE (reg), new_reg, mode, 0);
+      if (type != OP_OUT)
+	{
+	  push_to_sequence (before);
+	  lra_emit_move (subreg, reg);
+	  before = get_insns ();
+	  end_sequence ();
+	}
+      if (type != OP_IN)
+	{
+	  start_sequence ();
+	  lra_emit_move (reg, subreg);
+	  emit_insn (after);
+	  after = get_insns ();
+	  end_sequence ();
+	}
+      SUBREG_REG (operand) = new_reg;
+      lra_process_new_insns (curr_insn, before, after,
+                             "Inserting paradoxical subreg reload");
       return true;
     }
   return false;
@@ -1321,7 +1370,7 @@ static bool
 process_alt_operands (int only_alternative)
 {
   bool ok_p = false;
-  int nop, small_class_operands_num, overall, nalt;
+  int nop, overall, nalt;
   int n_alternatives = curr_static_id->n_alternatives;
   int n_operands = curr_static_id->n_operands;
   /* LOSERS counts the operands that don't fit this alternative and
@@ -1391,7 +1440,7 @@ process_alt_operands (int only_alternative)
   for (nalt = 0; nalt < n_alternatives; nalt++)
     {
       /* Loop over operands for one constraint alternative.  */
-#ifdef HAVE_ATTR_enabled
+#if HAVE_ATTR_enabled
       if (curr_id->alternative_enabled_p != NULL
 	  && ! curr_id->alternative_enabled_p[nalt])
 	continue;
@@ -1400,6 +1449,7 @@ process_alt_operands (int only_alternative)
       if (only_alternative >= 0 && nalt != only_alternative)
 	continue;
 
+            
       overall = losers = reject = reload_nregs = reload_sum = 0;
       for (nop = 0; nop < n_operands; nop++)
 	reject += (curr_static_id
@@ -1978,8 +2028,15 @@ process_alt_operands (int only_alternative)
 			      (op, this_alternative) == NO_REGS))))
 		reject += LRA_MAX_REJECT;
 
-	      if (! ((const_to_mem && constmemok)
-		     || (MEM_P (op) && offmemok)))
+	      if (MEM_P (op) && offmemok)
+		{
+		  /* If we know offset and this non-offsetable memory,
+		     something wrong with this memory and it is better
+		     to try other memory possibilities.  */
+		  if (MEM_OFFSET_KNOWN_P (op))
+		    reject += LRA_MAX_REJECT;
+		}
+	      else if (! (const_to_mem && constmemok))
 		{
 		  /* We prefer to reload pseudos over reloading other
 		     things, since such reloads may be able to be
@@ -1994,6 +2051,9 @@ process_alt_operands (int only_alternative)
 		  if (! no_regs_p)
 		    reload_nregs
 		      += ira_reg_class_max_nregs[this_alternative][mode];
+
+		  if (SMALL_REGISTER_CLASS_P (this_alternative))
+		    reject += LRA_LOSER_COST_FACTOR / 2;
 		}
 
 	      /* We are trying to spill pseudo into memory.  It is
@@ -2001,7 +2061,7 @@ process_alt_operands (int only_alternative)
 		 although it might takes the same number of
 		 reloads.  */
 	      if (no_regs_p && REG_P (op))
-		reject++;
+		reject += 2;
 
 #ifdef SECONDARY_MEMORY_NEEDED
 	      /* If reload requires moving value through secondary
@@ -2021,6 +2081,7 @@ process_alt_operands (int only_alternative)
 		 reloads.  */
 	      if (!REG_P (op) || curr_static_id->operand[nop].type != OP_IN)
 		reject++;
+
 	    }
 
 	  if (early_clobber_p)
@@ -2032,7 +2093,13 @@ process_alt_operands (int only_alternative)
 	     or non-important thing to be worth to do it.  */
 	  overall = losers * LRA_LOSER_COST_FACTOR + reject;
 	  if ((best_losers == 0 || losers != 0) && best_overall < overall)
-	    goto fail;
+            {
+              if (lra_dump_file != NULL)
+		fprintf (lra_dump_file,
+			 "          alt=%d,overall=%d,losers=%d -- reject\n",
+			 nalt, overall, losers);
+              goto fail;
+            }
 
 	  curr_alt[nop] = this_alternative;
 	  COPY_HARD_REG_SET (curr_alt_set[nop], this_alternative_set);
@@ -2099,7 +2166,10 @@ process_alt_operands (int only_alternative)
 	      curr_alt_dont_inherit_ops[curr_alt_dont_inherit_ops_num++]
 		= last_conflict_j;
 	      losers++;
-	      overall += LRA_LOSER_COST_FACTOR;
+	      /* Early clobber was already reflected in REJECT. */
+	      lra_assert (reject > 0);
+	      reject--;
+	      overall += LRA_LOSER_COST_FACTOR - 1;
 	    }
 	  else
 	    {
@@ -2123,13 +2193,15 @@ process_alt_operands (int only_alternative)
 		}
 	      curr_alt_win[i] = curr_alt_match_win[i] = false;
 	      losers++;
-	      overall += LRA_LOSER_COST_FACTOR;
+	      /* Early clobber was already reflected in REJECT. */
+	      lra_assert (reject > 0);
+	      reject--;
+	      overall += LRA_LOSER_COST_FACTOR - 1;
 	    }
 	}
-      small_class_operands_num = 0;
-      for (nop = 0; nop < n_operands; nop++)
-	small_class_operands_num
-	  += SMALL_REGISTER_CLASS_P (curr_alt[nop]) ? 1 : 0;
+      if (lra_dump_file != NULL)
+	fprintf (lra_dump_file, "          alt=%d,overall=%d,losers=%d,rld_nregs=%d\n",
+		 nalt, overall, losers, reload_nregs);
 
       /* If this alternative can be made to work by reloading, and it
 	 needs less reloading than the others checked so far, record
@@ -2141,17 +2213,12 @@ process_alt_operands (int only_alternative)
 		  || (best_overall == overall
 		      /* If the cost of the reloads is the same,
 			 prefer alternative which requires minimal
-			 number of small register classes for the
-			 operands.  This improves chances of reloads
-			 for insn requiring small register
-			 classes.  */
-		      && (small_class_operands_num
-			  < best_small_class_operands_num
-			  || (small_class_operands_num
-			      == best_small_class_operands_num
-			      && (reload_nregs < best_reload_nregs
-				  || (reload_nregs == best_reload_nregs
-				      && best_reload_sum < reload_sum))))))))
+			 number of reload regs.  */
+		      && (reload_nregs < best_reload_nregs
+			  || (reload_nregs == best_reload_nregs
+			      && (best_reload_sum < reload_sum
+				  || (best_reload_sum == reload_sum
+				      && nalt < goal_alt_number))))))))
 	{
 	  for (nop = 0; nop < n_operands; nop++)
 	    {
@@ -2167,7 +2234,6 @@ process_alt_operands (int only_alternative)
 	  goal_alt_swapped = curr_swapped;
 	  best_overall = overall;
 	  best_losers = losers;
-	  best_small_class_operands_num = small_class_operands_num;
 	  best_reload_nregs = reload_nregs;
 	  best_reload_sum = reload_sum;
 	  goal_alt_number = nalt;
@@ -2729,7 +2795,7 @@ curr_insn_transform (void)
      operands together against the register constraints.  */
 
   best_losers = best_overall = INT_MAX;
-  best_small_class_operands_num = best_reload_sum = 0;
+  best_reload_sum = 0;
 
   curr_swapped = false;
   goal_alt_swapped = false;
@@ -2932,7 +2998,10 @@ curr_insn_transform (void)
 	  for (; *p != '\0' && *p != ',' && *p != '#'; p++)
 	    fputc (*p, lra_dump_file);
 	}
-      fprintf (lra_dump_file, "\n");
+      if (INSN_CODE (curr_insn) >= 0
+          && (p = get_insn_name (INSN_CODE (curr_insn))) != NULL)
+        fprintf (lra_dump_file, " {%s}", p);
+       fprintf (lra_dump_file, "\n");
     }
 
   /* Right now, for any pair of operands I and J that are required to
@@ -3052,7 +3121,15 @@ curr_insn_transform (void)
 		 spilled.  Spilled scratch pseudos are transformed
 		 back to scratches at the LRA end.  */
 	      && lra_former_scratch_operand_p (curr_insn, i))
-	    change_class (REGNO (op), NO_REGS, "      Change", true);
+	    {
+	      int regno = REGNO (op);
+	      change_class (regno, NO_REGS, "      Change", true);
+	      if (lra_get_regno_hard_regno (regno) >= 0)
+		/* We don't have to mark all insn affected by the
+		   spilled pseudo as there is only one such insn, the
+		   current one.  */
+		reg_renumber[regno] = -1;
+	    }
 	  continue;
 	}
 
@@ -4117,7 +4194,7 @@ split_reg (bool before_p, int original_regno, rtx insn, rtx next_usage_insns)
 {
   enum reg_class rclass;
   rtx original_reg;
-  int hard_regno;
+  int hard_regno, nregs;
   rtx new_reg, save, restore, usage_insn;
   bool after_p;
   bool call_save_p;
@@ -4127,10 +4204,12 @@ split_reg (bool before_p, int original_regno, rtx insn, rtx next_usage_insns)
       rclass = ira_allocno_class_translate[REGNO_REG_CLASS (original_regno)];
       hard_regno = original_regno;
       call_save_p = false;
+      nregs = 1;
     }
   else
     {
       hard_regno = reg_renumber[original_regno];
+      nregs = hard_regno_nregs[hard_regno][PSEUDO_REGNO_MODE (original_regno)];
       rclass = lra_get_allocno_class (original_regno);
       original_reg = regno_reg_rtx[original_regno];
       call_save_p = need_for_call_save_p (original_regno);
@@ -4243,6 +4322,13 @@ split_reg (bool before_p, int original_regno, rtx insn, rtx next_usage_insns)
 			 before_p ? NULL_RTX : save,
 			 call_save_p
 			 ?  "Add save<-reg" : "Add split<-reg");
+  if (nregs > 1)
+    /* If we are trying to split multi-register.  We should check
+       conflicts on the next assignment sub-pass.  IRA can allocate on
+       sub-register levels, LRA do this on pseudos level right now and
+       this discrepancy may create allocation conflicts after
+       splitting.  */
+    lra_risky_transformations_p = true;
   if (lra_dump_file != NULL)
     fprintf (lra_dump_file,
 	     "	  ))))))))))))))))))))))))))))))))))))))))))))))))\n");
@@ -4362,7 +4448,7 @@ update_ebb_live_info (rtx head, rtx tail)
 	  bitmap_clear_bit (&live_regs, reg->regno);
       /* Mark each used value as live.  */
       for (reg = curr_id->regs; reg != NULL; reg = reg->next)
-	if (reg->type == OP_IN
+	if (reg->type != OP_OUT
 	    && bitmap_bit_p (&check_only_regs, reg->regno))
 	  bitmap_set_bit (&live_regs, reg->regno);
       /* It is quite important to remove dead move insns because it

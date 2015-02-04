@@ -36,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "hashtab.h"
 #include "tree-pass.h"
 #include "diagnostic-core.h"
+#include "params.h"
 
 /* This implements the pass that does predicate aware warning on uses of
    possibly uninitialized variables. The pass first collects the set of
@@ -101,6 +102,19 @@ ssa_undefined_value_p (tree t)
               && pointer_set_contains (possibly_undefined_names, t)));
 }
 
+/* Like ssa_undefined_value_p, but don't return true if TREE_NO_WARNING
+   is set on SSA_NAME_VAR.  */
+
+static inline bool
+uninit_undefined_value_p (tree t)
+{
+  if (!ssa_undefined_value_p (t))
+    return false;
+  if (SSA_NAME_VAR (t) && TREE_NO_WARNING (SSA_NAME_VAR (t)))
+    return false;
+  return true;
+}
+
 /* Checks if the operand OPND of PHI is defined by 
    another phi with one operand defined by this PHI, 
    but the rest operands are all defined. If yes, 
@@ -124,7 +138,7 @@ can_skip_redundant_opnd (tree opnd, gimple phi)
       tree op = gimple_phi_arg_def (op_def, i);
       if (TREE_CODE (op) != SSA_NAME)
         continue;
-      if (op != phi_def && ssa_undefined_value_p (op))
+      if (op != phi_def && uninit_undefined_value_p (op))
         return false;
     }
 
@@ -149,7 +163,7 @@ compute_uninit_opnds_pos (gimple phi)
     {
       tree op = gimple_phi_arg_def (phi, i);
       if (TREE_CODE (op) == SSA_NAME
-          && ssa_undefined_value_p (op)
+          && uninit_undefined_value_p (op)
           && !can_skip_redundant_opnd (op, phi))
         MASK_SET_BIT (uninit_opnds, i);
     }
@@ -233,8 +247,8 @@ find_control_equiv_block (basic_block bb)
 
 /* Computes the control dependence chains (paths of edges)
    for DEP_BB up to the dominating basic block BB (the head node of a
-   chain should be dominated by it).  CD_CHAINS is pointer to a
-   dynamic array holding the result chains. CUR_CD_CHAIN is the current
+   chain should be dominated by it).  CD_CHAINS is pointer to an
+   array holding the result chains.  CUR_CD_CHAIN is the current
    chain being computed.  *NUM_CHAINS is total number of chains.  The
    function returns true if the information is successfully computed,
    return false if there is no control dependence or not computed.  */
@@ -243,7 +257,8 @@ static bool
 compute_control_dep_chain (basic_block bb, basic_block dep_bb,
                            vec<edge> *cd_chains,
                            size_t *num_chains,
-                           vec<edge> *cur_cd_chain)
+			   vec<edge> *cur_cd_chain,
+			   int *num_calls)
 {
   edge_iterator ei;
   edge e;
@@ -253,6 +268,10 @@ compute_control_dep_chain (basic_block bb, basic_block dep_bb,
 
   if (EDGE_COUNT (bb->succs) < 2)
     return false;
+
+  if (*num_calls > PARAM_VALUE (PARAM_UNINIT_CONTROL_DEP_ATTEMPTS))
+    return false;
+  ++*num_calls;
 
   /* Could  use a set instead.  */
   cur_chain_len = cur_cd_chain->length ();
@@ -293,7 +312,7 @@ compute_control_dep_chain (basic_block bb, basic_block dep_bb,
 
           /* Now check if DEP_BB is indirectly control dependent on BB.  */
           if (compute_control_dep_chain (cd_bb, dep_bb, cd_chains,
-                                         num_chains, cur_cd_chain))
+					 num_chains, cur_cd_chain, num_calls))
             {
               found_cd_chain = true;
               break;
@@ -425,13 +444,11 @@ find_predicates (vec<use_pred_info_t> **preds,
                  basic_block use_bb)
 {
   size_t num_chains = 0, i;
-  vec<edge> *dep_chains = 0;
+  int num_calls = 0;
+  vec<edge> dep_chains[MAX_NUM_CHAINS];
   vec<edge> cur_chain = vNULL;
   bool has_valid_pred = false;
   basic_block cd_root = 0;
-
-  typedef vec<edge> vec_edge_heap;
-  dep_chains = XCNEWVEC (vec_edge_heap, MAX_NUM_CHAINS);
 
   /* First find the closest bb that is control equivalent to PHI_BB
      that also dominates USE_BB.  */
@@ -445,20 +462,16 @@ find_predicates (vec<use_pred_info_t> **preds,
         break;
     }
 
-  compute_control_dep_chain (cd_root, use_bb,
-                             dep_chains, &num_chains,
-                             &cur_chain);
+  compute_control_dep_chain (cd_root, use_bb, dep_chains, &num_chains,
+			     &cur_chain, &num_calls);
 
   has_valid_pred
-      = convert_control_dep_chain_into_preds (dep_chains,
-                                              num_chains,
-                                              preds,
-                                              num_preds);
+    = convert_control_dep_chain_into_preds (dep_chains, num_chains, preds,
+					    num_preds);
   /* Free individual chain  */
   cur_chain.release ();
   for (i = 0; i < num_chains; i++)
     dep_chains[i].release ();
-  free (dep_chains);
   return has_valid_pred;
 }
 
@@ -504,7 +517,7 @@ collect_phi_def_edges (gimple phi, basic_block cd_root,
                                  gimple_bb (def), cd_root))
             collect_phi_def_edges (def, cd_root, edges,
                                    visited_phis);
-          else if (!ssa_undefined_value_p (opnd))
+          else if (!uninit_undefined_value_p (opnd))
             {
               if (dump_file && (dump_flags & TDF_DETAILS))
                 {
@@ -526,15 +539,12 @@ find_def_preds (vec<use_pred_info_t> **preds,
                 size_t *num_preds, gimple phi)
 {
   size_t num_chains = 0, i, n;
-  vec<edge> *dep_chains = 0;
+  vec<edge> dep_chains[MAX_NUM_CHAINS];
   vec<edge> cur_chain = vNULL;
   vec<edge> def_edges = vNULL;
   bool has_valid_pred = false;
   basic_block phi_bb, cd_root = 0;
   struct pointer_set_t *visited_phis;
-
-  typedef vec<edge> vec_edge_heap;
-  dep_chains = XCNEWVEC (vec_edge_heap, MAX_NUM_CHAINS);
 
   phi_bb = gimple_bb (phi);
   /* First find the closest dominating bb to be
@@ -554,38 +564,33 @@ find_def_preds (vec<use_pred_info_t> **preds,
   for (i = 0; i < n; i++)
     {
       size_t prev_nc, j;
+      int num_calls = 0;
       edge opnd_edge;
 
       opnd_edge = def_edges[i];
       prev_nc = num_chains;
-      compute_control_dep_chain (cd_root, opnd_edge->src,
-                                 dep_chains, &num_chains,
-                                 &cur_chain);
-      /* Free individual chain  */
-      cur_chain.release ();
+      compute_control_dep_chain (cd_root, opnd_edge->src, dep_chains,
+				 &num_chains, &cur_chain, &num_calls);
 
       /* Now update the newly added chains with
          the phi operand edge:  */
       if (EDGE_COUNT (opnd_edge->src->succs) > 1)
         {
-          if (prev_nc == num_chains
-              && num_chains < MAX_NUM_CHAINS)
-            num_chains++;
+	  if (prev_nc == num_chains && num_chains < MAX_NUM_CHAINS)
+	    dep_chains[num_chains++] = vNULL;
           for (j = prev_nc; j < num_chains; j++)
-            {
-              dep_chains[j].safe_push (opnd_edge);
-            }
+	    dep_chains[j].safe_push (opnd_edge);
         }
     }
 
+  /* Free individual chain  */
+  cur_chain.release ();
+
   has_valid_pred
-      = convert_control_dep_chain_into_preds (dep_chains,
-                                              num_chains,
-                                              preds,
-                                              num_preds);
+    = convert_control_dep_chain_into_preds (dep_chains, num_chains, preds,
+					    num_preds);
   for (i = 0; i < num_chains; i++)
     dep_chains[i].release ();
-  free (dep_chains);
   return has_valid_pred;
 }
 
@@ -1988,7 +1993,7 @@ execute_late_warn_uninitialized (void)
           {
             tree op = gimple_phi_arg_def (phi, i);
             if (TREE_CODE (op) == SSA_NAME
-                && ssa_undefined_value_p (op))
+                && uninit_undefined_value_p (op))
               {
                 worklist.safe_push (phi);
 		pointer_set_insert (added_to_worklist, phi);

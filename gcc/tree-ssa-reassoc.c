@@ -785,8 +785,7 @@ eliminate_not_pairs (enum tree_code opcode,
 	  if (opcode == BIT_AND_EXPR)
 	    oe->op = build_zero_cst (TREE_TYPE (oe->op));
 	  else if (opcode == BIT_IOR_EXPR)
-	    oe->op = build_low_bits_mask (TREE_TYPE (oe->op),
-					  TYPE_PRECISION (TREE_TYPE (oe->op)));
+	    oe->op = build_all_ones_cst (TREE_TYPE (oe->op));
 
 	  reassociate_stats.ops_eliminated += ops->length () - 1;
 	  ops->truncate (0);
@@ -1774,7 +1773,14 @@ init_range_entry (struct range_entry *r, tree exp, gimple stmt)
       switch (code)
 	{
 	case BIT_NOT_EXPR:
-	  if (TREE_CODE (TREE_TYPE (exp)) == BOOLEAN_TYPE)
+	  if (TREE_CODE (TREE_TYPE (exp)) == BOOLEAN_TYPE
+	      /* Ensure the range is either +[-,0], +[0,0],
+		 -[-,0], -[0,0] or +[1,-], +[1,1], -[1,-] or
+		 -[1,1].  If it is e.g. +[-,-] or -[-,-]
+		 or similar expression of unconditional true or
+		 false, it should not be negated.  */
+	      && ((high && integer_zerop (high))
+		  || (low && integer_onep (low))))
 	    {
 	      in_p = !in_p;
 	      exp = arg0;
@@ -1973,8 +1979,15 @@ update_range_test (struct range_entry *range, struct range_entry *otherrange,
 
   tem = fold_convert_loc (loc, optype, tem);
   gsi = gsi_for_stmt (stmt);
-  tem = force_gimple_operand_gsi (&gsi, tem, true, NULL_TREE, true,
-				  GSI_SAME_STMT);
+  /* In rare cases range->exp can be equal to lhs of stmt.
+     In that case we have to insert after the stmt rather then before
+     it.  */
+  if (op == range->exp)
+    tem = force_gimple_operand_gsi (&gsi, tem, true, NULL_TREE, false,
+				    GSI_SAME_STMT);
+  else
+    tem = force_gimple_operand_gsi (&gsi, tem, true, NULL_TREE, true,
+				    GSI_SAME_STMT);
 
   /* If doing inter-bb range test optimization, update the
      stmts immediately.  Start with changing the first range test
@@ -4293,6 +4306,7 @@ struct gimple_opt_pass pass_reassoc =
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_verify_ssa
+    | TODO_update_ssa_only_virtuals
     | TODO_verify_flow
     | TODO_ggc_collect			/* todo_flags_finish */
  }

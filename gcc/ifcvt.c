@@ -115,7 +115,11 @@ count_bb_insns (const_basic_block bb)
 
   while (1)
     {
-      if (CALL_P (insn) || NONJUMP_INSN_P (insn))
+      if ((CALL_P (insn) || NONJUMP_INSN_P (insn))
+	  /* Don't count USE/CLOBBER insns, flow_find_cross_jump etc.
+	     don't count them either and we need consistency.  */
+	  && GET_CODE (PATTERN (insn)) != USE
+	  && GET_CODE (PATTERN (insn)) != CLOBBER)
 	count++;
 
       if (insn == BB_END (bb))
@@ -505,7 +509,10 @@ cond_exec_process_if_block (ce_if_block_t * ce_info,
 	  n_insns -= 2 * n_matching;
 	}
 
-      if (then_start && else_start)
+      if (then_start
+	  && else_start
+	  && then_n_insns > n_matching
+	  && else_n_insns > n_matching)
 	{
 	  int longest_match = MIN (then_n_insns - n_matching,
 				   else_n_insns - n_matching);
@@ -964,6 +971,8 @@ end_ifcvt_sequence (struct noce_if_info *if_info)
 
   set_used_flags (if_info->x);
   set_used_flags (if_info->cond);
+  set_used_flags (if_info->a);
+  set_used_flags (if_info->b);
   unshare_all_rtl_in_chain (seq);
   end_sequence ();
 
@@ -3473,7 +3482,7 @@ cond_exec_find_if_block (struct ce_if_block * ce_info)
      code processing.  ??? we should fix this in the future.  */
   if (EDGE_COUNT (then_bb->succs) == 0)
     {
-      if (single_pred_p (else_bb))
+      if (single_pred_p (else_bb) && else_bb != EXIT_BLOCK_PTR)
 	{
 	  rtx last_insn = BB_END (then_bb);
 

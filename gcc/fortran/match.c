@@ -1753,8 +1753,7 @@ gfc_match_critical (void)
       return MATCH_ERROR;
     }
 
-  if (gfc_implicit_pure (NULL))
-    gfc_current_ns->proc_name->attr.implicit_pure = 0;
+  gfc_unset_implicit_pure (NULL);
 
   if (gfc_notify_std (GFC_STD_F2008, "CRITICAL statement at %C")
       == FAILURE)
@@ -2683,8 +2682,7 @@ gfc_match_stopcode (gfc_statement st)
       goto cleanup;
     }
 
-  if (gfc_implicit_pure (NULL))
-    gfc_current_ns->proc_name->attr.implicit_pure = 0;
+  gfc_unset_implicit_pure (NULL);
 
   if (st == ST_STOP && gfc_find_state (COMP_CRITICAL) == SUCCESS)
     {
@@ -2824,8 +2822,7 @@ lock_unlock_statement (gfc_statement st)
       return MATCH_ERROR;
     }
 
-  if (gfc_implicit_pure (NULL))
-    gfc_current_ns->proc_name->attr.implicit_pure = 0;
+  gfc_unset_implicit_pure (NULL);
 
   if (gfc_option.coarray == GFC_FCOARRAY_NONE)
     {
@@ -3020,8 +3017,7 @@ sync_statement (gfc_statement st)
       return MATCH_ERROR;
     }
 
-  if (gfc_implicit_pure (NULL))
-    gfc_current_ns->proc_name->attr.implicit_pure = 0;
+  gfc_unset_implicit_pure (NULL);
 
   if (gfc_notify_std (GFC_STD_F2008, "SYNC statement at %C")
       == FAILURE)
@@ -3500,15 +3496,15 @@ gfc_match_allocate (void)
       if (gfc_check_do_variable (tail->expr->symtree))
 	goto cleanup;
 
-      if (gfc_pure (NULL) && gfc_impure_variable (tail->expr->symtree->n.sym))
+      bool impure = gfc_impure_variable (tail->expr->symtree->n.sym);
+      if (impure && gfc_pure (NULL))
 	{
 	  gfc_error ("Bad allocate-object at %C for a PURE procedure");
 	  goto cleanup;
 	}
 
-      if (gfc_implicit_pure (NULL)
-	    && gfc_impure_variable (tail->expr->symtree->n.sym))
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
+      if (impure)
+	gfc_unset_implicit_pure (NULL);
 
       if (tail->expr->ts.deferred)
 	{
@@ -3890,14 +3886,15 @@ gfc_match_deallocate (void)
 
       sym = tail->expr->symtree->n.sym;
 
-      if (gfc_pure (NULL) && gfc_impure_variable (sym))
+      bool impure = gfc_impure_variable (sym);
+      if (impure && gfc_pure (NULL))
 	{
 	  gfc_error ("Illegal allocate-object at %C for a PURE procedure");
 	  goto cleanup;
 	}
 
-      if (gfc_implicit_pure (NULL) && gfc_impure_variable (sym))
-	gfc_current_ns->proc_name->attr.implicit_pure = 0;
+      if (impure)
+	gfc_unset_implicit_pure (NULL);
 
       if (gfc_is_coarray (tail->expr)
 	  && gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
@@ -5142,7 +5139,6 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
 {
   gfc_ref *ref;
   gfc_symbol *assoc_sym;
-  int i;
 
   assoc_sym = associate->symtree->n.sym;
 
@@ -5153,9 +5149,8 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
   while (ref && ref->next)
     ref = ref->next;
 
-  if (selector->ts.type == BT_CLASS
-	&& CLASS_DATA (selector)->as
-	&& ref && ref->type == REF_ARRAY)
+  if (selector->ts.type == BT_CLASS && CLASS_DATA (selector)->as
+      && ref && ref->type == REF_ARRAY)
     {
       /* Ensure that the array reference type is set.  We cannot use
 	 gfc_resolve_expr at this point, so the usable parts of
@@ -5163,7 +5158,7 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
       if (ref->u.ar.type == AR_UNKNOWN)
 	{
 	  ref->u.ar.type = AR_ELEMENT;
-	  for (i = 0; i < ref->u.ar.dimen + ref->u.ar.codimen; i++)
+	  for (int i = 0; i < ref->u.ar.dimen + ref->u.ar.codimen; i++)
 	    if (ref->u.ar.dimen_type[i] == DIMEN_RANGE
 		|| ref->u.ar.dimen_type[i] == DIMEN_VECTOR
 		|| (ref->u.ar.dimen_type[i] == DIMEN_UNKNOWN
@@ -5182,37 +5177,19 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
 	selector->rank = 0;
     }
 
-  if (selector->ts.type != BT_CLASS)
+  if (selector->rank)
     {
-      /* The correct class container has to be available.  */
-      if (selector->rank)
-	{
-	  assoc_sym->attr.dimension = 1;
-	  assoc_sym->as = gfc_get_array_spec ();
-	  assoc_sym->as->rank = selector->rank;
-	  assoc_sym->as->type = AS_DEFERRED;
-	}
-      else
-	assoc_sym->as = NULL;
-
-      assoc_sym->ts.type = BT_CLASS;
-      assoc_sym->ts.u.derived = selector->ts.u.derived;
-      assoc_sym->attr.pointer = 1;
-      gfc_build_class_symbol (&assoc_sym->ts, &assoc_sym->attr,
-			      &assoc_sym->as, false);
+      assoc_sym->attr.dimension = 1;
+      assoc_sym->as = gfc_get_array_spec ();
+      assoc_sym->as->rank = selector->rank;
+      assoc_sym->as->type = AS_DEFERRED;
     }
   else
+    assoc_sym->as = NULL;
+
+  if (selector->ts.type == BT_CLASS)
     {
       /* The correct class container has to be available.  */
-      if (selector->rank)
-	{
-	  assoc_sym->attr.dimension = 1;
-	  assoc_sym->as = gfc_get_array_spec ();
-	  assoc_sym->as->rank = selector->rank;
-	  assoc_sym->as->type = AS_DEFERRED;
-	}
-      else
-	assoc_sym->as = NULL;
       assoc_sym->ts.type = BT_CLASS;
       assoc_sym->ts.u.derived = CLASS_DATA (selector)->ts.u.derived;
       assoc_sym->attr.pointer = 1;
@@ -5364,7 +5341,6 @@ gfc_match_select_type (void)
   char name[GFC_MAX_SYMBOL_LEN];
   bool class_array;
   gfc_symbol *sym;
-  gfc_namespace *parent_ns;
 
   m = gfc_match_label ();
   if (m == MATCH_ERROR)
@@ -5373,8 +5349,6 @@ gfc_match_select_type (void)
   m = gfc_match (" select type ( ");
   if (m != MATCH_YES)
     return m;
-
-  gfc_current_ns = gfc_build_block_ns (gfc_current_ns);
 
   m = gfc_match (" %n => %e", name, &expr2);
   if (m == MATCH_YES)
@@ -5406,7 +5380,10 @@ gfc_match_select_type (void)
 
   m = gfc_match (" )%t");
   if (m != MATCH_YES)
-    goto cleanup;
+    {
+      gfc_error ("parse error in SELECT TYPE statement at %C");
+      goto cleanup;
+    }
 
   /* This ghastly expression seems to be needed to distinguish a CLASS
      array, which can have a reference, from other expressions that
@@ -5444,9 +5421,6 @@ gfc_match_select_type (void)
   return MATCH_YES;
 
 cleanup:
-  parent_ns = gfc_current_ns->parent;
-  gfc_free_namespace (gfc_current_ns);
-  gfc_current_ns = parent_ns;
   return m;
 }
 

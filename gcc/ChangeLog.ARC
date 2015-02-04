@@ -1,3 +1,154 @@
+2014-12-22 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* doc/extend.texi: Update builtins.
+
+2014-12-19  Anton Kolesov  <Anton.Kolesov@synopsys.com>
+
+	* testsuite/gcc.target/arc/builtin_general.c: Fix failures on
+	ARCompact.
+
+2014-12-19  Anton Kolesov  <Anton.Kolesov@synopsys.com>
+
+	* testsuite/gcc.target/arc/builtin_clri.c: Fix failures with new-style
+	ARCCompact options.
+	* testsuite/gcc.target/arc/builtin_ffs.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_fls.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_kflag.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_seti.c: Likewise.
+
+2014-12-18 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.c: Fix endianess for atomic ops.
+
+2014-12-12 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.h: Define __LL64__; Cleanup ASM_SPEC.
+
+2014-12-08 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.md: Handle prefetch/prefetchw
+          instructions, HS only.
+
+2014-12-05 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.md: Allow addr-scalled prefetch instructions.
+	* testsuite/gcc.target/arc/builtin_mul64.c: Remove.
+	* testsuite/gcc.target/arc/builtin_mulu64.c: Likewise.
+
+2014-12-04 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.md: Update prefetch_3 pattern.
+
+2014-11-26 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* common/config/arc/arc-common.c: Decommission mRcw, mRcq and
+          mexpand-adddi options.
+	* config/arc/arc.md: Likewise.
+	* config/arc/arc.opt: Likewise.
+	* config/arc/constraints.md: Likewise.
+
+2014-11-21 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.h: Remove deprecated options.
+	* config/arc/arc.opt: Likewise.
+	* doc/invoke.texi: Update document.
+
+2014-11-13 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.c: Add mtune=arcembest.
+	* config/arc/arc.md: Likewise.
+	* config/arc/arc.opt: Likewise.
+	* doc/invoke.texi: Update options.
+	* doc/extend.texi: Update builtins.
+
+2014-11-12 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.opt: Remove malign-call and
+          munalign-prob-threshold options.
+	* config/arc/arc.c: Likewise.
+	* doc/invoke.texi: Likewise.
+	* common/config/arc/arc-common.c: Likewise.
+
+2014-10-24 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* testsuite/gcc.target/arc/builtin_errors.c: New file.
+	* testsuite/gcc.target/arc/builtin_general.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_lr.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_simdarc.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_special.c: Likewise.
+	* testsuite/gcc.target/arc/builtin_sr.c: Likewise.
+
+2014-10-22 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.c: Enable ACCL,ACCH to be used when FPU fused
+          instruction are selected.
+	* config/arc/fpu.md: Add double fused instructions.
+
+2014-10-20 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.h (ACC_REG_FIRST, ACC_REG_LAST, ACCL_REGNO,
+	ACCH_REGNO): Define.
+	* config/arc/arc.c (arc_conditional_register_usage): Add ACCL,ACCH.
+	(arc_primarysecondary_p): New function.
+	* config/arc/arc.md (mul64, mulu64, mpyd_arcv2hs, mpyd_imm_arcv2hs,
+	mpydu_arcv2hs, mpydu_imm_arcv2hs): Refurbish.
+	(maddsidi4, maddsidi, macd, mac, umaddsidi4, umaddsidi, macdu, macu):
+	New patterns.
+
+2014-10-08 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc-protos.h (arc_bdr_iscond): Declare.
+	* config/arc/arc.c (arc_expand_builtin): Cleanup
+	(arc_init_builtins): Likewise.
+	(arc_bdr_iscond): New function.
+	(arc_expand_builtin_aligned): New function.
+	(arc_builtin_decl): Likewise.
+	(TARGET_BUILTIN_DECL): Define
+	* config/arc/arc.md: Use arc_bdr_iscond.
+	(casesi_compact_jump instruction): Update instruction
+	length.
+	* config/arc/arc.md: Cleanup builtins.
+	* config/arc/atomic.md: Likewise.
+	* config/arc/fpx.md: Likewise.
+	* config/arc/builtins.def: New file.
+	* config/arc/simdarc.md: Likewise.
+
+2014-09-30 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* common/config/arc/arc-common.c: Make sure -mll64 is not
+          enabled for ARC6xx.
+
+2014-09-25 Claudiu Zissulescu <claziss@synopsys.com>
+
+        * config/arc/arc.md (casesi_load): Fix pattern length.
+
+2014-09-23 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* common/config/arc/arc-common.c: Make -mll64 default for HS.
+	* config/arc/arc.md: Cleanup.
+
+2014-09-22 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* common/config/arc/arc-common.c
+          (arc_option_optimization_table): Turn on the scheduling by
+          default.
+	  (arc_option_default_params): New function.
+	* config/arc/arc.c (arc_override_options): Enable sw prefetch
+          at -O3.
+
+2014-09-18 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.c (workaround_arc_anomaly): call arc_hazard
+          here.
+
+2014-09-16 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.h (PTRDIFF_TYPE): defined to int.
+
+2014-09-15 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arc.h (SIZE_TYPE): defined to unsigned int.
+
 2014-09-08 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_asm_insn_p): Check assignments also
@@ -13,6 +164,10 @@
 	* config/arc/arc.c: Insert a nop is the last instruction of a
           ZOL is inline asm.
 
+2014-08-29 Claudiu Zissulescu <claziss@synopsys.com>
+
+	* config/arc/arcHS.md: Change rezervation for archs load.
+
 2014-08-11 Claudiu Zissulescu <claziss@synopsys.com>
 
  	* config/arc/arc.c (arc_function_args_impl): Handle TI quatities.
@@ -23,12 +178,12 @@
 	(arc_function_args_impl): allow passing partial anonymous DIargs.
 	(arc_partial_bytes): Likewise.
 
-2013-08-09 Claudiu Zissulescu <claziss@synopsys.com>
+2014-08-09 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* common/config/arc/arc-common.c: mdiv-rem default on
 	for ARC HS.
 
-2013-07-29 Claudiu Zissulescu <claziss@synopsys.com>
+2014-07-29 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_setup_incoming_varargs): Pass
           anonymous arguments in registers (ABI HS).
@@ -39,14 +194,14 @@
 	* testsuite/gcc.target/arc/va_args-2.c: Likewise.
 	* testsuite/gcc.target/arc/va_args-3.c: Likewise.
 
-2013-07-23 Claudiu Zissulescu <claziss@synopsys.com>
+2014-07-23 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc-opts.h (arc_abi_type): Define.
 	* config/arc/arc.opt (-mabi=): New option.
 	* config/arc/arc.c (arc_setup_incoming_varargs): Clean up.
 	(arc_function_args_impl): Select ABI std/pack.
 
-2013-07-15 Claudiu Zissulescu <claziss@synopsys.com>
+2014-07-15 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.md (EXPAND mulsidi3): Use separate
           instructions when dealing with immediates, HS only.
@@ -54,24 +209,24 @@
 	  (mpyd_imm_arcv2hs): New pattern.
 	  (mpydu_imm_arcv2hs): Likewise.
 
-2013-06-30 Claudiu Zissulescu <claziss@synopsys.com>
+2014-06-30 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.h (DRIVER_SELF_SPECS): Add new mcpu options.
 	* config/arc/arc.opt: Likewise.
 
-2013-06-27 Claudiu Zissulescu <claziss@synopsys.com>
+2014-06-27 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* common/config/arc/arc-common.c: Atomic option set default on for HS.
 	* config.gcc: Add arcem. archs configuration variants.
 	* config/arc/arc.h: Translate marc600, macr601, marcem, and marchs options.
 	* config/arc/arc.opt: Add marc600, macr601, marcem, and marchs options.
 
-2013-06-26 Claudiu Zissulescu <claziss@synopsys.com>
+2014-06-26 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.h (ASM_DEFOPT): Define.
 	(ASM_SPEC): Use it.
 
-2013-06-25 Claudiu Zissulescu <claziss@synopsys.com>
+2014-06-25 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c: Add -mirq-ctrl-saved option.
 	* config/arc/arc.md: Likewise
@@ -79,23 +234,23 @@
 	* doc/invoke.texi: Likewise
 	* config/arc/t-arc-newlib (MULTILIB_REUSE): Define.
 
-2013-06-18 Claudiu Zissulescu <claziss@synopsys.com>
+2014-06-18 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* doc/extend.texi: Update __builtin_arc_sr description.
 	* doc/invoke.texi: Update mmul32x16 description.
 
-2013-05-28 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-28 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (%+):New punctuation character.
 	* config/arc/arc.opt (mbypass-cache): New option.
 	* config/arc/atomic.md: Use %+ punctuation character.
 
-2013-05-27 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-27 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.md (simple_return): Use RETI when returning
           from an interrupt. Valid only for ARCv2.
 
-2013-05-22 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-22 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_conditional_register_usage): Make sure
           r30 is fix for the time being.
@@ -104,18 +259,18 @@
           class.
 	* config/arc/constraints.md ('h'): New register constraint letter.
 
-2013-05-16 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-16 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_expand_movmem): Fix computation on
           n_pieces.
 	* config/arc/arc.md (addsi3_mixed): Fix attribute.
 
-2013-05-16 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-16 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_expand_movmem): Use double load/store
 	operations.
 
-2013-05-13 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-13 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc-opts.h (FPX_DP): Define.
 	* config/arc/arc.c (arc_init): Allow use of double precision
@@ -128,7 +283,7 @@
 	* config/arc/fpx.md: Clean up and filter out use of drsubh
           instructions for EM.
 
-2013-05-09 Claudiu Zissulescu <claziss@synopsys.com>
+2014-05-09 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_init): Allow FPU single precission to
           be used for EM.
@@ -138,17 +293,17 @@
 	* config/arc/arc.md (mulsi3_v2): Allow commutative operand.
 	* config/arc/arc.opt: Option documentation updated.
 
-2013-04-07 Claudiu Zissulescu <claziss@synopsys.com>
+2014-04-07 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/predicates.md (mult_operator): Update.
 
-2013-04-07 Claudiu Zissulescu <claziss@synopsys.com>
+2014-04-07 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c: Identation fix.
 	* config/arc/arc.h: Add marc700 alias.
 	* config/arc/arc.opt: Likewise.
 
-2013-04-03 Claudiu Zissulescu <claziss@synopsys.com>
+2014-04-03 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.md (*extendhisi2_i): Update pattern, use Ucd.
 	* config/arc/arc.c (compact_memory_operand_p): Refurbish the
@@ -157,7 +312,7 @@
           memory constraint "T".
 	* config/arc/predicates.md (compact_load_memory_operand): Remove it.
 
-2013-04-02 Claudiu Zissulescu <claziss@synopsys.com>
+2014-04-02 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_mode_dependent_address_p): Update
           condition when the address is mode dependent.
@@ -165,7 +320,7 @@
 	* doc/extend.texi: Update document.
 	* testsuite/gcc.target/arc/pr9000727530.c: New test.
 
-2013-03-28 Claudiu Zissulescu <claziss@synopsys.com>
+2014-03-28 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.md (movsi_ne): Update pattern.
 
@@ -177,12 +332,12 @@
           instructions.
 	* doc/install.texi: Typo fix.
 
-2013-03-17 Claudiu Zissulescu <claziss@synopsys.com>
+2014-03-17 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.md: Update how multiplication is done for ARC 600.
 	* doc/install.texi: Update with HS and EM options.
 
-2013-03-14 Claudiu Zissulescu <claziss@synopsys.com>
+2014-03-14 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.c (arc_init): Allow FPU options only for ARC HS.
 	* doc/invoke.texi: Update document, naming.
@@ -193,7 +348,7 @@
           assembler when using matomic.
 	* config/arc/t-arc-newlib (MULTILIB_MATCHES): Remove mno-mpy synonym.
 
-2013-03-12 Claudiu Zissulescu <claziss@synopsys.com>
+2014-03-12 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* doc/invoke.texi: Update document with ARCv2HS options.
 
@@ -487,7 +642,6 @@
 	* config/arc/arc.opt: Remove A5 variant, add HS variant.
 	* config/arc/constraints.md: Change TARGET_EM to TARGET_V2
 
->>>>>>> arc-4.8-64bit
 2013-10-14 Claudiu Zissulescu <claziss@synopsys.com>
 
 	* config/arc/arc.h: Remove CFA_FRAME_BASE_OFFSET and

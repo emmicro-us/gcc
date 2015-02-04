@@ -201,24 +201,14 @@ update_live_info (bitmap lr_bitmap)
     }
 }
 
-/* Return true if pseudo REGNO can be potentially coalesced.  Use
-   SPLIT_PSEUDO_BITMAP to find pseudos whose live ranges were
-   split.  */
+/* Return true if pseudo REGNO can be potentially coalesced.  */
 static bool
-coalescable_pseudo_p (int regno, bitmap split_origin_bitmap)
+coalescable_pseudo_p (int regno)
 {
   lra_assert (regno >= FIRST_PSEUDO_REGISTER);
-  /* Don't coalesce inheritance pseudos because spilled inheritance
-     pseudos will be removed in subsequent 'undo inheritance'
-     pass.  */
-  return (lra_reg_info[regno].restore_regno < 0
-	  /* We undo splits for spilled pseudos whose live ranges were
-	     split.  So don't coalesce them, it is not necessary and
-	     the undo transformations would be wrong.  */
-	  && ! bitmap_bit_p (split_origin_bitmap, regno)
-	  /* We don't want to coalesce regnos with equivalences, at
+  return (/* We don't want to coalesce regnos with equivalences, at
 	     least without updating this info.  */
-	  && ira_reg_equiv[regno].constant == NULL_RTX
+	  ira_reg_equiv[regno].constant == NULL_RTX
 	  && ira_reg_equiv[regno].memory == NULL_RTX
 	  && ira_reg_equiv[regno].invariant == NULL_RTX);
 }
@@ -230,11 +220,12 @@ lra_coalesce (void)
 {
   basic_block bb;
   rtx mv, set, insn, next, *sorted_moves;
-  int i, mv_num, sregno, dregno, restore_regno;
+  int i, mv_num, sregno, dregno;
   unsigned int regno;
   int coalesced_moves;
   int max_regno = max_reg_num ();
-  bitmap_head involved_insns_bitmap, split_origin_bitmap;
+  bitmap_head involved_insns_bitmap;
+  bitmap_head result_pseudo_vals_bitmap;
   bitmap_iterator bi;
 
   timevar_push (TV_LRA_COALESCE);
@@ -249,11 +240,6 @@ lra_coalesce (void)
     first_coalesced_pseudo[i] = next_coalesced_pseudo[i] = i;
   sorted_moves = XNEWVEC (rtx, get_max_uid ());
   mv_num = 0;
-  /* Collect pseudos whose live ranges were split.  */
-  bitmap_initialize (&split_origin_bitmap, &reg_obstack);
-  EXECUTE_IF_SET_IN_BITMAP (&lra_split_regs, 0, regno, bi)
-    if ((restore_regno = lra_reg_info[regno].restore_regno) >= 0)
-      bitmap_set_bit (&split_origin_bitmap, restore_regno);
   /* Collect moves.  */
   coalesced_moves = 0;
   FOR_EACH_BB (bb)
@@ -265,15 +251,13 @@ lra_coalesce (void)
 	    && (sregno = REGNO (SET_SRC (set))) >= FIRST_PSEUDO_REGISTER
 	    && (dregno = REGNO (SET_DEST (set))) >= FIRST_PSEUDO_REGISTER
 	    && mem_move_p (sregno, dregno)
-	    && coalescable_pseudo_p (sregno, &split_origin_bitmap)
-	    && coalescable_pseudo_p (dregno, &split_origin_bitmap)
+	    && coalescable_pseudo_p (sregno) && coalescable_pseudo_p (dregno)
 	    && ! side_effects_p (set)
 	    && !(lra_intersected_live_ranges_p
 		 (lra_reg_info[sregno].live_ranges,
 		  lra_reg_info[dregno].live_ranges)))
 	  sorted_moves[mv_num++] = insn;
     }
-  bitmap_clear (&split_origin_bitmap);
   qsort (sorted_moves, mv_num, sizeof (rtx), move_freq_compare_func);
   /* Coalesced copies, most frequently executed first.	*/
   bitmap_initialize (&coalesced_pseudos_bitmap, &reg_obstack);
@@ -337,6 +321,34 @@ lra_coalesce (void)
 	      }
 	  }
     }
+  /* If we have situation after inheritance pass:
+
+     r1 <- ...  insn originally setting p1
+     i1 <- r1   setting inheritance i1 from reload r1
+       ...
+     ... <- ... p2 ... dead p2
+     ..
+     p1 <- i1
+     r2 <- i1
+     ...<- ... r2 ...
+
+     And we are coalescing p1 and p2 using p1.  In this case i1 and p1
+     should have different values, otherwise they can get the same
+     hard reg and this is wrong for insn using p2 before coalescing.
+     So invalidate such inheritance pseudo values.  */
+  bitmap_initialize (&result_pseudo_vals_bitmap, &reg_obstack);
+  EXECUTE_IF_SET_IN_BITMAP (&coalesced_pseudos_bitmap, 0, regno, bi)
+    bitmap_set_bit (&result_pseudo_vals_bitmap,
+		    lra_reg_info[first_coalesced_pseudo[regno]].val);
+  EXECUTE_IF_SET_IN_BITMAP (&lra_inheritance_pseudos, 0, regno, bi)
+    if (bitmap_bit_p (&result_pseudo_vals_bitmap, lra_reg_info[regno].val))
+      {
+	lra_set_regno_unique_value (regno);
+	if (lra_dump_file != NULL)
+	  fprintf (lra_dump_file,
+		   "	 Make unique value for inheritance r%d\n", regno);
+      }
+  bitmap_clear (&result_pseudo_vals_bitmap);
   bitmap_clear (&used_pseudos_bitmap);
   bitmap_clear (&involved_insns_bitmap);
   bitmap_clear (&coalesced_pseudos_bitmap);
