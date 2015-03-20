@@ -1922,7 +1922,9 @@ duplicate_decls (tree newdecl, tree olddecl, bool newdecl_is_friend)
 	{
 	  /* Per C++11 8.3.6/4, default arguments cannot be added in later
 	     declarations of a function template.  */
-	  check_redeclaration_no_default_args (newdecl);
+	  if (DECL_SOURCE_LOCATION (newdecl)
+	      != DECL_SOURCE_LOCATION (olddecl))
+	    check_redeclaration_no_default_args (newdecl);
 
 	  check_default_args (newdecl);
 
@@ -10132,8 +10134,9 @@ grokdeclarator (const cp_declarator *declarator,
      the object as `const'.  */
   if (constexpr_p && innermost_code != cdk_function)
     {
-      if (type_quals & TYPE_QUAL_VOLATILE)
-        error ("both %<volatile%> and %<constexpr%> cannot be used here");
+      /* DR1688 says that a `constexpr' specifier in combination with
+	 `volatile' is valid.  */
+
       if (TREE_CODE (type) != REFERENCE_TYPE)
 	{
 	  type_quals |= TYPE_QUAL_CONST;
@@ -11227,11 +11230,10 @@ check_default_argument (tree decl, tree arg, tsubst_flags_t complain)
 				     LOOKUP_IMPLICIT);
   --cp_unevaluated_operand;
 
-  if (warn_zero_as_null_pointer_constant
-      && TYPE_PTR_OR_PTRMEM_P (decl_type)
-      && null_ptr_cst_p (arg)
-      && (complain & tf_warning)
-      && maybe_warn_zero_as_null_pointer_constant (arg, input_location))
+  /* Avoid redundant -Wzero-as-null-pointer-constant warnings at
+     the call sites.  */
+  if (TYPE_PTR_OR_PTRMEM_P (decl_type)
+      && null_ptr_cst_p (arg))
     return nullptr_node;
 
   /* [dcl.fct.default]
@@ -13721,9 +13723,7 @@ start_preparsed_function (tree decl1, tree attrs, int flags)
       || (DECL_CONSTRUCTOR_P (decl1)
 	  && targetm.cxx.cdtor_returns_this ()))
     {
-      cdtor_label = build_decl (input_location, 
-				LABEL_DECL, NULL_TREE, void_type_node);
-      DECL_CONTEXT (cdtor_label) = current_function_decl;
+      cdtor_label = create_artificial_label (input_location);
     }
 
   start_fname_decls ();
