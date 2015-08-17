@@ -20,7 +20,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "bconfig.h"
 #include "system.h"
 #include "errors.h"
-#include "hashtab.h"
 
 /* enum mode_class is normally defined by machmode.h but we can't
    include that header here.  */
@@ -1040,7 +1039,7 @@ mode_inner_inline (machine_mode mode)\n\
   for_all_modes (c, m)
     printf ("    case %smode: return %smode;\n", m->name,
 	    c != MODE_PARTIAL_INT && m->component
-	    ? m->component->name : void_mode->name);
+	    ? m->component->name : m->name);
 
   puts ("\
     default: return mode_inner[mode];\n\
@@ -1339,7 +1338,7 @@ emit_mode_inner (void)
   for_all_modes (c, m)
     tagged_printf ("%smode",
 		   c != MODE_PARTIAL_INT && m->component
-		   ? m->component->name : void_mode->name,
+		   ? m->component->name : m->name,
 		   m->name);
 
   print_closer ();
@@ -1600,11 +1599,7 @@ emit_mode_int_n (void)
   for (i = 0; i<n_modes - 1; i++)
     for (j = i + 1; j < n_modes; j++)
       if (mode_sort[i]->int_n > mode_sort[j]->int_n)
-	{
-	  m = mode_sort[i];
-	  mode_sort[i] = mode_sort[j];
-	  mode_sort[j] = m;
-	}
+	std::swap (mode_sort[i], mode_sort[j]);
 
   for (i = 0; i < n_modes; i ++)
     {

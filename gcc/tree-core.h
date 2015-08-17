@@ -20,6 +20,8 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_TREE_CORE_H
 #define GCC_TREE_CORE_H
 
+#include "symtab.h"
+
 /* This file contains all the data structures that define the 'tree' type.
    There are no accessor macros nor functions in this file. Only the
    basic data structures, extern declarations and type definitions.  */
@@ -430,17 +432,6 @@ enum cv_qualifier {
   TYPE_QUAL_RESTRICT = 0x4,
   TYPE_QUAL_ATOMIC   = 0x8
 };
-
-/* Enumerate visibility settings.  */
-#ifndef SYMBOL_VISIBILITY_DEFINED
-#define SYMBOL_VISIBILITY_DEFINED
-enum symbol_visibility {
-  VISIBILITY_DEFAULT,
-  VISIBILITY_PROTECTED,
-  VISIBILITY_HIDDEN,
-  VISIBILITY_INTERNAL
-};
-#endif  // SYMBOL_VISIBILITY_DEFINED
 
 /* Standard named or nameless data types of the C compiler.  */
 enum tree_index {
@@ -1097,7 +1088,7 @@ struct GTY(()) tree_base {
        TREE_THIS_NOTRAP in
           INDIRECT_REF, MEM_REF, TARGET_MEM_REF, ARRAY_REF, ARRAY_RANGE_REF
 
-       SSA_NAME_IN_FREELIST in
+       SSA_NAME_IN_FREE_LIST in
           SSA_NAME
 
        DECL_NONALIASED in
@@ -1334,6 +1325,9 @@ struct GTY(()) tree_block {
   tree abstract_origin;
   tree fragment_origin;
   tree fragment_chain;
+
+  /* Pointer to the DWARF lexical block.  */
+  struct die_struct *die;
 };
 
 struct GTY(()) tree_type_common {
@@ -1649,7 +1643,7 @@ struct GTY(()) tree_optimization_option {
   struct tree_common common;
 
   /* The optimization options used by the user.  */
-  struct cl_optimization opts;
+  struct cl_optimization *opts;
 
   /* Target optabs for this set of optimization options.  This is of
      type `struct target_optabs *'.  */
@@ -1673,7 +1667,7 @@ struct GTY(()) tree_target_option {
   struct target_globals *globals;
 
   /* The optimization options used by the user.  */
-  struct cl_target_option opts;
+  struct cl_target_option *opts;
 };
 
 /* Define the overall contents of a tree node.

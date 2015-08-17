@@ -25,22 +25,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"		/* For UNITS_PER_WORD.  */
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
 #include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "real.h"
 #include "tree.h"
 #include "fold-const.h"
 #include "stringpool.h"
 #include "tree-nested.h"
 #include "stor-layout.h"
-#include "ggc.h"
 #include "gfortran.h"
 #include "diagnostic-core.h"	/* For internal_error.  */
 #include "toplev.h"	/* For rest_of_decl_compilation.  */
@@ -685,6 +675,11 @@ gfc_build_intrinsic_lib_fndecls (void)
 #undef LIB_FUNCTION
 #undef DEFINE_MATH_BUILTIN
 #undef DEFINE_MATH_BUILTIN_C
+
+    /* There is one built-in we defined manually, because it gets called
+       with builtin_decl_for_precision() or builtin_decl_for_float_type()
+       even though it is not an OTHER_BUILTIN: it is SQRT.  */
+    quad_decls[BUILT_IN_SQRT] = define_quad_builtin ("sqrtq", func_1, true);
 
   }
 
@@ -5921,8 +5916,17 @@ gfc_conv_intrinsic_sizeof (gfc_se *se, gfc_expr *expr)
     }
   else if (arg->ts.type == BT_CLASS)
     {
-      if (arg->rank)
+      /* For deferred length arrays, conv_expr_descriptor returns an
+	 indirect_ref to the component.  */
+      if (arg->rank < 0
+	  || (arg->rank > 0 && !VAR_P (argse.expr)
+	      && GFC_DECL_CLASS (TREE_OPERAND (argse.expr, 0))))
 	byte_size = gfc_class_vtab_size_get (TREE_OPERAND (argse.expr, 0));
+      else if (arg->rank > 0)
+	/* The scalarizer added an additional temp.  To get the class' vptr
+	   one has to look at the original backend_decl.  */
+	byte_size = gfc_class_vtab_size_get (
+	      GFC_DECL_SAVED_DESCRIPTOR (arg->symtree->n.sym->backend_decl));
       else
 	byte_size = gfc_class_vtab_size_get (argse.expr);
     }
@@ -6053,7 +6057,11 @@ gfc_conv_intrinsic_storage_size (gfc_se *se, gfc_expr *expr)
       gfc_conv_expr_descriptor (&argse, arg);
       if (arg->ts.type == BT_CLASS)
 	{
-	  tmp = gfc_class_vtab_size_get (TREE_OPERAND (argse.expr, 0));
+	  if (arg->rank > 0)
+	    tmp = gfc_class_vtab_size_get (
+		 GFC_DECL_SAVED_DESCRIPTOR (arg->symtree->n.sym->backend_decl));
+	  else
+	    tmp = gfc_class_vtab_size_get (TREE_OPERAND (argse.expr, 0));
 	  tmp = fold_convert (result_type, tmp);
 	  goto done;
 	}
@@ -6664,6 +6672,8 @@ gfc_conv_associated (gfc_se *se, gfc_expr *expr)
 						       arg2se.expr);
 	  gfc_add_block_to_block (&se->pre, &arg1se.pre);
 	  gfc_add_block_to_block (&se->post, &arg1se.post);
+	  gfc_add_block_to_block (&se->pre, &arg2se.pre);
+	  gfc_add_block_to_block (&se->post, &arg2se.post);
           tmp = fold_build2_loc (input_location, EQ_EXPR, boolean_type_node,
 				 arg1se.expr, arg2se.expr);
           tmp2 = fold_build2_loc (input_location, NE_EXPR, boolean_type_node,
@@ -7080,7 +7090,11 @@ gfc_conv_intrinsic_loc (gfc_se * se, gfc_expr * expr)
 
   arg_expr = expr->value.function.actual->expr;
   if (arg_expr->rank == 0)
-    gfc_conv_expr_reference (se, arg_expr);
+    {
+      if (arg_expr->ts.type == BT_CLASS)
+	gfc_add_component_ref (arg_expr, "_data");
+      gfc_conv_expr_reference (se, arg_expr);
+    }
   else
     gfc_conv_array_parameter (se, arg_expr, true, NULL, NULL, NULL);
   se->expr = convert (gfc_get_int_type (gfc_index_integer_kind), se->expr);
@@ -7408,8 +7422,7 @@ conv_intrinsic_ieee_is_normal (gfc_se * se, gfc_expr * expr)
 static void
 conv_intrinsic_ieee_is_negative (gfc_se * se, gfc_expr * expr)
 {
-  tree arg, signbit, isnan, decl;
-  int argprec;
+  tree arg, signbit, isnan;
 
   /* Convert arg, evaluate it only once.  */
   conv_ieee_function_args (se, expr, &arg, 1);
@@ -7420,9 +7433,9 @@ conv_intrinsic_ieee_is_negative (gfc_se * se, gfc_expr * expr)
 			       1, arg);
   STRIP_TYPE_NOPS (isnan);
 
-  argprec = TYPE_PRECISION (TREE_TYPE (arg));
-  decl = builtin_decl_for_precision (BUILT_IN_SIGNBIT, argprec);
-  signbit = build_call_expr_loc (input_location, decl, 1, arg);
+  signbit = build_call_expr_loc (input_location,
+				 builtin_decl_explicit (BUILT_IN_SIGNBIT),
+				 1, arg);
   signbit = fold_build2_loc (input_location, NE_EXPR, boolean_type_node,
 			     signbit, integer_zero_node);
 
@@ -7570,9 +7583,9 @@ conv_intrinsic_ieee_copy_sign (gfc_se * se, gfc_expr * expr)
   conv_ieee_function_args (se, expr, args, 2);
 
   /* Get the sign of the second argument.  */
-  argprec = TYPE_PRECISION (TREE_TYPE (args[1]));
-  decl = builtin_decl_for_precision (BUILT_IN_SIGNBIT, argprec);
-  sign = build_call_expr_loc (input_location, decl, 1, args[1]);
+  sign = build_call_expr_loc (input_location,
+			      builtin_decl_explicit (BUILT_IN_SIGNBIT),
+			      1, args[1]);
   sign = fold_build2_loc (input_location, NE_EXPR, boolean_type_node,
 			  sign, integer_zero_node);
 
@@ -8307,14 +8320,10 @@ walk_inline_intrinsic_transpose (gfc_ss *ss, gfc_expr *expr)
       if (tmp_ss->info->type != GFC_SS_SCALAR
 	  && tmp_ss->info->type != GFC_SS_REFERENCE)
 	{
-	  int tmp_dim;
-
 	  gcc_assert (tmp_ss->dimen == 2);
 
 	  /* We just invert dimensions.  */
-	  tmp_dim = tmp_ss->dim[0];
-	  tmp_ss->dim[0] = tmp_ss->dim[1];
-	  tmp_ss->dim[1] = tmp_dim;
+	  std::swap (tmp_ss->dim[0], tmp_ss->dim[1]);
 	}
 
       /* Stop when tmp_ss points to the last valid element of the chain...  */
@@ -8801,7 +8810,7 @@ conv_co_collective (gfc_code *code)
 	}
       opr_flags = build_int_cst (integer_type_node, opr_flag_int);
       gfc_conv_expr (&argse, opr_expr);
-      opr = gfc_build_addr_expr (NULL_TREE, argse.expr);
+      opr = argse.expr;
       fndecl = build_call_expr_loc (input_location, fndecl, 8, array, opr, opr_flags,
 				    image_index, stat, errmsg, strlen, errmsg_len);
     }

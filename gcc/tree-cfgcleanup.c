@@ -20,50 +20,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "cfghooks.h"
 #include "tree.h"
+#include "gimple.h"
+#include "rtl.h"
+#include "ssa.h"
+#include "alias.h"
 #include "fold-const.h"
 #include "tm_p.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfganal.h"
 #include "cfgcleanup.h"
-#include "basic-block.h"
 #include "diagnostic-core.h"
 #include "flags.h"
 #include "langhooks.h"
-#include "tree-ssa-alias.h"
 #include "internal-fn.h"
 #include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
 #include "gimple-iterator.h"
-#include "gimple-ssa.h"
 #include "tree-cfg.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
 #include "tree-ssa-loop-manip.h"
-#include "hashtab.h"
-#include "rtl.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
 #include "insn-config.h"
 #include "expmed.h"
 #include "dojump.h"
@@ -579,13 +555,15 @@ remove_forwarder_block (basic_block bb)
   return true;
 }
 
-/* STMT is a call that has been discovered noreturn.  Fixup the CFG
-   and remove LHS.  Return true if something changed.  */
+/* STMT is a call that has been discovered noreturn.  Split the
+   block to prepare fixing up the CFG and remove LHS.
+   Return true if cleanup-cfg needs to run.  */
 
 bool
 fixup_noreturn_call (gimple stmt)
 {
   basic_block bb = gimple_bb (stmt);
+  bool changed = false;
 
   if (gimple_call_builtin_p (stmt, BUILT_IN_RETURN))
     return false;
@@ -604,12 +582,17 @@ fixup_noreturn_call (gimple stmt)
 	    gsi_remove (&gsi, true);
 	}
       else
-	split_block (bb, stmt);
+	{
+	  split_block (bb, stmt);
+	  changed = true;
+	}
     }
 
-  /* If there is an LHS, remove it.  */
+  /* If there is an LHS, remove it, but only if its type has fixed size.
+     The LHS will need to be recreated during RTL expansion and creating
+     temporaries of variable-sized types is not supported.  */
   tree lhs = gimple_call_lhs (stmt);
-  if (lhs)
+  if (lhs && TREE_CODE (TYPE_SIZE_UNIT (TREE_TYPE (lhs))) == INTEGER_CST)
     {
       gimple_call_set_lhs (stmt, NULL_TREE);
 
@@ -626,9 +609,13 @@ fixup_noreturn_call (gimple stmt)
     }
 
   /* Mark the call as altering control flow.  */
-  gimple_call_set_ctrl_altering (stmt, true);
+  if (!gimple_call_ctrl_altering_p (stmt))
+    {
+      gimple_call_set_ctrl_altering (stmt, true);
+      changed = true;
+    }
 
-  return remove_fallthru_edge (bb->succs);
+  return changed;
 }
 
 

@@ -23,10 +23,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "intl.h"
 #include "coretypes.h"
 #include "opts.h"
-#include "options.h"
-#include "tm.h" /* For STACK_CHECK_BUILTIN,
-		   STACK_CHECK_STATIC_BUILTIN, DEFAULT_GDB_EXTENSIONS,
-		   DWARF2_DEBUGGING_INFO and DBX_DEBUGGING_INFO.  */
+#include "tm.h"
 #include "flags.h"
 #include "params.h"
 #include "diagnostic.h"
@@ -448,12 +445,12 @@ static const struct default_options default_options_table[] =
     { OPT_LEVELS_1_PLUS, OPT_fsplit_wide_types, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_ccp, NULL, 1 },
     { OPT_LEVELS_1_PLUS_NOT_DEBUG, OPT_ftree_bit_ccp, NULL, 1 },
+    { OPT_LEVELS_1_PLUS, OPT_ftree_coalesce_vars, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_dce, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_dominator_opts, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_dse, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_ter, NULL, 1 },
     { OPT_LEVELS_1_PLUS_NOT_DEBUG, OPT_ftree_sra, NULL, 1 },
-    { OPT_LEVELS_1_PLUS, OPT_ftree_copyrename, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_fre, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_copy_prop, NULL, 1 },
     { OPT_LEVELS_1_PLUS, OPT_ftree_sink, NULL, 1 },
@@ -741,6 +738,15 @@ finish_options (struct gcc_options *opts, struct gcc_options *opts_set,
 
   if (!opts->x_flag_opts_finished)
     {
+      /* We initialize opts->x_flag_pie to -1 so that targets can set a
+	 default value.  */
+      if (opts->x_flag_pie == -1)
+	{
+	  if (opts->x_flag_pic == 0)
+	    opts->x_flag_pie = DEFAULT_FLAG_PIE;
+	  else
+	    opts->x_flag_pie = 0;
+	}
       if (opts->x_flag_pie)
 	opts->x_flag_pic = opts->x_flag_pie;
       if (opts->x_flag_pic && !opts->x_flag_pie)
@@ -1386,7 +1392,7 @@ common_handle_option (struct gcc_options *opts,
 	unsigned int i;
 
 	if (lang_mask == CL_DRIVER)
-	  break;;
+	  break;
 
 	undoc_mask = ((opts->x_verbose_flag | opts->x_extra_warnings)
 		      ? 0
@@ -1584,6 +1590,8 @@ common_handle_option (struct gcc_options *opts,
 	      { "float-cast-overflow", SANITIZE_FLOAT_CAST,
 		sizeof "float-cast-overflow" - 1 },
 	      { "bounds", SANITIZE_BOUNDS, sizeof "bounds" - 1 },
+	      { "bounds-strict", SANITIZE_BOUNDS | SANITIZE_BOUNDS_STRICT,
+		sizeof "bounds-strict" - 1 },
 	      { "alignment", SANITIZE_ALIGNMENT, sizeof "alignment" - 1 },
 	      { "nonnull-attribute", SANITIZE_NONNULL_ATTRIBUTE,
 		sizeof "nonnull-attribute" - 1 },
@@ -1757,8 +1765,12 @@ common_handle_option (struct gcc_options *opts,
       break;
 
     case OPT_fdbg_cnt_:
+      /* Deferred.  */
+      break;
+
     case OPT_fdbg_cnt_list:
       /* Deferred.  */
+      opts->x_exit_after_options = true;
       break;
 
     case OPT_fdebug_prefix_map_:
@@ -2211,7 +2223,7 @@ set_debug_level (enum debug_info_type type, int extended, const char *arg,
 
 	  if (extended == 2)
 	    {
-#ifdef DWARF2_DEBUGGING_INFO
+#if defined DWARF2_DEBUGGING_INFO || defined DWARF2_LINENO_DEBUGGING_INFO
 	      opts->x_write_symbols = DWARF2_DEBUG;
 #elif defined DBX_DEBUGGING_INFO
 	      opts->x_write_symbols = DBX_DEBUG;

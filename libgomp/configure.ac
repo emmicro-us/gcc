@@ -170,7 +170,7 @@ AC_SUBST(libtool_VERSION)
 AC_STDC_HEADERS
 AC_HEADER_TIME
 ACX_HEADER_STRING
-AC_CHECK_HEADERS(pthread.h unistd.h semaphore.h sys/loadavg.h sys/time.h sys/time.h)
+AC_CHECK_HEADERS(pthread.h unistd.h semaphore.h sys/loadavg.h sys/sysctl.h sys/time.h)
 
 GCC_HEADER_STDINT(gstdint.h)
 
@@ -178,6 +178,9 @@ XPCFLAGS=""
 case "$host" in
   *-*-rtems*)
     # RTEMS supports Pthreads, but the library is not available at GCC build time.
+    ;;
+  nvptx*-*-*)
+    # NVPTX does not support Pthreads, has its own code replacement.
     ;;
   *)
     # Check to see if -pthread or -lpthread is needed.  Prefer the former.

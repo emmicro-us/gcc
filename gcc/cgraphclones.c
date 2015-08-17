@@ -67,33 +67,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
 #include "tree.h"
+#include "gimple.h"
+#include "rtl.h"
+#include "alias.h"
 #include "fold-const.h"
 #include "stringpool.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
 #include "emit-rtl.h"
-#include "predict.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
 #include "internal-fn.h"
 #include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "bitmap.h"
 #include "tree-cfg.h"
 #include "tree-inline.h"
 #include "langhooks.h"
@@ -104,9 +87,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic.h"
 #include "params.h"
 #include "intl.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
 #include "cgraph.h"
 #include "alloc-pool.h"
 #include "symbol-summary.h"
@@ -437,7 +417,7 @@ cgraph_node::expand_all_artificial_thunks ()
    node is not inlined.  */
 
 cgraph_node *
-cgraph_node::create_clone (tree decl, gcov_type gcov_count, int freq,
+cgraph_node::create_clone (tree new_decl, gcov_type gcov_count, int freq,
 			   bool update_original,
 			   vec<cgraph_edge *> redirect_callers,
 			   bool call_duplication_hook,
@@ -449,7 +429,7 @@ cgraph_node::create_clone (tree decl, gcov_type gcov_count, int freq,
   gcov_type count_scale;
   unsigned i;
 
-  new_node->decl = decl;
+  new_node->decl = new_decl;
   new_node->register_symbol ();
   new_node->origin = origin;
   new_node->lto_file_data = lto_file_data;
@@ -476,6 +456,7 @@ cgraph_node::create_clone (tree decl, gcov_type gcov_count, int freq,
 
   new_node->clone.tree_map = NULL;
   new_node->clone.args_to_skip = args_to_skip;
+  new_node->split_part = split_part;
   if (!args_to_skip)
     new_node->clone.combined_args_to_skip = clone.combined_args_to_skip;
   else if (clone.combined_args_to_skip)
@@ -1083,7 +1064,7 @@ cgraph_materialize_clone (cgraph_node *node)
 /* Once all functions from compilation unit are in memory, produce all clones
    and update all calls.  We might also do this on demand if we don't want to
    bring all functions to memory prior compilation, but current WHOPR
-   implementation does that and it is is bit easier to keep everything right in
+   implementation does that and it is a bit easier to keep everything right in
    this order.  */
 
 void

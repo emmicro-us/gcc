@@ -2507,7 +2507,7 @@
 	(gen_rtx_COND_EXEC
 	  (VOIDmode,
 	   gen_rtx_LTU (VOIDmode, gen_rtx_REG (CC_Cmode, CC_REG), GEN_INT (0)),
-	   gen_rtx_SET (VOIDmode, h0, plus_constant (SImode, h0, 1))));
+	   gen_rtx_SET (h0, plus_constant (SImode, h0, 1))));
       DONE;
     }
   emit_insn (gen_add_f (l0, l1, l2));
@@ -2719,13 +2719,13 @@
     {
       h1 = simplify_gen_binary (MINUS, SImode, h1, h2);
       if (!rtx_equal_p (h0, h1))
-	emit_insn (gen_rtx_SET (VOIDmode, h0, h1));
+	emit_insn (gen_rtx_SET (h0, h1));
       emit_insn (gen_sub_f (l0, l1, l2));
       emit_insn
 	(gen_rtx_COND_EXEC
 	  (VOIDmode,
 	   gen_rtx_LTU (VOIDmode, gen_rtx_REG (CC_Cmode, CC_REG), GEN_INT (0)),
-	   gen_rtx_SET (VOIDmode, h0, plus_constant (SImode, h0, -1))));
+	   gen_rtx_SET (h0, plus_constant (SImode, h0, -1))));
       DONE;
     }
   emit_insn (gen_sub_f (l0, l1, l2));
@@ -3759,9 +3759,11 @@
   operands[6] = gen_reg_rtx (SImode);
   operands[7] = operands[3];
   emit_insn (gen_subsi3 (operands[5], operands[0], operands[1]));
-
-  emit_cmp_and_jump_insns (operands[5], operands[2], GTU, NULL_RTX, SImode, 1, operands[4]);
-
+  emit_insn (gen_cmpsi_cc_insn_mixed (operands[5], operands[2]));
+  x = gen_rtx_GTU (VOIDmode, gen_rtx_REG (CCmode, CC_REG), const0_rtx);
+  x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
+			    gen_rtx_LABEL_REF (VOIDmode, operands[4]), pc_rtx);
+  emit_jump_insn (gen_rtx_SET (pc_rtx, x));
   if (TARGET_COMPACT_CASESI)
     {
       emit_jump_insn (gen_casesi_compact_jump (operands[5], operands[7]));
@@ -4308,9 +4310,20 @@
 			 (const_int 0)
 			 (match_dup 2)))]
   "TARGET_NORM"
-  {
-   operands[2] = gen_reg_rtx (SImode);
-   })
+{
+  emit_insn (gen_norm_f (operands[0], operands[1]));
+  emit_insn
+    (gen_rtx_COND_EXEC
+      (VOIDmode,
+       gen_rtx_LT (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
+       gen_rtx_SET (operands[0], const0_rtx)));
+  emit_insn
+    (gen_rtx_COND_EXEC
+      (VOIDmode,
+       gen_rtx_GE (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
+       gen_rtx_SET (operands[0], plus_constant (SImode, operands[0], 1))));
+  DONE;
+})
 
 (define_expand "ctzsi2"
   [(set (match_dup 2) (plus:SI (match_operand:SI 1 "register_operand" "")
@@ -4330,9 +4343,29 @@
 			 (const_int 32)
 			 (match_dup 2)))]
   "TARGET_NORM"
-  {
-   operands[2] = gen_reg_rtx (SImode);
-   })
+{
+  rtx temp = operands[0];
+
+  if (reg_overlap_mentioned_p (temp, operands[1])
+      || (REGNO (temp) < FIRST_PSEUDO_REGISTER
+	  && !TEST_HARD_REG_BIT (reg_class_contents[GENERAL_REGS],
+				 REGNO (temp))))
+    temp = gen_reg_rtx (SImode);
+  emit_insn (gen_addsi3 (temp, operands[1], constm1_rtx));
+  emit_insn (gen_bic_f_zn (temp, temp, operands[1]));
+  emit_insn (gen_clrsbsi2 (temp, temp));
+  emit_insn
+    (gen_rtx_COND_EXEC
+      (VOIDmode,
+       gen_rtx_LT (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
+       gen_rtx_SET (operands[0], GEN_INT (32))));
+  emit_insn
+    (gen_rtx_COND_EXEC
+      (VOIDmode,
+       gen_rtx_GE (VOIDmode, gen_rtx_REG (CC_ZNmode, CC_REG), const0_rtx),
+       gen_rtx_SET (operands[0], gen_rtx_MINUS (SImode, GEN_INT (31), temp))));
+  DONE;
+})
 
 (define_insn "swap"
   [(set (match_operand:SI  0 "dest_reg_operand" "=w,w,w")
@@ -5164,7 +5197,7 @@
     {
       /* At least four instructions are needed between the setting of LP_COUNT
 	 and the loop end - but the lp instruction qualifies as one.  */
-      rtx prev = prev_nonnote_insn (insn);
+      rtx_insn *prev = prev_nonnote_insn (insn);
 
       if (!INSN_P (prev) || dead_or_set_regno_p (prev, LP_COUNT))
 	output_asm_insn ("nop", operands);
@@ -5220,7 +5253,7 @@
   ""
   "*
 {
-  rtx prev = prev_nonnote_insn (insn);
+  rtx_insn *prev = prev_nonnote_insn (insn);
 
   /* If there is an immediately preceding label, we must output a nop,
      lest a branch to that label will fall out of the loop.

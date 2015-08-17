@@ -1,3 +1,22 @@
+2015-08-01  Caroline Tice  <cmtice@google.com>
+
+	PR 66521
+	* Makefile.am:  Update to match latest tree.
+	* Makefile.in: Regenerate.
+	* testsuite/lib/libvtv: Brought up to date.
+	* vtv_malloc.cc (VTV_DEBUG): Update function call to match renamed
+	function (old bug!).
+	* vtv_rts.cc (debug_functions, debug_init, debug_verify_vtable): Update
+	initializations to work correctly with VTV_DEBUG defined.
+
+2015-05-13  Michael Haubenwallner  <michael.haubenwallner@ssi-schaefer.com>
+
+	* Makefile.in: Regenerated with automake-1.11.6.
+	* aclocal.m4: Likewise.
+	* configure: Likewise.
+	* testsuite/Makefile.in: Likewise.
+	* testsuite/other-tests/Makefile.in: Likewise.
+
 2015-02-09  Thomas Schwinge  <thomas@codesourcery.com>
 
 	* Makefile.in: Regenerate.

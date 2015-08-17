@@ -23,34 +23,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "predict.h"
 #include "tree.h"
+#include "gimple.h"
+#include "rtl.h"
+#include "alias.h"
 #include "fold-const.h"
 #include "stringpool.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
 #include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "hashtab.h"
-#include "rtl.h"
 #include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
 #include "insn-config.h"
 #include "expmed.h"
 #include "dojump.h"
@@ -62,16 +44,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "params.h"
 #include "langhooks.h"
-#include "bitmap.h"
 #include "diagnostic-core.h"
 #include "except.h"
 #include "timevar.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
 #include "cgraph.h"
-#include "lto-streamer.h"
-#include "data-streamer.h"
 #include "tree-streamer.h"
 #include "gcov-io.h"
 #include "tree-pass.h"
@@ -80,6 +56,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "pass_manager.h"
 #include "ipa-utils.h"
 #include "omp-low.h"
+#include "ipa-chkp.h"
 
 /* True when asm nodes has been output.  */
 bool asm_nodes_output = false;
@@ -578,6 +555,7 @@ lto_output_node (struct lto_simple_output_block *ob, struct cgraph_node *node,
   bp_pack_enum (&bp, ld_plugin_symbol_resolution,
 	        LDPR_NUM_KNOWN, node->resolution);
   bp_pack_value (&bp, node->instrumentation_clone, 1);
+  bp_pack_value (&bp, node->split_part, 1);
   streamer_write_bitpack (&bp);
   streamer_write_data_stream (ob->main_stream, section, strlen (section) + 1);
 
@@ -804,8 +782,33 @@ output_refs (lto_symtab_encoder_t encoder)
     {
       symtab_node *node = lto_symtab_encoder_deref (encoder, i);
 
+      /* IPA_REF_ALIAS and IPA_REF_CHKP references are always preserved
+	 in the boundary.  Alias node can't have other references and
+	 can be always handled as if it's not in the boundary.  */
       if (!node->alias && !lto_symtab_encoder_in_partition_p (encoder, node))
-	continue;
+	{
+	  cgraph_node *cnode = dyn_cast <cgraph_node *> (node);
+	  /* Output IPA_REF_CHKP reference.  */
+	  if (cnode
+	      && cnode->instrumented_version
+	      && !cnode->instrumentation_clone)
+	    {
+	      for (int i = 0; node->iterate_reference (i, ref); i++)
+		if (ref->use == IPA_REF_CHKP)
+		  {
+		    if (lto_symtab_encoder_lookup (encoder, ref->referred)
+			!= LCC_NOT_FOUND)
+		      {
+			int nref = lto_symtab_encoder_lookup (encoder, node);
+			streamer_write_gcov_count_stream (ob->main_stream, 1);
+			streamer_write_uhwi_stream (ob->main_stream, nref);
+			lto_output_ref (ob, ref, encoder);
+		      }
+		    break;
+		  }
+	    }
+	  continue;
+	}
 
       count = node->ref_list.nreferences ();
       if (count)
@@ -1214,6 +1217,7 @@ input_overwrite_node (struct lto_file_decl_data *file_data,
   node->resolution = bp_unpack_enum (bp, ld_plugin_symbol_resolution,
 				     LDPR_NUM_KNOWN);
   node->instrumentation_clone = bp_unpack_value (bp, 1);
+  node->split_part = bp_unpack_value (bp, 1);
   gcc_assert (flag_ltrans
 	      || (!node->in_other_partition
 		  && !node->used_from_other_partition));
@@ -1614,11 +1618,13 @@ input_cgraph_1 (struct lto_file_decl_data *file_data,
 		    cnode->instrumented_version->instrumented_version = cnode;
 		}
 
-	      /* Restore decl names reference.  */
-	      if (IDENTIFIER_TRANSPARENT_ALIAS (DECL_ASSEMBLER_NAME (cnode->decl))
-		  && !TREE_CHAIN (DECL_ASSEMBLER_NAME (cnode->decl)))
-		TREE_CHAIN (DECL_ASSEMBLER_NAME (cnode->decl))
-		  = DECL_ASSEMBLER_NAME (cnode->orig_decl);
+	      /* Restore decl names reference except for wrapper functions.  */
+	      if (!chkp_wrap_function (cnode->orig_decl))
+		{
+		  tree name = DECL_ASSEMBLER_NAME (cnode->decl);
+		  IDENTIFIER_TRANSPARENT_ALIAS (name) = 1;
+		  TREE_CHAIN (name) = DECL_ASSEMBLER_NAME (cnode->orig_decl);
+		}
 	    }
 	}
 

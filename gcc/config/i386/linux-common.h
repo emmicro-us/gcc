@@ -59,6 +59,26 @@ along with GCC; see the file COPYING3.  If not see
  %:include(libmpx.spec)%(link_libmpx)"
 #endif
 
+#ifndef LINK_MPX
+#if defined (HAVE_LD_BNDPLT_SUPPORT)
+#define LINK_MPX "-z bndplt "
+#else
+#define LINK_MPX \
+  "%nGCC was configured with a linker with no '-z bndplt' support. " \
+  "It significantly reduces MPX coverage for dynamic codes. " \
+  "It is strongly recommended to use GCC properly configured for MPX."
+#endif
+#endif
+
+#ifndef MPX_SPEC
+#ifdef SPEC_64
+#define MPX_SPEC "\
+ %{mmpx:%{fcheck-pointer-bounds:%{!static:%{" SPEC_64 ":" LINK_MPX "}}}}"
+#else
+#define MPX_SPEC ""
+#endif
+#endif
+
 #ifndef LIBMPX_SPEC
 #if defined(HAVE_LD_STATIC_DYNAMIC)
 #define LIBMPX_SPEC "\
@@ -89,5 +109,5 @@ along with GCC; see the file COPYING3.  If not see
 
 #ifndef CHKP_SPEC
 #define CHKP_SPEC "\
-%{!nostdlib:%{!nodefaultlibs:" LIBMPX_SPEC LIBMPXWRAPPERS_SPEC "}}"
+%{!nostdlib:%{!nodefaultlibs:" LIBMPX_SPEC LIBMPXWRAPPERS_SPEC "}}" MPX_SPEC
 #endif

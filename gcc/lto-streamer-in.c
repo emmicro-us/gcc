@@ -23,28 +23,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "toplev.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "cfghooks.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stringpool.h"
-#include "hashtab.h"
-#include "hard-reg-set.h"
-#include "function.h"
+#include "gimple.h"
 #include "rtl.h"
+#include "ssa.h"
+#include "toplev.h"
+#include "alias.h"
+#include "fold-const.h"
 #include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
 #include "insn-config.h"
 #include "expmed.h"
 #include "dojump.h"
@@ -55,19 +43,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "stmt.h"
 #include "expr.h"
 #include "params.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
 #include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimple-iterator.h"
-#include "gimple-ssa.h"
 #include "tree-cfg.h"
-#include "tree-ssanames.h"
 #include "tree-into-ssa.h"
 #include "tree-dfa.h"
 #include "tree-ssa.h"
@@ -75,16 +53,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic.h"
 #include "except.h"
 #include "debug.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
 #include "cgraph.h"
 #include "ipa-utils.h"
-#include "data-streamer.h"
+#include "target.h"
 #include "gimple-streamer.h"
-#include "lto-streamer.h"
-#include "tree-streamer.h"
-#include "streamer-hooks.h"
 #include "cfgloop.h"
 
 
@@ -283,12 +255,13 @@ lto_location_cache::input_location (location_t *loc, struct bitpack_d *bp,
 
   gcc_assert (current_cache == this);
 
-  if (bp_unpack_value (bp, 1))
-    {
-      *loc = UNKNOWN_LOCATION;
-      return;
-    }
-  *loc = BUILTINS_LOCATION + 1;
+  *loc = bp_unpack_int_in_range (bp, "location", 0, RESERVED_LOCATION_COUNT);
+
+  if (*loc < RESERVED_LOCATION_COUNT)
+    return;
+
+  /* Keep value RESERVED_LOCATION_COUNT in *loc as linemap lookups will
+     ICE on it.  */
 
   file_change = bp_unpack_value (bp, 1);
   line_change = bp_unpack_value (bp, 1);
@@ -1571,7 +1544,7 @@ lto_input_mode_table (struct lto_file_decl_data *file_data)
 	= bp_unpack_enum (&bp, mode_class, MAX_MODE_CLASS);
       unsigned int size = bp_unpack_value (&bp, 8);
       unsigned int prec = bp_unpack_value (&bp, 16);
-      machine_mode inner = (machine_mode) table[bp_unpack_value (&bp, 8)];
+      machine_mode inner = (machine_mode) bp_unpack_value (&bp, 8);
       unsigned int nunits = bp_unpack_value (&bp, 8);
       unsigned int ibit = 0, fbit = 0;
       unsigned int real_fmt_len = 0;
@@ -1600,12 +1573,14 @@ lto_input_mode_table (struct lto_file_decl_data *file_data)
 	for (machine_mode mr = pass ? VOIDmode
 				    : GET_CLASS_NARROWEST_MODE (mclass);
 	     pass ? mr < MAX_MACHINE_MODE : mr != VOIDmode;
-	     pass ? mr = (machine_mode) (m + 1)
+	     pass ? mr = (machine_mode) (mr + 1)
 		  : mr = GET_MODE_WIDER_MODE (mr))
 	  if (GET_MODE_CLASS (mr) != mclass
 	      || GET_MODE_SIZE (mr) != size
 	      || GET_MODE_PRECISION (mr) != prec
-	      || GET_MODE_INNER (mr) != inner
+	      || (inner == m
+		  ? GET_MODE_INNER (mr) != mr
+		  : GET_MODE_INNER (mr) != table[(int) inner])
 	      || GET_MODE_IBIT (mr) != ibit
 	      || GET_MODE_FBIT (mr) != fbit
 	      || GET_MODE_NUNITS (mr) != nunits)
@@ -1633,7 +1608,7 @@ lto_input_mode_table (struct lto_file_decl_data *file_data)
 	    case MODE_VECTOR_UACCUM:
 	      /* For unsupported vector modes just use BLKmode,
 		 if the scalar mode is supported.  */
-	      if (inner != VOIDmode)
+	      if (table[(int) inner] != VOIDmode)
 		{
 		  table[m] = BLKmode;
 		  break;
