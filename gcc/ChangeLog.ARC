@@ -1,3 +1,8 @@
+2015-08-17  Claudiu Zissulescu  <claziss@synopsys.com>
+
+	* config/arc/arc.c: Clean up gen_rtx_SET.
+        * config/arc/simdarc.md (arc_vec_*multacc_lo_v4hi): Disabled.
+
 2015-02-04 Claudiu Zissulescu <claziss@synopsys.com>
 
         * config/arc/arc.md (movdi_hsll64): Use move_dest_operand.

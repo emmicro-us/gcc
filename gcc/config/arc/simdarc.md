@@ -303,21 +303,21 @@
    (set_attr "predicable" "yes,no")
    (set_attr "cond" "canuse,nocond")])
 
-(define_insn "arc_vec_<V_US>multacc_lo_v4hi"
-  [(set (reg:V2SI MUL64_OUT_REG)
-	(mult:V2SI (SE:V2SI (vec_select:V2HI
-			     (match_operand:V4HI 0 "register_operand" "0,r")
-			     (parallel [(const_int 0) (const_int 1)])))
-		   (SE:V2SI (vec_select:V2HI
-			     (match_operand:V4HI 1 "register_operand" "r,r")
-			     (parallel [(const_int 0) (const_int 1)])))))
-  ]
-  "TARGET_V2"
-  "vmpy2h<V_US_suffix>%? 0, %0, %1"
-  [(set_attr "length" "4")
-   (set_attr "type" "multi")
-   (set_attr "predicable" "yes,no")
-   (set_attr "cond" "canuse,nocond")])
+;(define_insn "arc_vec_<V_US>multacc_lo_v4hi"
+;  [(set (reg:V2SI MUL64_OUT_REG)
+;	(mult:V2SI (SE:V2SI (vec_select:V2HI
+;			     (match_operand:V4HI 0 "register_operand" "0,r")
+;			     (parallel [(const_int 0) (const_int 1)])))
+;		   (SE:V2SI (vec_select:V2HI
+;			     (match_operand:V4HI 1 "register_operand" "r,r")
+;			     (parallel [(const_int 0) (const_int 1)])))))
+;  ]
+;  "TARGET_V2"
+;  "vmpy2h<V_US_suffix>%? 0, %0, %1"
+;  [(set_attr "length" "4")
+;   (set_attr "type" "multi")
+;   (set_attr "predicable" "yes,no")
+;   (set_attr "cond" "canuse,nocond")])
 
 (define_expand "vec_widen_<V_US>mult_lo_v4hi"
  [(set (match_operand:V2SI 0 "register_operand"                      "")

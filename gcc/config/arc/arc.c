@@ -742,9 +742,9 @@ arc_secondary_reload_conv (rtx reg, rtx mem, rtx scratch, bool store_p)
 
   /* Now create the move.  */
   if (store_p)
-    emit_insn (gen_rtx_SET (VOIDmode, mem, reg));
+    emit_insn (gen_rtx_SET (mem, reg));
   else
-    emit_insn (gen_rtx_SET (VOIDmode, reg, mem));
+    emit_insn (gen_rtx_SET (reg, mem));
 
   return;
 }
@@ -2656,7 +2656,7 @@ dwarf_emit_irq_save_regs(void)
 			     + irq_ctrl_saved.irq_save_blink
 			     + irq_ctrl_saved.irq_save_lpcount);
   tmp = plus_constant (Pmode, stack_pointer_rtx, -1 * offset);
-  tmp = gen_rtx_SET (VOIDmode, stack_pointer_rtx, tmp);
+  tmp = gen_rtx_SET (stack_pointer_rtx, tmp);
   RTX_FRAME_RELATED_P (tmp) = 1;
   XVECEXP (par, 0, j++) = tmp;
 
@@ -2668,7 +2668,7 @@ dwarf_emit_irq_save_regs(void)
       reg = gen_rtx_REG (SImode, 60);
       tmp = plus_constant (Pmode, stack_pointer_rtx, offset);
       tmp = gen_frame_mem (SImode, tmp);
-      tmp = gen_rtx_SET (VOIDmode, tmp, reg);
+      tmp = gen_rtx_SET (tmp, reg);
       RTX_FRAME_RELATED_P (tmp) = 1;
       XVECEXP (par, 0, j++) = tmp;
       offset -= UNITS_PER_WORD;
@@ -2680,7 +2680,7 @@ dwarf_emit_irq_save_regs(void)
       reg = gen_rtx_REG (SImode, 31);
       tmp = plus_constant (Pmode, stack_pointer_rtx, offset);
       tmp = gen_frame_mem (SImode, tmp);
-      tmp = gen_rtx_SET (VOIDmode, tmp, reg);
+      tmp = gen_rtx_SET (tmp, reg);
       RTX_FRAME_RELATED_P (tmp) = 1;
       XVECEXP (par, 0, j++) = tmp;
       offset -= UNITS_PER_WORD;
@@ -2693,7 +2693,7 @@ dwarf_emit_irq_save_regs(void)
       reg = gen_rtx_REG (SImode, i);
       tmp = plus_constant (Pmode, stack_pointer_rtx, offset);
       tmp = gen_frame_mem (SImode, tmp);
-      tmp = gen_rtx_SET (VOIDmode, tmp, reg);
+      tmp = gen_rtx_SET (tmp, reg);
       RTX_FRAME_RELATED_P (tmp) = 1;
       XVECEXP (par, 0, j++) = tmp;
       offset -= UNITS_PER_WORD;
@@ -11450,14 +11450,14 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
   bool is_weak = (weak != const0_rtx);
 
   /* Truncate the address. */
-  emit_insn (gen_rtx_SET (VOIDmode, addr,
+  emit_insn (gen_rtx_SET (addr,
 			  gen_rtx_AND (Pmode, addr1, GEN_INT (-4))));
 
   /* Compute the datum offset. */
-  emit_insn (gen_rtx_SET (VOIDmode, off,
+  emit_insn (gen_rtx_SET (off,
 			  gen_rtx_AND (SImode, addr1, GEN_INT (3))));
   if (TARGET_BIG_ENDIAN)
-    emit_insn (gen_rtx_SET (VOIDmode, off,
+    emit_insn (gen_rtx_SET (off,
 			    gen_rtx_MINUS (SImode,
 					   (GET_MODE (mem) == QImode) ? GEN_INT (3) :
 					   GEN_INT (2), off)));
@@ -11470,7 +11470,7 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
   val = copy_to_reg (memsi);
 
   /* Convert the offset in bits. */
-  emit_insn (gen_rtx_SET (VOIDmode, off,
+  emit_insn (gen_rtx_SET (off,
 			  gen_rtx_ASHIFT (SImode, off, GEN_INT (3))));
 
   /* Get the proper mask. */
@@ -11479,26 +11479,26 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
   else
     mask = force_reg (SImode, GEN_INT (0xffff));
 
-  emit_insn (gen_rtx_SET (VOIDmode, mask,
+  emit_insn (gen_rtx_SET (mask,
 			  gen_rtx_ASHIFT (SImode, mask, off)));
 
   /* Prepare the old and new values. */
-  emit_insn (gen_rtx_SET (VOIDmode, val,
+  emit_insn (gen_rtx_SET (val,
 			  gen_rtx_AND (SImode, gen_rtx_NOT (SImode, mask),
 				       val)));
 
   oldval = gen_lowpart (SImode, oldval);
-  emit_insn (gen_rtx_SET (VOIDmode, oldv,
+  emit_insn (gen_rtx_SET (oldv,
 			  gen_rtx_ASHIFT (SImode, oldval, off)));
 
   newval = gen_lowpart_common (SImode, newval);
-  emit_insn (gen_rtx_SET (VOIDmode, newv,
+  emit_insn (gen_rtx_SET (newv,
 			  gen_rtx_ASHIFT (SImode, newval, off)));
 
-  emit_insn (gen_rtx_SET (VOIDmode, oldv,
+  emit_insn (gen_rtx_SET (oldv,
 			  gen_rtx_AND (SImode, oldv, mask)));
 
-  emit_insn (gen_rtx_SET (VOIDmode, newv,
+  emit_insn (gen_rtx_SET (newv,
 			  gen_rtx_AND (SImode, newv, mask)));
 
   if (!is_weak)
@@ -11509,10 +11509,10 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
     }
 
   /* Make the old and new values. */
-  emit_insn (gen_rtx_SET (VOIDmode, oldvalue,
+  emit_insn (gen_rtx_SET (oldvalue,
 			  gen_rtx_IOR (SImode, oldv, val)));
 
-  emit_insn (gen_rtx_SET (VOIDmode, newvalue,
+  emit_insn (gen_rtx_SET (newvalue,
 			  gen_rtx_IOR (SImode, newv, val)));
 
   /* Try an 32bit atomic compare and swap. It clobbers the CC
@@ -11524,7 +11524,7 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
      result needs to be provided. */
   x = gen_rtx_REG (CC_Zmode, CC_REG);
   x = gen_rtx_EQ (SImode, x, const0_rtx);
-  emit_insn (gen_rtx_SET (VOIDmode, bool_result, x));
+  emit_insn (gen_rtx_SET (bool_result, x));
 
   if (!is_weak)
     {
@@ -11534,35 +11534,35 @@ arc_expand_compare_and_swap_qh (rtx bool_result, rtx result, rtx mem,
       x = gen_rtx_EQ (VOIDmode, x, const0_rtx);
       x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
 				gen_rtx_LABEL_REF (Pmode, end_label), pc_rtx);
-      emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx, x));
+      emit_jump_insn (gen_rtx_SET (pc_rtx, x));
 
       /* Wait for the right moment when the accessed 32-bit location is
 	 stable. */
-      emit_insn (gen_rtx_SET (VOIDmode, resv,
+      emit_insn (gen_rtx_SET (resv,
 			      gen_rtx_AND (SImode, gen_rtx_NOT (SImode, mask),
 					   res)));
       mode = SELECT_CC_MODE (NE, resv, val);
       cc = gen_rtx_REG (mode, CC_REG);
-      emit_insn (gen_rtx_SET (VOIDmode, cc, gen_rtx_COMPARE (mode, resv, val)));
+      emit_insn (gen_rtx_SET (cc, gen_rtx_COMPARE (mode, resv, val)));
 
       /* Set the new value of the 32 bit location, proper masked. */
-      emit_insn (gen_rtx_SET (VOIDmode, val, resv));
+      emit_insn (gen_rtx_SET (val, resv));
 
       /* Try again if location is unstable. Fall through if only scond op
 	 failed. */
       x = gen_rtx_NE (VOIDmode, cc, const0_rtx);
       x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
 				gen_rtx_LABEL_REF (Pmode, loop_label), pc_rtx);
-      emit_unlikely_jump (gen_rtx_SET (VOIDmode, pc_rtx, x));
+      emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
 
       emit_label (end_label);
     }
 
   /* End: proper return the result for the given mode. */
-  emit_insn (gen_rtx_SET (VOIDmode, res,
+  emit_insn (gen_rtx_SET (res,
 			  gen_rtx_AND (SImode, res, mask)));
 
-  emit_insn (gen_rtx_SET (VOIDmode, res,
+  emit_insn (gen_rtx_SET (res,
 			  gen_rtx_LSHIFTRT (SImode, res, off)));
 
   emit_move_insn (result, gen_lowpart (GET_MODE (result), res));
@@ -11593,7 +11593,7 @@ arc_expand_compare_and_swap (rtx operands[])
 						  is_weak, mod_s, mod_f));
       x = gen_rtx_REG (CC_Zmode, CC_REG);
       x = gen_rtx_EQ (SImode, x, const0_rtx);
-      emit_insn (gen_rtx_SET (VOIDmode, bval, x));
+      emit_insn (gen_rtx_SET (bval, x));
     }
   else
     {
@@ -11639,12 +11639,12 @@ arc_split_compare_and_swap (rtx operands[])
   /* Check if it is oldval. */
   mode = SELECT_CC_MODE (NE, rval, oldval);
   cond = gen_rtx_REG (mode, CC_REG);
-  emit_insn (gen_rtx_SET (VOIDmode, cond, gen_rtx_COMPARE (mode, rval, oldval)));
+  emit_insn (gen_rtx_SET (cond, gen_rtx_COMPARE (mode, rval, oldval)));
 
   x = gen_rtx_NE (VOIDmode, cond, const0_rtx);
   x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
 			    gen_rtx_LABEL_REF (Pmode, label2), pc_rtx);
-  emit_unlikely_jump (gen_rtx_SET (VOIDmode, pc_rtx, x));
+  emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
 
   /* Exclusively store new item. Store clobbers CC reg. */
   emit_insn (gen_arc_store_exclusivesi (mem, newval));
@@ -11656,7 +11656,7 @@ arc_split_compare_and_swap (rtx operands[])
       x = gen_rtx_NE (VOIDmode, cond, const0_rtx);
       x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
 				gen_rtx_LABEL_REF (Pmode, label1), pc_rtx);
-      emit_unlikely_jump (gen_rtx_SET (VOIDmode, pc_rtx, x));
+      emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
     }
 
   if (mod_f != MEMMODEL_RELAXED)
@@ -11704,9 +11704,9 @@ arc_expand_atomic_op (enum rtx_code code, rtx mem, rtx val,
     {
     case NOT:
       x = gen_rtx_AND (mode, before, val);
-      emit_insn (gen_rtx_SET (VOIDmode, after, x));
+      emit_insn (gen_rtx_SET (after, x));
       x = gen_rtx_NOT (mode, after);
-      emit_insn (gen_rtx_SET (VOIDmode, after, x));
+      emit_insn (gen_rtx_SET (after, x));
       break;
 
     case MINUS:
@@ -11719,7 +11719,7 @@ arc_expand_atomic_op (enum rtx_code code, rtx mem, rtx val,
 
     default:
       x = gen_rtx_fmt_ee (code, mode, before, val);
-      emit_insn (gen_rtx_SET (VOIDmode, after, x));
+      emit_insn (gen_rtx_SET (after, x));
       break;
    }
 
@@ -11731,7 +11731,7 @@ arc_expand_atomic_op (enum rtx_code code, rtx mem, rtx val,
   x = gen_rtx_NE (VOIDmode, cond, const0_rtx);
   x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
 			    label, pc_rtx);
-  emit_unlikely_jump (gen_rtx_SET (VOIDmode, pc_rtx, x));
+  emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
 
   arc_post_atomic_barrier (model);
 }
