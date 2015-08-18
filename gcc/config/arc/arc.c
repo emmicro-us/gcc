@@ -11837,12 +11837,15 @@ arc_pre_atomic_barrier (enum memmodel model)
     case MEMMODEL_RELAXED:
     case MEMMODEL_CONSUME:
     case MEMMODEL_ACQUIRE:
+    case MEMMODEL_SYNC_ACQUIRE:
       break;
     case MEMMODEL_RELEASE:
     case MEMMODEL_ACQ_REL:
+    case MEMMODEL_SYNC_RELEASE:
       emit_insn (gen_membar (const0_rtx));
       break;
     case MEMMODEL_SEQ_CST:
+    case MEMMODEL_SYNC_SEQ_CST:
       emit_insn (gen_sync (const1_rtx));
       break;
     default:
@@ -11858,12 +11861,15 @@ arc_post_atomic_barrier (enum memmodel model)
     case MEMMODEL_RELAXED:
     case MEMMODEL_CONSUME:
     case MEMMODEL_RELEASE:
+    case MEMMODEL_SYNC_RELEASE:
       break;
     case MEMMODEL_ACQUIRE:
     case MEMMODEL_ACQ_REL:
+    case MEMMODEL_SYNC_ACQUIRE:
       emit_insn (gen_membar (const0_rtx));
       break;
     case MEMMODEL_SEQ_CST:
+    case MEMMODEL_SYNC_SEQ_CST:
       emit_insn (gen_sync (const1_rtx));
       break;
     default:

@@ -1,3 +1,10 @@
+2015-08-18  Claudiu Zissulescu  <claziss@synopsys.com>
+
+	* config/arc/arc.c (arc_pre_atomic_barrier): Add *_SYNC_*
+        memory models.
+	(arc_post_atomic_barrier): Likewise.
+	* config/arc/atomic.md (mem_thread_fence): Likewise.
+
 2015-08-17  Claudiu Zissulescu  <claziss@synopsys.com>
 
 	* config/arc/arc.c: Clean up gen_rtx_SET.
