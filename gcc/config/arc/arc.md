@@ -100,8 +100,9 @@
 ;;  -----------------------------------------------------------------------------
 ;;  UNSPEC_PLT       3        symbol to be referenced through the PLT
 ;;  UNSPEC_GOT       4        symbol to be rerenced through the GOT
-;;  UNSPEC_GOTOFF    5        Local symbol.To be referenced relative to the
-;;                            GOTBASE.(Referenced as @GOTOFF)
+;;  UNSPEC_GOTOFF    5        Local symbol. To be referenced relative to the
+;;                            GOTBASE.  (Referenced as @GOTOFF)
+;;  UNSPEC_GOTOFFPC  6        Local symbol.  To be referenced pc-relative.
 ;;  ----------------------------------------------------------------------------
 
 (define_c_enum "unspec" [
@@ -155,12 +156,44 @@
 ])
 
 (define_constants
-  [(UNSPEC_PROF 18) ; profile callgraph counter
+  [(UNSPEC_NORM 11) ; norm generation through builtins. candidate for scheduling
+   (UNSPEC_NORMW 12) ; normw generation through builtins. candidate for scheduling
+   (UNSPEC_SWAP 13) ; swap generation through builtins. candidate for scheduling
+   (UNSPEC_MUL64 14) ; mul64 generation through builtins. candidate for scheduling
+   (UNSPEC_MULU64 15) ; mulu64 generation through builtins. candidate for scheduling
+   (UNSPEC_DIVAW 16) ; divaw generation through builtins. candidate for scheduling
+   (UNSPEC_DIRECT 17)
+   (UNSPEC_PROF 18) ; profile callgraph counter
+   (UNSPEC_LP 19) ; to set LP_END
+   (UNSPEC_CASESI 20)
+   (UNSPEC_TLS_GD 21)
+   (UNSPEC_TLS_LD 22)
+   (UNSPEC_TLS_IE 23)
+   (UNSPEC_TLS_OFF 24)
+   (VUNSPEC_RTIE 17) ; blockage insn for rtie generation
+   (VUNSPEC_SYNC 18) ; blockage insn for sync generation
+   (VUNSPEC_BRK 19) ; blockage insn for brk generation
+   (VUNSPEC_FLAG 20) ; blockage insn for flag generation
+   (VUNSPEC_SLEEP 21) ; blockage insn for sleep generation
+   (VUNSPEC_SWI 22) ; blockage insn for swi generation
+   (VUNSPEC_CORE_READ 23) ; blockage insn for reading a core register
+   (VUNSPEC_CORE_WRITE 24) ; blockage insn for writing to a core register
+   (VUNSPEC_LR 25) ; blockage insn for reading an auxiliary register
+   (VUNSPEC_SR 26) ; blockage insn for writing to an auxiliary register
+   (VUNSPEC_TRAP_S 27) ; blockage insn for trap_s generation
+   (VUNSPEC_UNIMP_S 28) ; blockage insn for unimp_s generation
+   (VUNSPEC_KFLAG 29); blockage insn for kflag generation
+   (VUNSPEC_CLRI  30); disable interrupts
+   (VUNSPEC_SETI  31); SETI
+
+   (UNSPEC_FFS  40); FFS
+   (UNSPEC_FLS  41); FLS
 
    (R0_REG 0)
    (R1_REG 1)
    (R2_REG 2)
    (R3_REG 3)
+   (R10_REG 10)
    (R12_REG 12)
    (SP_REG 28)
    (ILINK1_REGNUM 29)
@@ -705,7 +738,7 @@
    ror %0,((%1*2+1) & 0x3f) ;6
    mov%? %0,%1		;7
    add %0,%S1		;8
-   * return arc_get_unalign () ? \"add %0,pcl,%1-.+2\" : \"add %0,pcl,%1-.\";
+   add %0,pcl,@%1@pcl	;9
    mov%? %0,%S1%&	;10
    mov%? %0,%S1		;11
    ld%?%U1 %0,%1%&	;12
@@ -982,77 +1015,40 @@
   [(set (match_operand:DI 0 "move_dest_operand" "")
 	(match_operand:DI 1 "general_operand" ""))]
   ""
-  "
-{
-  /* Everything except mem = const or mem = mem can be done easily.  */
-
-  if (GET_CODE (operands[0]) == MEM)
-    operands[1] = force_reg (DImode, operands[1]);
-}")
+  "if (prepare_move_operands (operands, DImode)) DONE;")
 
 (define_insn_and_split "*movdi_insn"
   [(set (match_operand:DI 0 "move_dest_operand"      "=w, w,r,m")
 	(match_operand:DI 1 "move_double_src_operand" "c,Hi,m,c"))]
-  "(register_operand (operands[0], DImode)
-    || register_operand (operands[1], DImode))
-   && !(TARGET_HS && TARGET_LL64
-        && (memory_operand (operands[0], DImode) || memory_operand (operands[1], DImode)))
-   && !(TARGET_HS && (arc_mpy_option > 8) && register_operand (operands[0], DImode)
-		  && register_operand (operands[1], DImode))"
+  "register_operand (operands[0], DImode)
+   || register_operand (operands[1], DImode)"
   "*
 {
-  switch (which_alternative)
-    {
+ switch (which_alternative)
+   {
     default:
-    case 0 :
-      /* We normally copy the low-numbered register first.  However, if
-	 the first register operand 0 is the same as the second register of
-	 operand 1, we must copy in the opposite order.  */
-      if (REGNO (operands[0]) == REGNO (operands[1]) + 1)
-	return \"mov%? %R0,%R1\;mov%? %0,%1\";
-      else
-      return \"mov%? %0,%1\;mov%? %R0,%R1\";
-    case 1 :
-      return \"mov%? %L0,%L1\;mov%? %H0,%H1\";
-    case 2 :
-      /* If the low-address word is used in the address, we must load it
-	 last.  Otherwise, load it first.  Note that we cannot have
-	 auto-increment in that case since the address register is known to be
-	 dead.  */
-      if (refers_to_regno_p (REGNO (operands[0]), operands [1], 0))
-	return \"ld%V1 %R0,%R1\;ld%V1 %0,%1\";
-      else switch (GET_CODE (XEXP(operands[1], 0)))
-	{
-	case POST_MODIFY: case POST_INC: case POST_DEC:
-	  return \"ld%V1 %R0,%R1\;ld%U1%V1 %0,%1\";
-	case PRE_MODIFY: case PRE_INC: case PRE_DEC:
-	  return \"ld%U1%V1 %0,%1\;ld%V1 %R0,%R1\";
-	default:
-	  return \"ld%U1%V1 %0,%1\;ld%U1%V1 %R0,%R1\";
-	}
-    case 3 :
-      switch (GET_CODE (XEXP(operands[0], 0)))
-	{
-	case POST_MODIFY: case POST_INC: case POST_DEC:
-	  return \"st%V0 %R1,%R0\;st%U0%V0 %1,%0\";
-	case PRE_MODIFY: case PRE_INC: case PRE_DEC:
-	  return \"st%U0%V0 %1,%0\;st%V0 %R1,%R0\";
-	default:
-	  return \"st%U0%V0 %1,%0\;st%U0%V0 %R1,%R0\";
-	}
-    }
-}"
-  "&& reload_completed && optimize
-   && !(TARGET_HS && TARGET_LL64
-        && (memory_operand (operands[0], DImode) || memory_operand (operands[1], DImode)))
-   && !(TARGET_HS && (arc_mpy_option > 8) && register_operand (operands[0], DImode)
-		  && register_operand (operands[1], DImode))"
-  [(set (match_dup 2) (match_dup 3)) (set (match_dup 4) (match_dup 5))]
-  "arc_split_move (operands);"
-  [(set_attr "type" "move,move,load,store")
-   ;; ??? The ld/st values could be 4 if it's [reg,bignum].
-   (set_attr "length" "8,16,16,16")])
+      return \"#\";
+    case 2:
+    if (TARGET_HS && TARGET_LL64
+	&& ((even_register_operand (operands[0], DImode) && memory_operand (operands[1], DImode))
+	    || (memory_operand (operands[0], DImode) && even_register_operand (operands[1], DImode))))
+      return \"ldd%U1%V1 %0,%1%&\";
+    return \"#\";
 
+    case 3:
+    if (TARGET_HS && TARGET_LL64
+	&& ((even_register_operand (operands[0], DImode) && memory_operand (operands[1], DImode))
+	    || (memory_operand (operands[0], DImode) && even_register_operand (operands[1], DImode))))
+     return \"std%U0%V0 %1,%0\";
+    return \"#\";
+   }
+}"
+  "reload_completed"
+  [(match_dup 2)]
+  "operands[2] = arc_split_move (operands);"
+  [(set_attr "type" "move,move,load,store")
+   ;; ??? The ld/st values could be 16 if it's [reg,bignum].
+   (set_attr "length" "8,16,*,*")])
 
 ;; Floating point move insns.
 
@@ -1089,22 +1085,38 @@
     DONE;
   ")
 
-(define_insn "*movdf_insn"
+(define_insn_and_split "*movdf_insn"
   [(set (match_operand:DF 0 "move_dest_operand"      "=D,r,c,c,r,m")
 	(match_operand:DF 1 "move_double_src_operand" "r,D,c,E,m,c"))]
   "(register_operand (operands[0], DFmode) || register_operand (operands[1], DFmode))"
-  "#"
+  "*
+{
+ switch (which_alternative)
+   {
+    default:
+      return \"#\";
+    case 4:
+    if (TARGET_HS && TARGET_LL64
+	&& ((even_register_operand (operands[0], DFmode) && memory_operand (operands[1], DFmode))
+	    || (memory_operand (operands[0], DFmode) && even_register_operand (operands[1], DFmode))))
+      return \"ldd%U1%V1 %0,%1%&\";
+    return \"#\";
+
+    case 5:
+    if (TARGET_HS && TARGET_LL64
+	&& ((even_register_operand (operands[0], DFmode) && memory_operand (operands[1], DFmode))
+	    || (memory_operand (operands[0], DFmode) && even_register_operand (operands[1], DFmode))))
+     return \"std%U0%V0 %1,%0\";
+    return \"#\";
+   }
+}"
+  "reload_completed"
+  [(match_dup 2)]
+  "operands[2] = arc_split_move (operands);"
   [(set_attr "type" "move,move,move,move,load,store")
    (set_attr "predicable" "no,no,yes,yes,no,no")
    ;; ??? The ld/st values could be 16 if it's [reg,bignum].
    (set_attr "length" "4,16,8,16,16,16")])
-
-(define_split
-  [(set (match_operand:DF 0 "move_dest_operand" "")
-	(match_operand:DF 1 "move_double_src_operand" ""))]
-  "reload_completed"
-  [(match_dup 2)]
-  "operands[2] = arc_split_move (operands);")
 
 (define_insn_and_split "*movdf_insn_nolrsr"
   [(set (match_operand:DF 0 "register_operand"       "=r")
@@ -2117,7 +2129,7 @@
 (define_insn_and_split "mulsidi3_700"
   [(set (match_operand:DI 0 "register_operand" "=&r")
 	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "%c"))
-		 (sign_extend:DI (match_operand:SI 2 "register_operand" "cL"))))]
+		 (sign_extend:DI (match_operand:SI 2 "extend_operand" "cL"))))]
   "(TARGET_ARC700 && TARGET_MPY_SET) || EM_MULTI"
   "#"
   "&& reload_completed"
@@ -2140,7 +2152,7 @@
 	 (lshiftrt:DI
 	  (mult:DI
 	   (sign_extend:DI (match_operand:SI 1 "register_operand" "%0,c,  0,c"))
-	   (sign_extend:DI (match_operand:SI 2 "extend_operand"    "c,c,  s,s")))
+	   (sign_extend:DI (match_operand:SI 2 "extend_operand"    "c,c,  i,i")))
 	  (const_int 32))))]
   "(TARGET_ARC700 && TARGET_MPY_SET) || EM_MULTI"
   "* return TARGET_ARC700 ? \"mpyh%? %0,%1,%2\" : \"mpym%? %0,%1,%2\"; "
@@ -2157,7 +2169,7 @@
 	 (lshiftrt:DI
 	  (mult:DI
 	   (zero_extend:DI (match_operand:SI 1 "register_operand" "%0,c,  0,c"))
-	   (zero_extend:DI (match_operand:SI 2 "extend_operand"    "c,c,  s,s")))
+	   (zero_extend:DI (match_operand:SI 2 "extend_operand"    "c,c,  i,i")))
 	  (const_int 32))))]
   "(TARGET_ARC700 && TARGET_MPY_SET) || EM_MULTI"
   "* return TARGET_ARC700 ? \"mpyhu%? %0,%1,%2\" : \"mpymu%? %0,%1,%2\"; "
@@ -2304,16 +2316,15 @@
     }
   else if (TARGET_MULMAC_32BY16_SET)
     {
-      rtx result_hi = gen_reg_rtx (SImode);
-      rtx result_low = gen_reg_rtx (SImode);
-
-      result_hi = gen_highpart(SImode , operands[0]);
-      result_low = gen_lowpart(SImode , operands[0]);
+      rtx result_hi = gen_highpart (SImode, operands[0]);
+      rtx result_low = gen_lowpart (SImode, operands[0]);
+      rtx tmpreg = gen_reg_rtx (SImode);
 
       emit_insn (gen_umul64_600 (operands[1], operands[2]));
-      emit_insn (gen_umac64_600 (result_hi, operands[1], operands[2]));
+      emit_insn (gen_umac64_600 (tmpreg, operands[1], operands[2]));
       emit_move_insn (result_low, gen_acc2 ());
-      DONE;
+      emit_move_insn (result_hi, tmpreg);
+     DONE;
     }
   else
     {
@@ -2376,8 +2387,7 @@
 (define_insn_and_split "umulsidi3_700"
   [(set (match_operand:DI 0 "dest_reg_operand" "=&r")
 	(mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "%c"))
-		 (zero_extend:DI (match_operand:SI 2 "register_operand" "c"))))]
-;;		 (zero_extend:DI (match_operand:SI 2 "register_operand" "rL"))))]
+		 (zero_extend:DI (match_operand:SI 2 "extend_operand" "cL"))))]
   "(TARGET_ARC700 && TARGET_MPY_SET) || EM_MULTI"
   "#"
   "reload_completed"
@@ -3727,7 +3737,12 @@
 (define_insn "indirect_jump"
   [(set (pc) (match_operand:SI 0 "nonmemory_operand" "L,I,Cal,Rcqq,r"))]
   ""
-  "j%!%* [%0]%&"
+  "@
+   j%!%* %0%&
+   j%!%* %0%&
+   j%!%* %0%&
+   j%!%* [%0]%&
+   j%!%* [%0]%&"
   [(set_attr "type" "jump")
    (set_attr "iscompact" "false,false,false,maybe,false")
    (set_attr "cond" "canuse,canuse_limm,canuse,canuse,canuse")])
@@ -4079,7 +4094,6 @@
   "nop%?"
   [(set_attr "type" "misc")
    (set_attr "iscompact" "true")
-   (set_attr "cond" "canuse")
    (set_attr "length" "2")])
 
 (define_insn "nopv"
@@ -4088,7 +4102,6 @@
   "nop%?"
   [(set_attr "type" "misc")
    (set_attr "iscompact" "true")
-   (set_attr "cond" "canuse")
    (set_attr "length" "2")])
 
 ;; Special pattern to flush the icache.
@@ -4853,39 +4866,6 @@
 	       (const_int 4)]
 	      (const_int 2)))])
 
-(define_insn_and_split "eh_return"
-  [(eh_return)
-   (use (match_operand:SI 0 "move_src_operand" "rC32,mCalCpc"))
-   (clobber (match_scratch:SI 1  "=X,r"))
-   (clobber (match_scratch:SI 2 "=&r,r"))]
-  ""
-  "#"
-  "reload_completed"
-  [(set (match_dup 2) (match_dup 0))]
-{
-  int offs = arc_return_slot_offset ();
-
-  if (offs < 0)
-    operands[2] = gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM);
-  else
-    {
-      if (!register_operand (operands[0], Pmode)
-	  && !satisfies_constraint_C32 (operands[0]))
-	{
-	  emit_move_insn (operands[1], operands[0]);
-	  operands[0] = operands[1];
-	}
-      rtx addr = plus_constant (Pmode, stack_pointer_rtx, offs);
-      if (!strict_memory_address_p (Pmode, addr))
-	{
-	  emit_move_insn (operands[2], addr);
-	  addr = operands[2];
-	}
-      operands[2] = gen_frame_mem (Pmode, addr);
-    }
-}
-  [(set_attr "length" "12")])
-
 ;; ??? #ifdefs in function.c require the presence of this pattern, with a
 ;; non-constant predicate.
 (define_expand "return"
@@ -5111,7 +5091,7 @@
       /* ??? Can do better for when a scratch register
 	 is known.  But that would require extra testing.  */
       arc_clear_unalign ();
-      return ".p2align 2\;push_s r0\;add r0,pcl,%4-.+2\;sr r0,[2]; LP_START\;add r0,pcl,.L__GCC__LP%1-.+2\;sr r0,[3]; LP_END\;pop_s r0";
+      return ".p2align 2\;push_s r0\;add r0,pcl,@%4@pcl\;sr r0,[2]; LP_START\;add r0,pcl,@.L__GCC__LP%1@pcl\;sr r0,[3]; LP_END\;pop_s r0";
     }
   /* Check if the loop end is in range to be set by the lp instruction.  */
   size = INTVAL (operands[3]) < 2 ? 0 : 2048;
@@ -5443,6 +5423,72 @@
 }
   [(set_attr "type" "call")
    (set_attr "is_SIBCALL" "yes")])
+
+(define_insn "tls_load_tp_soft"
+  [(set (reg:SI R0_REG) (unspec:SI [(const_int 0)] UNSPEC_TLS_OFF))
+   (clobber (reg:SI RETURN_ADDR_REGNUM))]
+  ""
+  "*return arc_output_libcall (\"__read_tp\");"
+  [(set_attr "is_sfunc" "yes")
+   (set_attr "predicable" "yes")])
+
+(define_insn "tls_gd_load"
+  [(set (match_operand:SI 0 "dest_reg_operand" "=Rcq#q,c")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "Rcq#q,c")
+		    (match_operand:SI 2 "symbolic_operand" "X,X")]
+	 UNSPEC_TLS_GD))]
+  ""
+  ".tls_gd_ld %2`ld%? %0,[%1]"
+  [(set_attr "type" "load")
+   ; if the linker has to patch this into IE, we need a long insns
+   ; (FIXME: or two short insn, ld_s / jl_s.  missing -Os optimization.)
+   (set_attr_alternative "iscompact"
+     [(cond [(ne (symbol_ref "arc_tp_regno == 30") (const_int 0))
+	     (const_string "*")] (const_string "maybe"))
+      (const_string "*")])])
+
+(define_insn "tls_gd_obsolete_get_addr"
+  [(set (reg:SI R0_REG)
+	(call:SI (mem:SI (unspec:SI [(match_operand:SI 0
+				      "symbolic_operand" "X,X")]
+			  UNSPEC_TLS_GD))
+		 (const_int 0)))
+   (clobber (reg:SI RETURN_ADDR_REGNUM))]
+  ""
+  ".tls_gd_ld %0`bl%* __tls_get_addr@plt"
+  [(set_attr "type" "call")
+   ; With TARGET_MEDIUM_CALLS, plt calls are not predicable.
+   (set_attr "predicable" "no")])
+
+; We make this call specific to the tls symbol to avoid commoning this with
+; calls for other symbols; we want the linker to be able to 
+(define_insn "tls_gd_dispatch"
+  [(set (reg:SI R0_REG)
+	(unspec:SI
+	  [(reg:SI R0_REG)
+	   (call (mem:SI (match_operand:SI 0 "register_operand" "Rcq,q,c"))
+		 (const_int 0))
+	   (match_operand:SI 1 "symbolic_operand" "X,X,X")]
+	 UNSPEC_TLS_GD))
+   (clobber (reg:SI RETURN_ADDR_REGNUM))
+   (clobber (reg:DI R10_REG))
+   (clobber (reg:SI R12_REG))]
+  ""
+  ".tls_gd_call %1`jl%!%* [%0]"
+  [(set_attr "type" "call")
+   (set_attr "iscompact" "maybe,false,*")
+   (set_attr "predicable" "no,no,yes")])
+
+;; For thread pointer builtins
+(define_expand "get_thread_pointersi"
+  [(set (match_operand:SI 0 "register_operand") (match_dup 1))]
+ ""
+ "operands[1] = gen_rtx_REG (Pmode, arc_tp_regno);")
+
+(define_expand "set_thread_pointersi"
+  [(set (match_dup 1) (match_operand:SI 0 "register_operand"))]
+ ""
+ "operands[1] = gen_rtx_REG (Pmode, arc_tp_regno);")
 
 ;; If hardware floating point is available, don't define a negdf pattern;
 ;; it would be something like:
@@ -5785,7 +5831,7 @@
    (set_attr "cond"       "canuse,nocond,nocond,canuse,nocond")])
 
 (define_insn "mpyd_arcv2hs"
-  [(set (match_operand:DI 0 "nonimmediate_operand"                      "=Rcr, r")
+  [(set (match_operand:DI 0 "even_register_operand"                     "=Rcr, r")
 	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand"  "  0, c"))
 		 (sign_extend:DI (match_operand:SI 2 "register_operand"  "  c, c"))))
    (set (reg:DI ARCV2_ACC)
@@ -5801,7 +5847,7 @@
   (set_attr "cond" "canuse,nocond")])
 
 (define_insn "mpyd_imm_arcv2hs"
-  [(set (match_operand:DI 0 "nonimmediate_operand"                      "=Rcr, r,r,Rcr,  r")
+  [(set (match_operand:DI 0 "even_register_operand"                     "=Rcr, r,r,Rcr,  r")
 	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand"  "  0, c,0,  0,  c"))
 		 (match_operand 2                   "immediate_operand"  "  L, L,I,Cal,Cal")))
    (set (reg:DI ARCV2_ACC)
@@ -5816,7 +5862,7 @@
   (set_attr "cond" "canuse,nocond,nocond,canuse_limm,nocond")])
 
 (define_insn "mpydu_arcv2hs"
-  [(set (match_operand:DI 0 "nonimmediate_operand"                      "=Rcr, r")
+  [(set (match_operand:DI 0 "even_register_operand"                     "=Rcr, r")
 	(mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand"  "  0, c"))
 		 (zero_extend:DI (match_operand:SI 2 "register_operand" "   c, c"))))
    (set (reg:DI ARCV2_ACC)
@@ -5831,7 +5877,7 @@
   (set_attr "cond" "canuse,nocond")])
 
 (define_insn "mpydu_imm_arcv2hs"
-  [(set (match_operand:DI 0 "nonimmediate_operand"                      "=Rcr, r,r,Rcr,  r")
+  [(set (match_operand:DI 0 "even_register_operand"                     "=Rcr, r,r,Rcr,  r")
 	(mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand"  "  0, c,0,  0,  c"))
 		 (match_operand 2                   "immediate_operand"  "  L, L,I,Cal,Cal")))
    (set (reg:DI ARCV2_ACC)
@@ -5844,33 +5890,6 @@
   (set_attr "type" "multi")
   (set_attr "predicable" "yes,no,no,yes,no")
   (set_attr "cond" "canuse,nocond,nocond,canuse_limm,nocond")])
-
-
-(define_insn "*movdi_hsll64"
-  [(set (match_operand:DI 0 "move_dest_operand"     "=r,m")
-	(match_operand:DI 1 "nonimmediate_operand"   "m,c"))]
-  "TARGET_HS && TARGET_LL64
-   && ((register_operand (operands[0], DImode) && memory_operand (operands[1], DImode))
-       || (memory_operand (operands[0], DImode) && register_operand (operands[1], DImode)))"
- "@
-  ldd%U1%V1 %0,%1%&
-  std%U0%V0 %1,%0"
- [(set_attr "type" "load,store")
-  (set_attr "iscompact" "false,false")
-  (set_attr "length" "*,*")
-  (set_attr "predicable" "no,no")]
-)
-
-(define_insn "*movdi_vadd2"
-  [(set (match_operand:DI 0 "register_operand" "=w")
-	(match_operand:DI 1 "register_operand"  "c"))]
-  "TARGET_HS && (arc_mpy_option > 8)"
-  "vadd2 %0,%1,0  ; movdi %0,%1"
-  [(set_attr "length" "4")
-   (set_attr "iscompact" "false")
-   (set_attr "type" "multi")
-   (set_attr "predicable" "no")]
-)
 
 ;; FPU/FPX fussion
 
@@ -5999,21 +6018,6 @@
    gcc_unreachable ();
  ")
 
-;; 64-bit floating point moves
-;;(define_insn "*movdf_hsll64"
-;;  [(set (match_operand:DF 0 "nonimmediate_operand" "=r,m")
-;;	(match_operand:DF 1 "nonimmediate_operand"  "m,c"))]
-;;  "TARGET_HS && TARGET_LL64
-;;   && ((register_operand (operands[0], DFmode) && memory_operand (operands[1], DFmode))
-;;       || (memory_operand (operands[0], DFmode) && register_operand (operands[1], DFmode)))"
-;; "@
-;;  ldd%U1%V1 %0,%1%&
-;;  std%U0%V0 %1,%0"
-;; [(set_attr "type" "load,store")
-;;  (set_attr "iscompact" "false,false")
-;;  (set_attr "length" "*,*")
-;;  (set_attr "predicable" "no,no")]
-;;)
 ;;
 ;;(define_insn "*movdf_vadd2"
 ;;  [(set (match_operand:DF 0 "register_operand" "=r")
@@ -6100,7 +6104,7 @@
    (set_attr "length" "36")])
 
 (define_insn "macd"
-  [(set (match_operand:DI 0 "register_operand"                 "=Rcr,r")
+  [(set (match_operand:DI 0 "even_register_operand"            "=Rcr,r")
 	(plus:DI
 	 (mult:DI
 	  (sign_extend:DI (match_operand:SI 1 "register_operand" " 0,c"))
@@ -6172,7 +6176,7 @@
    (set_attr "length" "36")])
 
 (define_insn "macdu"
-  [(set (match_operand:DI 0 "register_operand"                 "=Rcr,r")
+  [(set (match_operand:DI 0 "even_register_operand"            "=Rcr,r")
 	(plus:DI
 	 (mult:DI
 	  (zero_extend:DI (match_operand:SI 1 "register_operand" " 0,c"))

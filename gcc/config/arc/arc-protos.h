@@ -49,7 +49,7 @@ extern enum arc_function_type arc_compute_function_type (struct function *);
 
 
 extern void arc_init (void);
-extern unsigned int arc_compute_frame_size (int);
+extern unsigned int arc_compute_frame_size ();
 extern bool arc_ccfsm_branch_deleted_p (void);
 extern void arc_ccfsm_record_branch_deleted (void);
 
@@ -64,7 +64,6 @@ extern bool check_if_valid_sleep_operand (rtx *, int);
 extern bool arc_legitimate_constant_p (machine_mode, rtx);
 extern bool arc_legitimate_pc_offset_p (rtx);
 extern bool arc_legitimate_pic_addr_p (rtx);
-extern void emit_pic_move (rtx *, machine_mode);
 extern bool arc_raw_symbolic_reference_mentioned_p (rtx, bool);
 extern bool arc_legitimate_pic_operand_p (rtx);
 extern bool arc_is_longcall_p (rtx);
@@ -113,11 +112,13 @@ extern bool arc_text_label (rtx_insn *);
 extern int arc_decl_pretend_args (tree decl);
 extern bool arc_short_comparison_p (rtx, int);
 extern bool arc_epilogue_uses (int regno);
+extern bool arc_eh_uses (int regno);
 /* insn-attrtab.c doesn't include reload.h, which declares regno_clobbered_p. */
 extern int regno_clobbered_p (unsigned int, rtx_insn *, machine_mode, int);
 extern int arc_return_slot_offset (void);
 extern bool compact_memory_operand_p (rtx, machine_mode, bool, bool);
 extern bool arc_legitimize_reload_address (rtx *, machine_mode, int, int);
+extern rtx arc_eh_return_address_location (void);
 extern void arc_secondary_reload_conv (rtx, rtx, rtx, bool);
 extern bool arc_store_addr_hazard_p (rtx_insn *, rtx_insn *);
 extern void arc_dump_stack_info (FILE *stream, const char *name);
@@ -129,3 +130,5 @@ extern void arc_expand_compare_and_swap (rtx *);
 extern void arc_expand_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx, rtx);
 extern bool arc_bdr_iscond (rtx);
 #endif
+
+extern bool insn_is_tls_gd_dispatch (rtx_insn *);

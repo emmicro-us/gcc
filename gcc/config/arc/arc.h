@@ -43,12 +43,13 @@ along with GCC; see the file COPYING3.  If not see
 #define TARGET_CPU_generic 6
 
 #ifndef TARGET_CPU_DEFAULT
-#define TARGET_CPU_DEFAULT	TARGET_CPU_generic
+#define TARGET_CPU_DEFAULT	TARGET_CPU_arc700
 #endif
 
 #define SYMBOL_FLAG_SHORT_CALL	(SYMBOL_FLAG_MACH_DEP << 0)
 #define SYMBOL_FLAG_MEDIUM_CALL	(SYMBOL_FLAG_MACH_DEP << 1)
 #define SYMBOL_FLAG_LONG_CALL	(SYMBOL_FLAG_MACH_DEP << 2)
+#define SYMBOL_FLAG_TLS_S9	(SYMBOL_FLAG_MACH_DEP << 3)
 
 /* Check if this symbol has a long_call attribute in its declaration */
 #define SYMBOL_REF_LONG_CALL_P(X)	\
@@ -61,6 +62,10 @@ along with GCC; see the file COPYING3.  If not see
 /* Check if this symbol has a short_call attribute in its declaration */
 #define SYMBOL_REF_SHORT_CALL_P(X)	\
 	((SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_SHORT_CALL) != 0)
+
+/* Check if this symbol has a tls9 attribute in its declaration */
+#define SYMBOL_REF_TLS_S9_P(X)	\
+	(TARGET_TLS9 || (SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_TLS_S9) != 0)
 
 #undef ASM_SPEC
 #undef LINK_SPEC
@@ -202,6 +207,9 @@ ASM_DEFOPT "%{matomic:-mlock} \
 %{mcpu=ARCv2HS:-mHS} \
 "
 
+#define OPTION_DEFAULT_SPECS \
+  {"abi", "%{!mabi=*:-mabi=%(VALUE)}" }
+
 #if DEFAULT_LIBC == LIBC_UCLIBC
 /* Note that the default is to link against dynamic libraries, if they are
    available.  Override with -static.  */
@@ -239,7 +247,12 @@ ASM_DEFOPT "%{matomic:-mlock} \
 #endif
 
 #if DEFAULT_LIBC != LIBC_UCLIBC
-#define STARTFILE_SPEC "%{!shared:crt0.o%s} crti%O%s %{pg|p:crtg.o%s} crtbegin.o%s"
+#define ARC_TLS_EXTRA_START_SPEC "crttls_r25.o%s"
+
+#define EXTRA_SPECS \
+  { "arc_tls_extra_start_spec", ARC_TLS_EXTRA_START_SPEC }, \
+
+#define STARTFILE_SPEC "%{!shared:crt0.o%s} crti%O%s %{pg|p:%{!mcpu=ARCv2EM:crtg.o%s}} %(arc_tls_extra_start_spec) crtbegin.o%s"
 #else
 #define STARTFILE_SPEC   "%{!shared:%{!mkernel:crt1.o%s}} crti.o%s \
   %{!shared:%{pg|p|profile:crtg.o%s} crtbegin.o%s} %{shared:crtbeginS.o%s}"
@@ -287,11 +300,7 @@ ASM_DEFOPT "%{matomic:-mlock} \
   "%{mcpu=arc600: -mcpu=ARC600 %<mcpu=arc600}"				\
   "%{mcpu=arc601: -mcpu=ARC601 %<mcpu=arc601}"				\
   "%{mcpu=arcem: -mcpu=ARCv2EM %<mcpu=arcem}"				\
-  "%{mcpu=archs: -mcpu=ARCv2HS %<mcpu=archs}"				\
-  "%{mspfp_*: -mspfp-%* %<mspfp_*}"					\
-  "%{mdpfp_*: -mdpfp-%* %<mdpfp_*}"					\
-  "%{mdsp_pack*: -mdsp-pack%* %<mdsp_pack*}"				\
-  "%{mmac_*: -mmac-%* %<mmac_*}"
+  "%{mcpu=archs: -mcpu=ARCv2HS %<mcpu=archs}"
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
@@ -721,10 +730,10 @@ enum reg_class
   "MPY_WRITABLE_CORE_REGS", \
   "WRITABLE_CORE_REGS",     \
   "CHEAP_CORE_REGS",	    \
+  "ALL_CORE_REGS",	    \
   "R0R3_CODE_DENSITY_REGS", \
   "R0R1_CODE_DENSITY_REGS", \
   "AC16_H_REGS",	    \
-  "ALL_CORE_REGS",	    \
   "ALL_REGS"          	    \
 }
 
@@ -797,14 +806,18 @@ extern enum reg_class arc_regno_reg_class[];
 
 #define BASE_REG_CLASS (TARGET_MIXED_CODE ? AC16_BASE_REGS : GENERAL_REGS)
 
+#define HARD_REGNO_OK_FOR_BASE_P(REGNO) \
+((REGNO) < 29 || ((REGNO) == ARG_POINTER_REGNUM) || ((REGNO) == 63) \
+ || ((REGNO) == (unsigned) arc_tp_regno)) \
+
 /* These assume that REGNO is a hard or pseudo reg number.
    They give nonzero only if REGNO is a hard reg of the suitable class
    or a pseudo reg currently allocated to a suitable hard reg.
    Since they use reg_renumber, they are safe only once reg_renumber
    has been allocated, which happens in local-alloc.c.  */
-#define REGNO_OK_FOR_BASE_P(REGNO)					\
-  ((REGNO) < 29 || ((REGNO) == ARG_POINTER_REGNUM) || ((REGNO) == 63) || \
-   (unsigned) reg_renumber[REGNO] < 29)
+#define REGNO_OK_FOR_BASE_P(REGNO) \
+(HARD_REGNO_OK_FOR_BASE_P (REGNO) \
+ || (unsigned) reg_renumber[REGNO] < 29)
 
 #define REGNO_OK_FOR_INDEX_P(REGNO) REGNO_OK_FOR_BASE_P(REGNO)
 
@@ -1003,6 +1016,8 @@ typedef struct arc_args
 
 #define EPILOGUE_USES(REGNO) arc_epilogue_uses ((REGNO))
 
+#define EH_USES(REGNO) arc_eh_uses((REGNO))
+
 /* Definitions for register eliminations.
 
    This is an array of structures.  Each structure initializes one pair
@@ -1077,55 +1092,6 @@ extern int arc_initial_elimination_offset(int from, int to);
 
 /* Is the argument a const_int rtx, containing an exact power of 2 */
 #define  IS_POWEROF2_P(X) (! ( (X) & ((X) - 1)) && (X))
-
-/* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
-   and check its validity for a certain class.
-   We have two alternate definitions for each of them.
-   The *_NONSTRICT definition accepts all pseudo regs; the other rejects
-   them unless they have been allocated suitable hard regs.
-
-   Most source files want to accept pseudo regs in the hope that
-   they will get allocated to the class that the insn wants them to be in.
-   Source files for reload pass need to be strict.
-   After reload, it makes no difference, since pseudo regs have
-   been eliminated by then.  */
-
-/* Nonzero if X is a hard reg that can be used as an index
-   or if it is a pseudo reg.  */
-#define REG_OK_FOR_INDEX_P_NONSTRICT(X) \
-((unsigned) REGNO (X) >= FIRST_PSEUDO_REGISTER || \
- (unsigned) REGNO (X) < 29 || \
- (unsigned) REGNO (X) == 63 || \
- (unsigned) REGNO (X) == ARG_POINTER_REGNUM)
-/* Nonzero if X is a hard reg that can be used as a base reg
-   or if it is a pseudo reg.  */
-#define REG_OK_FOR_BASE_P_NONSTRICT(X) \
-((unsigned) REGNO (X) >= FIRST_PSEUDO_REGISTER || \
- (unsigned) REGNO (X) < 29 || \
- (unsigned) REGNO (X) == 63 || \
- (unsigned) REGNO (X) == ARG_POINTER_REGNUM)
-
-/* Nonzero if X is a hard reg that can be used as an index.  */
-#define REG_OK_FOR_INDEX_P_STRICT(X) REGNO_OK_FOR_INDEX_P (REGNO (X))
-/* Nonzero if X is a hard reg that can be used as a base reg.  */
-#define REG_OK_FOR_BASE_P_STRICT(X) REGNO_OK_FOR_BASE_P (REGNO (X))
-
-/* GO_IF_LEGITIMATE_ADDRESS recognizes an RTL expression
-   that is a valid memory address for an instruction.
-   The MODE argument is the machine mode for the MEM expression
-   that wants to use this address.  */
-/* The `ld' insn allows [reg],[reg+shimm],[reg+limm],[reg+reg],[limm]
-   but the `st' insn only allows [reg],[reg+shimm],[limm].
-   The only thing we can do is only allow the most strict case `st' and hope
-   other parts optimize out the restrictions for `ld'.  */
-
-#define RTX_OK_FOR_BASE_P(X, STRICT) \
-(REG_P (X) \
- && ((STRICT) ? REG_OK_FOR_BASE_P_STRICT (X) : REG_OK_FOR_BASE_P_NONSTRICT (X)))
-
-#define RTX_OK_FOR_INDEX_P(X, STRICT) \
-(REG_P (X) \
- && ((STRICT) ? REG_OK_FOR_INDEX_P_STRICT (X) : REG_OK_FOR_INDEX_P_NONSTRICT (X)))
 
 /* A C compound statement that attempts to replace X, which is an address
    that needs reloading, with a valid memory address for an operand of
@@ -1412,7 +1378,7 @@ extern char rname29[], rname30[], rname56[], rname57[], rname58[], rname59[];
 {  "r0",   "r1",   "r2",   "r3",       "r4",     "r5",     "r6",    "r7",	\
    "r8",   "r9",  "r10",  "r11",      "r12",    "r13",    "r14",   "r15",	\
   "r16",  "r17",  "r18",  "r19",      "r20",    "r21",    "r22",   "r23",	\
-  "r24",  "r25",   "gp",   "fp",       "sp",  rname29, rname30, "blink",	\
+  "r24",  "r25",   "gp",   "fp",       "sp",  rname29,  rname30, "blink",	\
   "r32",  "r33",  "r34",  "r35",      "r36",    "r37",    "r38",   "r39",	\
    "d1",   "d1",   "d2",   "d2",      "r44",    "r45",    "r46",   "r47",	\
   "r48",  "r49",  "r50",  "r51",      "r52",    "r53",    "r54",   "r55",	\
@@ -1582,7 +1548,11 @@ extern int arc_return_address_regs[4];
 #endif
 
 #define EH_RETURN_DATA_REGNO(N)	\
-  ((N) < 4 ? (N) : INVALID_REGNUM)
+  ((N) < 2 ? (N) : INVALID_REGNUM)
+
+#define EH_RETURN_STACKADJ_RTX 		gen_rtx_REG (Pmode, 2)
+
+#define EH_RETURN_HANDLER_RTX		arc_eh_return_address_location ()
 
 /* Turn off splitting of long stabs.  */
 #define DBX_CONTIN_LENGTH 0
@@ -1652,8 +1622,10 @@ extern int arc_return_address_regs[4];
    (e.g. 20020226-1.c). This change truncates the upper 27 bits of a word
    while rotating a word. Came to notice through a combine phase
    optimization viz. a << (32-b) is equivalent to a << (-b).
+   vgupta: Changed this back to 1 in 4.8.4 and see that above test passes
+   nevertheless both at -O2 and otherwise
 */
-#define SHIFT_COUNT_TRUNCATED 0
+#define SHIFT_COUNT_TRUNCATED 1
 
 /* Value is 1 if truncating an integer of INPREC bits to OUTPREC bits
    is done just by pretending it is already truncated.  */
@@ -1723,7 +1695,12 @@ extern enum arc_function_type arc_compute_function_type (struct function *);
    && GET_CODE (PATTERN (X)) != CLOBBER		\
    && (get_attr_type (X) == TYPE_CALL || get_attr_type (X) == TYPE_SFUNC))
 
-#define INSN_REFERENCES_ARE_DELAYED(insn) INSN_SETS_ARE_DELAYED (insn)
+/* ??? INSN_REFERENCES_ARE_DELAYED also applies to the address in a CALL
+   even if that call is not in a CALL_INSN.
+   For sfuncs, we cope with disapplowing r12 setters in the delay slot,
+   but tls_gd_dispatch allows any register.  */
+#define INSN_REFERENCES_ARE_DELAYED(insn) \
+  (INSN_SETS_ARE_DELAYED (insn) && !insn_is_tls_gd_dispatch (insn))
 
 #define CALL_ATTR(X, NAME) \
   ((CALL_P (X) || NONJUMP_INSN_P (X)) \

@@ -103,7 +103,7 @@ Same as -mcpu=archs
 
 mmpy-option=
 Target RejectNegative Joined UInteger Var(arc_mpy_option) Init(2)
--mmpy-option={0,1,2,3,4,5,6,7,8,9} Compile ARCv2 code with a multiplier design option. WLH1 is default on
+-mmpy-option={0,1,2,3,4,5,6,7,8,9} Compile ARCv2 code with a multiplier design option. Option 2 is default on.  
 
 mmpy16
 Target Report Mask(MPY16_SET)
@@ -117,17 +117,13 @@ mcode-density
 Target Report Mask(CODE_DENSITY)
 Enable code density instructions for ARCv2
 
-mshift-assist
-Target Report Mask(SHIFT_ASSIST)
-Enable shift assist instructions for ARCv2
-
 matomic
 Target Report Mask(ATOMIC)
 Enable atomic instructions.
 
 mll64
 Target Report Mask(LL64)
-Enable double load/store instructions for ARCv2HS
+Enable double load/store instructions for ARC HS
 
 mmixed-code
 Target Report Mask(MIXED_CODE_SET)
@@ -140,10 +136,6 @@ Tweak register allocation to help 16-bit instruction generation
 mvolatile-cache
 Target Report Mask(VOLATILE_CACHE_SET)
 Use ordinarily cached memory accesses for volatile references
-
-mno-volatile-cache
-Target Report InverseMask(VOLATILE_CACHE_SET)
-Enable cache bypass for volatile references
 
 mbarrel-shifter
 Target Report Mask(BARREL_SHIFTER)
@@ -187,7 +179,16 @@ EnumValue
 Enum(arc_fpu) String(fpud) Value(FPU_SP | FPU_SC | FPU_DP | FPU_DC)
 
 EnumValue
-Enum(arc_fpu) String(fpuda) Value(FPU_SP | FPU_SC | FPU_SF | FPU_SD | FPX_DP)
+Enum(arc_fpu) String(fpuda) Value(FPU_SP | FPU_SC | FPX_DP)
+
+EnumValue
+Enum(arc_fpu) String(fpuda_div) Value(FPU_SP | FPU_SC | FPU_SD | FPX_DP)
+
+EnumValue
+Enum(arc_fpu) String(fpuda_fma) Value(FPU_SP | FPU_SC | FPU_SF | FPX_DP)
+
+EnumValue
+Enum(arc_fpu) String(fpuda_all) Value(FPU_SP | FPU_SC | FPU_SF | FPU_SD | FPX_DP)
 
 EnumValue
 Enum(arc_fpu) String(fpus_div) Value(FPU_SP | FPU_SC | FPU_SD)
@@ -478,21 +479,6 @@ mucb-mcount
 Target Report Var(TARGET_UCB_MCOUNT)
 instrument with mcount calls as in the ucb code
 
-; Unfortunately, listing the full option name gives us clashes
-; with OPT_opt_name being claimed for both opt_name and opt-name,
-; so we leave out the last character or more.
-mspfp_
-Target Joined
-
-mdpfp_
-Target Joined
-
-mdsp_pack
-Target Joined
-
-mmac_
-Target Joined
-
 mbypass-cache
 Target Report Mask(BYPASS_CACHE)
 Controls the .di instruction extension of atomic instructions. When enabled, the atomic operations operates directly on external memory.
@@ -503,7 +489,7 @@ Specifies the registers that the processor saves on an interrupt entry and exit.
 
 mabi=
 Target RejectNegative Joined Var(arc_abi) Enum(arc_abi_type) Init(ARC_ABI_STD)
-Specify the desired ABI used for ARC HS processors. Variants can be std or pack.
+Specify the desired ABI used for ARC HS processors. Variants can be std or mwabi.
 
 Enum
 Name(arc_abi_type) Type(enum arc_abi_type)
@@ -512,5 +498,19 @@ EnumValue
 Enum(arc_abi_type) String(std) Value(ARC_ABI_STD)
 
 EnumValue
-Enum(arc_abi_type) String(pack) Value(ARC_ABI_PACK)
+Enum(arc_abi_type) String(mwabi) Value(ARC_ABI_MWABI)
 
+mtls
+Target Report Var(TARGET_TLS)
+Enable target-specific TLS support
+
+mtls9
+Target Report Var(TARGET_TLS9)
+Assume local tls symbols can be addressed with scaled s9 offset
+
+mtp-regno=
+Target RejectNegative Joined UInteger Var(arc_tp_regno) Init(25)
+Specify thread pointer register number
+
+mtp-regno=none
+Target RejectNegative Var(arc_tp_regno,-1)

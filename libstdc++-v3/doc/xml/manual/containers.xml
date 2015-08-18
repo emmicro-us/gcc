@@ -25,8 +25,9 @@
   <section xml:id="sequences.list.size" xreflabel="list::size() is O(n)"><info><title>list::size() is O(n)</title></info>
     
    <para>
-     Yes it is, and that's okay.  This is a decision that we preserved
-     when we imported SGI's STL implementation.  The following is
+     Yes it is, and that was okay until the 2011 edition of the C++ standard.
+     In future GCC will change it to O(1) but O(N) was a decision that we
+     preserved when we imported SGI's STL implementation.  The following is
      quoted from <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.sgi.com/tech/stl/FAQ.html">their FAQ</link>:
    </para>
    <blockquote>

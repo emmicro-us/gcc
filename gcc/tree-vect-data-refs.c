@@ -3981,6 +3981,16 @@ vect_create_addr_base_for_vector_ref (gimple stmt,
       base_offset = fold_build2 (PLUS_EXPR, sizetype,
 				 base_offset, byte_offset);
     }
+  if (byte_offset)
+    {
+      tree tmp = create_tmp_var (sizetype, "offset");
+
+      byte_offset = fold_convert (sizetype, byte_offset);
+      base_offset = fold_build2 (PLUS_EXPR, sizetype,
+				 base_offset, byte_offset);
+      base_offset = force_gimple_operand (base_offset, &seq, false, tmp);
+      gimple_seq_add_seq (new_stmt_list, seq);
+    }
 
   /* base + base_offset */
   if (loop_vinfo)

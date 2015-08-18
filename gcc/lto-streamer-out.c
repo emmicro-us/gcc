@@ -152,6 +152,9 @@ tree_is_indexable (tree t)
     return false;
   else if (TREE_CODE (t) == DEBUG_EXPR_DECL)
     return false;
+  /* IMPORTED_DECL is put into BLOCK and thus it never can be shared.  */
+  else if (TREE_CODE (t) == IMPORTED_DECL)
+    return false;
   /* Variably modified types need to be streamed alongside function
      bodies because they can refer to local entities.  Together with
      them we have to localize their members as well.
