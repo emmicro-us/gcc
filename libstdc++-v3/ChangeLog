@@ -1,3 +1,21 @@
+2015-08-18  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR c++/67216
+	* testsuite/tr1/2_general_utilities/shared_ptr/observers/bool_conv.cc:
+	Fix use of safe-bool idiom that isn't valid in C++11.
+
+	* include/bits/ptr_traits.h: Include <bits/move.h> for addressof.
+
+	PR libstdc++/67066
+	* doc/xml/manual/configure.xml (manual.intro.setup.configure): Add
+	caveats for --enable-concept-checks. Improve link text.
+	* doc/xml/manual/diagnostics.xml (std.diagnostics.concept_checking):
+	Clarify caveats.
+	* doc/html/*: Regenerate.
+	* include/bits/stl_deque.h (deque): Only use concept checks in C++03.
+	* include/bits/stl_stack.h (stack): Likewise.
+	* include/bits/stl_vector.h (vector): Likewise.
+
 2015-08-14  Jonathan Wakely  <jwakely@redhat.com>
 
 	* include/experimental/any (any::operator=(const any&)): Move check

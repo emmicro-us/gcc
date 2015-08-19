@@ -1,3 +1,126 @@
+2015-08-19  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	* config/arm/arm.c (bounds_check): Use %wd print format
+	for HOST_WIDE_INT arguments.
+
+2015-08-18  Trevor Saunders  <tbsaunde@tbsaunde.org>
+
+	* bb-reorder.c, cfgloop.h, collect2.c, combine.c, dse.c,
+	dwarf2cfi.c, gcse-common.h, genopinit.c, ggc-page.c, machmode.h,
+	mcf.c, modulo-sched.c, omp-low.c, read-rtl.c, sched-rgn.c,
+	signop.h, tree-call-cdce.c, tree-dfa.c, tree-diagnostic.c,
+	tree-inline.h, tree-scalar-evolution.c, tree-ssa-address.c,
+	tree-ssa-loop-niter.c, tree-ssa-loop.h, tree-ssa-pre.c,
+	tree-ssa-reassoc.c, tree-ssa-sccvn.h, tree-ssa-structalias.c,
+	tree-ssa-uninit.c, tree-ssa.h, tree-vect-loop-manip.c,
+	tree-vectorizer.h, tree-vrp.c, var-tracking.c: Remove useless
+	typedefs.
+
+2015-08-18  trevor Saunders  <tbsaunde@tbsaunde.org>
+
+	* bt-load.c, cgraph.h, dwarf2out.c, dwarf2out.h, final.c,
+	function.c, graphite-scop-detection.c, haifa-sched.c,
+	ipa-devirt.c, ipa-split.c, recog.c, ree.c, stmt.c,
+	tree-data-ref.c, tree-ssa-dom.c, tree-ssa-loop-ivopts.c,
+	varasm.c: Remove typedefs of structs.
+
+2015-08-18  Bill Schmidt  <wschmidt@vnet.linux.ibm.com>
+
+	* config/rs6000/altivec.h (vec_adde): New define.
+	(vec_addec): Likewise.
+	(vec_double): Likewise.
+	(vec_bperm): Likewise.
+	(vec_gb): Likewise.
+	* config/rs6000/rs6000-builtin.def (ADDE): New
+	BU_ALTIVEC_OVERLOAD_3.
+	(ADDEC): Likewise.
+	(DOUBLE): New BU_VSX_OVERLOAD_1.
+	* config/rs6000/rs6000-c.c (altivec_overloaded_builtins): Add new
+	entries for ALTIVEC_BUILTIN_VEC_ADDC, ALTIVEC_BUILTIN_VEC_ADDE,
+	ALTIVEC_BUILTIN_VEC_ADDEC, ALTIVEC_BUILTIN_VEC_ANDC,
+	VSX_BUILTIN_VEC_DOUBLE, ALTIVEC_BUILTIN_VEC_MERGEH,
+	ALTIVEC_BUILTIN_VEC_MERGEL, ALTIVEC_BUILTIN_VEC_NOR,
+	ALTIVEC_BUILTIN_VEC_OR, ALTIVEC_BUILTIN_VEC_XOR,
+	ALTIVEC_BUILTIN_VEC_PERM, ALTIVEC_BUILTIN_VEC_SEL,
+	P8V_BUILTIN_VEC_EQV, P8V_BUILTIN_VEC_NAND, P8V_BUILTIN_VEC_ORC,
+	and P8V_BUILTIN_VEC_VBPERMQ.
+
+2015-08-18  Jason Merrill  <jason@redhat.com>
+
+	* print-tree.c (print_node): Handle TREE_BINFO.
+
+2015-08-18  Francois-Xavier Coudert  <fxcoudert@gcc.gnu.org>
+
+	PR middle-end/36757
+	* builtins.c (expand_builtin_signbit): Add asserts to make sure
+	we can expand BUILT_IN_SIGNBIT inline.
+	* builtins.def (BUILT_IN_SIGNBIT): Make type-generic.
+	* doc/extend.texi: Document the type-generic __builtin_signbit.
+
+2015-08-18  Richard Sandiford  <richard.sandiford@arm.com>
+
+	PR rtl-optimization/67218
+	* simplify-rtx.c (exact_int_to_float_conversion_p): New function.
+	(simplify_unary_operation_1): Use it.
+
+2015-08-18  Marek Polacek  <polacek@redhat.com>
+
+	PR middle-end/67222
+	* gimple-low.c (lower_stmt): Don't lower BUILT_IN_POSIX_MEMALIGN
+	if the call isn't valid.
+	* tree-ssa-alias.c (ref_maybe_used_by_call_p_1): Check builtins using
+	gimple_call_builtin_p.
+	(call_may_clobber_ref_p_1): Likewise.
+	(stmt_kills_ref_p): Likewise.
+
+2015-08-18  Robert Suchanek  <robert.suchanek@imgtec.com>
+
+	* config/mips/mips-protos.h (mips_hard_regno_rename_ok): New prototype.
+	* config/mips/mips.c (mips_hard_regno_rename_ok): New function.
+	(mips_hard_regno_scratch_ok): Likewise.
+	(TARGET_HARD_REGNO_SCRATCH_OK): Define macro.
+	* config/mips/mips.h (HARD_REGNO_RENAME_OK): New.
+
+2015-08-18  Bin Cheng  <bin.cheng@arm.com>
+
+	* tree-ssa-loop-niter.c (refine_value_range_using_guard): New.
+	(determine_value_range): Call refine_value_range_using_guard for
+	each loop initial condition to improve value range.
+
+2015-08-17  Aldy Hernandez  <aldyh@redhat.com>
+
+	* config/i386/i386.c: Remove include of fibheap.h.
+
+2015-08-17  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/67221
+	* tree-ssa-sccvn.c (visit_phi): Keep all-TOP args TOP.
+	(sccvn_dom_walker::before_dom_children): Mark backedges of
+	non-executable blocks as not executable.
+
+2015-08-17  David Sherwood  <david.sherwood@arm.com>
+
+	* config/arm/arm.c (neon_element_bits): Replace call to
+	GET_MODE_BITSIZE (GET_MODE_INNER (m)) with GET_MODE_UNIT_BITSIZE (m).
+	* config/arm/neon.md (neon_vget_lane<mode>): Likewise.
+	(neon_vget_laneu<mode>, neon_vset_lane<mode>): Likewise
+	(neon_vdup_lane<mode>): Likewise.
+	* config/i386/i386.c (ix86_expand_int_vcond): Likewise.
+	(ix86_expand_multi_arg_builtin, ix86_expand_reduc): Likewise.
+	(expand_vec_perm_palignr, ix86_expand_sse2_abs): Likewise.
+	* config/rs6000/rs6000.c (rs6000_do_expand_vec_perm): Likewise.
+	* config/spu/spu.c (arith_immediate_p): Likewise.
+	* expmed.c (store_bit_field_1, extract_bit_field_1): Likewise.
+	* expr.c (expand_expr_real_2): Likewise.
+	* optabs.c (shift_amt_for_vec_perm_mask): Likewise.
+	* simplify-rtx.c (simplify_immed_subreg): Likewise.
+	* tree-cfg.c (verify_gimple_assign_ternary): Likewise.
+	* tree-vect-patterns.c (vect_recog_mixed_size_cond_pattern): Likewise.
+	New variable.
+	* fold-const.c (fold_binary_loc): Replace call to
+	GET_MODE_PRECISION (GET_MODE_INNER (m)) with
+	GET_MODE_UNIT_PRECISION (m).
+
 2015-08-17  Mike Stump  <mikestump@comcast.net>
 
 	* config/arm/arm.c (arm_block_move_unaligned_straight):
@@ -605,8 +728,8 @@
 	* configure.ac: Define LIBICONV_DEP with in-tree libiconv.
 	* configure: Regenerate.
 
-2015-08-06    Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
-	      Jiong Wang  <jiong.wang@arm.com>
+2015-08-06  Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
+	    Jiong Wang  <jiong.wang@arm.com>
 
 	* config/aarch64/aarch64.d (tlsdesc_small_pseudo_<mode>): New pattern.
 	* config/aarch64/aarch64.h (reg_class): New enumeration FIXED_REG0.

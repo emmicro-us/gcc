@@ -1,3 +1,88 @@
+2015-08-18  Bill Schmidt  <wschmidt@vnet.linux.ibm.com>
+
+	* gcc.target/powerpc/altivec-35.c: New test.
+	* gcc.target/powerpc/p8vector-builtin-8.c: New test.
+	* gcc.target/powerpc/vsx-vector-7.c: New test.
+
+2015-08-18  Francois-Xavier Coudert  <fxcoudert@gcc.gnu.org>
+
+	PR middle-end/36757
+	* gcc.dg/builtins-error.c: Add checks for __builtin_signbit.
+	* gcc.dg/tg-tests.h: Add checks for __builtin_signbit.
+
+2015-08-18  Richard Sandiford  <richard.sandiford@arm.com>
+
+	PR rtl-optimization/67218
+	* gcc.c-torture/execute/ieee/pr67218.c,
+	gcc.target/aarch64/fcvt_int_float_double1.c,
+	gcc.target/aarch64/fcvt_int_float_double2.c,
+	gcc.target/aarch64/fcvt_int_float_double3.c,
+	gcc.target/aarch64/fcvt_int_float_double4.c,
+	gcc.target/aarch64/fcvt_uint_float_double1.c,
+	gcc.target/aarch64/fcvt_uint_float_double2.c,
+	gcc.target/aarch64/fcvt_uint_float_double3.c,
+	gcc.target/aarch64/fcvt_uint_float_double4.c: New tests.
+
+2015-08-18  Matthew Wahab  <matthew.wahab@arm.com>
+
+	* gcc.target/aarch64/atomic-comp-swap-release-acquire.c: Adjust
+	dg-options to disable LSE extensions.
+	* gcc.target/aarch64/atomic-op-acq_rel.c: Likewise.
+	* gcc.target/aarch64/atomic-op-acquire.c: Likewise.
+	* gcc.target/aarch64/atomic-op-char.c: Likewise.
+	* gcc.target/aarch64/atomic-op-consume.c: Likewise.
+	* gcc.target/aarch64/atomic-op-imm.c: Likewise.
+	* gcc.target/aarch64/atomic-op-int.c: Likewise.
+	* gcc.target/aarch64/atomic-op-long.c: Likewise.
+	* gcc.target/aarch64/atomic-op-relaxed.c: Likewise.
+	* gcc.target/aarch64/atomic-op-seq_cst.c: Likewise.
+	* gcc.target/aarch64/atomic-op-release.c: Likewise.
+	* gcc.target/aarch64/atomic-op-short.c: Likewise.
+	* gcc.target/aarch64/sync-comp-swap.c: Likewise.
+	* gcc.target/aarch64/sync-op-acquire.c: Likewise.
+	* gcc.target/aarch64/sync-op-full.c: Likewise.
+	* gcc.target/aarch64/sync-op-release.c: Likewise.
+
+2015-08-18  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/67160
+	* g++.dg/cpp1z/feat-cxx1z.C: New.
+
+2015-08-18  Marek Polacek  <polacek@redhat.com>
+
+	PR middle-end/67222
+	* gcc.dg/torture/pr67222.c: New test.
+
+2015-08-18  Robert Suchanek  <robert.suchanek@imgtec.com>
+
+	* gcc.target/mips/interrupt_handler-bug-1.c: New test.
+
+2015-08-18  Bin Cheng  <bin.cheng@arm.com>
+
+	* gcc.dg/tree-ssa/loop-bound-1.c: New test.
+	* gcc.dg/tree-ssa/loop-bound-3.c: New test.
+	* gcc.dg/tree-ssa/loop-bound-5.c: New test.
+
+2015-08-17  Matthew Fortune  <matthew.fortune@imgtec.com>
+
+	* gcc.target/mips/mips.exp (mips-dg-options): Redefine isa
+	which is used in later code.
+
+2015-08-17  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/67216
+	* g++.dg/cpp0x/nullptr34.C: New.
+	* g++.dg/warn/Wconversion2.C: Adjust.
+	* g++.dg/warn/Wnull-conversion-1.C: Likewise.
+	* g++.old-deja/g++.other/null3.C: Likewise.
+
+	* g++.dg/cpp0x/pr51313.C: Adjust.
+
+2015-08-17  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/67221
+	* gcc.dg/torture/pr67221.c: New testcase.
+
 2015-08-17 Mike Stump  <mikestump@comcast.net>
            Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
 
