@@ -889,7 +889,7 @@ arc*-*-elf*)
 	big*)	tm_defines="DRIVER_ENDIAN_SELF_SPECS=\\\"%{!EL:%{!mlittle-endian:-mbig-endian}}\\\" ${tm_defines}"
 	esac
 	;;
-arc*-*-linux-uclibc*)
+arc*-*-linux*)
 	extra_headers="arc-simd.h"
 	tm_file="arc/arc-arch.h dbxelf.h elfos.h gnu-user.h linux.h glibc-stdint.h ${tm_file}"
 	tmake_file="${tmake_file} arc/t-arc-uClibc arc/t-arc"
