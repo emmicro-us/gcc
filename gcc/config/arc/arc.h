@@ -31,6 +31,11 @@ along with GCC; see the file COPYING3.  If not see
 
 #include <stdbool.h>
 
+#if DEFAULT_LIBC == LIBC_GLIBC
+#undef DEFAULT_LIBC
+#define DEFAULT_LIBC LIBC_UCLIBC
+#endif
+
 /* Things to do:
 
    - incscc, decscc?
@@ -130,7 +135,7 @@ extern const char *arc_cpu_to_as (int argc, const char **argv);
 		   %{static:-Bstatic} \
 		   %{symbolic:-Bsymbolic} \
 		   %{rdynamic:-export-dynamic}\
-		   -dynamic-linker /lib/ld-uClibc.so.0 \
+		   -dynamic-linker /lib/ld-linux-arc.so.1 \
 		   -X %{mbig-endian:-EB} \
 		   %{EB} %{EL} \
 		   %{marclinux*} \
