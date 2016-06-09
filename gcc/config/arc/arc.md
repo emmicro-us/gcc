@@ -2901,17 +2901,17 @@
    (set (match_dup 3) (match_dup 4))])
 
 (define_insn "*add_n"
-  [(set (match_operand:SI 0 "dest_reg_operand"                  "=Rcqq,w,w")
-	(plus:SI (mult:SI (match_operand:SI 1 "register_operand" "Rcqq,w,w")
+  [(set (match_operand:SI 0 "dest_reg_operand"                  "=Rcqq,Rcw,W,   W,w,w")
+	(plus:SI (mult:SI (match_operand:SI 1 "register_operand" "Rcqq,  c,c,   c,w,w")
 			  (match_operand:SI 2 "_2_4_8_operand"   ""))
-		 (match_operand:SI 3 "nonmemory_operand"            "0,c,Cal")))]
+		 (match_operand:SI 3 "nonmemory_operand"            "0,  0,c,?Cal,c,Cal")))]
   ""
   "add%z2%? %0,%3,%1%&"
   [(set_attr "type" "shift")
-   (set_attr "length" "*,4,8")
-   (set_attr "predicable" "yes,no,no")
-   (set_attr "cond" "canuse,nocond,nocond")
-   (set_attr "iscompact" "maybe,false,false")])
+   (set_attr "length" "*,4,4,8,4,8")
+   (set_attr "predicable" "yes,yes,no,no,no,no")
+   (set_attr "cond" "canuse,canuse,nocond,nocond,nocond,nocond")
+   (set_attr "iscompact" "maybe,false,false,false,false,false")])
 
 ;; N.B. sub[123] has the operands of the MINUS in the opposite order from
 ;; what synth_mult likes.
@@ -6218,6 +6218,46 @@
 	      (set (zero_extract:SI (match_dup 0) (match_dup 5) (match_dup 6))
 		   (zero_extract:SI (match_dup 1) (match_dup 5) (match_dup 7)))])
    (match_dup 1)])
+
+(define_insn "*rotrsi3_cnt1"
+  [(set (match_operand:SI 0 "dest_reg_operand"             "=w")
+	(rotatert:SI (match_operand:SI 1 "register_operand" "c")
+		     (const_int 1)))]
+  ""
+  "ror %0,%1%&"
+  [(set_attr "type" "shift")
+   (set_attr "predicable" "no")
+   (set_attr "length" "4")])
+
+(define_insn "*ashlsi2_cnt1"
+  [(set (match_operand:SI 0 "dest_reg_operand"           "=Rcqq,w")
+	(ashift:SI (match_operand:SI 1 "register_operand" "Rcqq,c")
+		   (const_int 1)))]
+  ""
+  "asl%? %0,%1%&"
+  [(set_attr "type" "shift")
+   (set_attr "iscompact" "maybe,false")
+   (set_attr "predicable" "no,no")])
+
+(define_insn "*lshrsi3_cnt1"
+  [(set (match_operand:SI 0 "dest_reg_operand"             "=Rcqq,w")
+	(lshiftrt:SI (match_operand:SI 1 "register_operand" "Rcqq,c")
+		     (const_int 1)))]
+  ""
+  "lsr%? %0,%1%&"
+  [(set_attr "type" "shift")
+   (set_attr "iscompact" "maybe,false")
+   (set_attr "predicable" "no,no")])
+
+(define_insn "*ashrsi3_cnt1"
+  [(set (match_operand:SI 0 "dest_reg_operand"             "=Rcqq,w")
+	(ashiftrt:SI (match_operand:SI 1 "register_operand" "Rcqq,c")
+		     (const_int 1)))]
+  ""
+  "asr%? %0,%1%&"
+  [(set_attr "type" "shift")
+   (set_attr "iscompact" "maybe,false")
+   (set_attr "predicable" "no,no")])
 
 ;; include the arc-FPX instructions
 (include "fpx.md")
