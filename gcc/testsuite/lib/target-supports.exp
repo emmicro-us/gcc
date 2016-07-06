@@ -1057,7 +1057,7 @@ proc check_effective_target_pie { } {
     if { [istarget *-*-darwin\[912\]*]
 	 || [istarget *-*-dragonfly*]
 	 || [istarget *-*-freebsd*]
-	 || [istarget *-*-linux*]
+	 || ([istarget *-*-linux*] && ![istarget arc*-*-linux*])
 	 || [istarget *-*-gnu*] } {
 	return 1;
     }
